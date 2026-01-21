@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Calendar, Bot, FileText, Printer, Download, LoaderCircle, ChevronDown, List, ChevronsUpDown, Edit2, Trash2, X, Plus, Store } from 'lucide-react';
@@ -164,7 +165,8 @@ const DetailedReportDisplay = ({ reports, mainTitle }: { reports: ShopReportData
                             </tr>
                             <tr>
                                 <td className="p-2 border border-slate-200 text-center font-semibold">环比</td>
-                                {salesMetrics.map(key => <ChangeCell key={key} current={report.sales[key].current} previous={report.sales[key].previous} />)}
+                                {/* FIX: Renamed the map variable from 'key' to 'metricKey' to avoid confusion with React's special 'key' prop and resolve the type error. */}
+                                {salesMetrics.map(metricKey => <ChangeCell key={metricKey} current={report.sales[metricKey].current} previous={report.sales[metricKey].previous} />)}
                             </tr>
                             <tr className="bg-slate-50 font-bold text-slate-700">
                                 <td className="p-2 border border-slate-200 text-center" rowSpan={4}>投放</td>
@@ -181,7 +183,8 @@ const DetailedReportDisplay = ({ reports, mainTitle }: { reports: ShopReportData
                             </tr>
                             <tr>
                                 <td className="p-2 border border-slate-200 text-center font-semibold">环比</td>
-                                {adMetrics.map(key => <ChangeCell key={key} current={report.advertising[key].current} previous={report.advertising[key].previous} isBetterWhenLower={key === 'cost' || key === 'cpc'} />)}
+                                {/* FIX: Renamed the map variable from 'key' to 'metricKey' to avoid confusion with React's special 'key' prop and resolve the type error. */}
+                                {adMetrics.map(metricKey => <ChangeCell key={metricKey} current={report.advertising[metricKey].current} previous={report.advertising[metricKey].previous} isBetterWhenLower={metricKey === 'cost' || metricKey === 'cpc'} />)}
                             </tr>
                         </React.Fragment>
                     ))}

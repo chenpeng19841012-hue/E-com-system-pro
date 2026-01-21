@@ -23,6 +23,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
     const [brand, setBrand] = useState('');
     const [category, setCategory] = useState('');
     const [model, setModel] = useState('');
+    const [mtm, setMtm] = useState('');
     const [configuration, setConfiguration] = useState('');
     const [mode, setMode] = useState<SKUMode>('入仓');
     const [status, setStatus] = useState<SKUStatus>('在售');
@@ -44,6 +45,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
             setBrand(initialData.brand || '');
             setCategory(initialData.category || '');
             setModel(initialData.model || '');
+            setMtm(initialData.mtm || '');
             setConfiguration(initialData.configuration || '');
             setMode(initialData.mode || '入仓');
             setStatus(initialData.status || '在售');
@@ -72,6 +74,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
             brand: brand.trim(),
             category: category.trim(),
             model: model.trim(),
+            mtm: mtm.trim(),
             configuration: configuration.trim(),
             mode,
             status,
@@ -114,6 +117,10 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
                         <select value={shopId} onChange={e => setShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]">
                             {shops.map((shop:Shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}
                         </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-600 mb-2">MTM</label>
+                        <input type="text" value={mtm} onChange={e => setMtm(e.target.value)} placeholder="例如：82SA0012CD" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -200,12 +207,14 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
 
 const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmText }: any) => {
     const [name, setName] = useState('');
+    const [platformId, setPlatformId] = useState('');
     const [mode, setMode] = useState('自营');
     const [error, setError] = useState('');
 
     React.useEffect(() => {
         if (isOpen) {
             setName(shopToEdit?.name || '');
+            setPlatformId(shopToEdit?.platformId || '');
             setMode(shopToEdit?.mode || '自营');
             setError('');
         }
@@ -216,7 +225,7 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
             setError('店铺名称不能为空。');
             return;
         }
-        const payload = { id: shopToEdit?.id, name: name.trim(), mode };
+        const payload = { id: shopToEdit?.id, name: name.trim(), platformId: platformId.trim(), mode };
         if (onConfirm(payload)) {
             onClose();
         }
@@ -235,6 +244,10 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
                     <div>
                         <label className="block text-sm font-bold text-slate-600 mb-2">店铺名称 *</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]" />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-bold text-slate-600 mb-2">店铺ID</label>
+                        <input type="text" value={platformId} onChange={e => setPlatformId(e.target.value)} placeholder="例如: 1000080013" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]" />
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-600 mb-2">经营模式 *</label>
@@ -515,10 +528,10 @@ export const SKUManagementView = ({
         let headers: string[] = [];
         let filename = '';
         if (type === 'sku') {
-            headers = ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)'];
+            headers = ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', 'MTM (mtm)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)'];
             filename = 'SKU_template.xlsx';
         } else if (type === 'shop') {
-            headers = ['店铺名称 (name)', '经营模式 (mode)'];
+            headers = ['店铺名称 (name)', '店铺ID (platformId)', '经营模式 (mode)'];
             filename = 'Shop_template.xlsx';
         } else {
             headers = ['姓名 (name)', '客服账号 (account)', '关联店铺 (shopNames)'];
@@ -567,7 +580,8 @@ export const SKUManagementView = ({
                              shopId, 
                              brand: String(row['品牌 (brand)'] || ''), 
                              category: String(row['类目 (category)'] || ''), 
-                             model: String(row['型号 (model)'] || ''), 
+                             model: String(row['型号 (model)'] || ''),
+                             mtm: String(row['MTM (mtm)'] || row['MTM'] || ''),
                              configuration: String(row['配置 (configuration)'] || ''), 
                              costPrice: costPriceRaw ? parseFloat(costPriceRaw) : undefined,
                              sellingPrice: sellingPriceRaw ? parseFloat(sellingPriceRaw) : undefined,
@@ -584,9 +598,10 @@ export const SKUManagementView = ({
                 } else if (type === 'shop') {
                      const newShops = data.map((row: any): Omit<Shop, 'id'> | null => {
                         const name = row['店铺名称 (name)'] || row['店铺名称'];
+                        const platformId = row['店铺ID (platformId)'] || row['店铺ID'];
                         const mode = row['经营模式 (mode)'] || row['经营模式'];
                         if (!name || !['自营', 'POP'].includes(mode)) return null;
-                        return { name, mode };
+                        return { name, platformId, mode };
                      }).filter(shop => shop);
                      onBulkAddShops(newShops as Omit<Shop, 'id'>[]);
                 } else if (type === 'agent') {
@@ -624,13 +639,13 @@ export const SKUManagementView = ({
         if (type === 'sku') {
             if (sortedAndFilteredSkus.length === 0) { addToast('error', '导出失败', '没有可导出的数据。'); return; }
             const shopIdToNameMap = new Map(shops.map(s => [s.id, s.name]));
-            headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告'];
-            dataToExport = sortedAndFilteredSkus.map(sku => [sku.code, sku.name, shopIdToNameMap.get(sku.shopId) || '未知店铺', sku.brand || '', sku.category || '', sku.model || '', sku.configuration || '', sku.costPrice ?? '', sku.sellingPrice ?? '', sku.promoPrice ?? '', sku.jdCommission ?? '', sku.warehouseStock ?? '', sku.factoryStock ?? '', sku.mode || '', sku.status || '', sku.advertisingStatus || '']);
+            headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', 'MTM', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告'];
+            dataToExport = sortedAndFilteredSkus.map(sku => [sku.code, sku.name, shopIdToNameMap.get(sku.shopId) || '未知店铺', sku.brand || '', sku.category || '', sku.model || '', sku.mtm || '', sku.configuration || '', sku.costPrice ?? '', sku.sellingPrice ?? '', sku.promoPrice ?? '', sku.jdCommission ?? '', sku.warehouseStock ?? '', sku.factoryStock ?? '', sku.mode || '', sku.status || '', sku.advertisingStatus || '']);
             filename = `SKU_export_${formattedDate}.xlsx`;
         } else if (type === 'shop') {
              if (shops.length === 0) { addToast('error', '导出失败', '没有可导出的数据。'); return; }
-             headers = ['店铺名称', '经营模式'];
-             dataToExport = shops.map(s => [s.name, s.mode]);
+             headers = ['店铺名称', '店铺ID', '经营模式'];
+             dataToExport = shops.map(s => [s.name, s.platformId || '', s.mode]);
              filename = `Shops_export_${formattedDate}.xlsx`;
         } else if (type === 'agent') {
              if (agents.length === 0) { addToast('error', '导出失败', '没有可导出的数据。'); return; }
@@ -793,10 +808,11 @@ export const SKUManagementView = ({
                             <table className="w-full text-sm table-fixed">
                                 <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                     <tr>
-                                        <th className="w-[18%] text-left pl-4 pb-4 border-b border-slate-100">SKU / 店铺</th>
-                                        <th className="w-[14%] text-center pb-4 border-b border-slate-100">品牌 / 类目</th>
-                                        <th className="w-[14%] text-center pb-4 border-b border-slate-100">型号 / 配置</th>
-                                        <th className="w-[14%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
+                                        <th className="w-[16%] text-left pl-4 pb-4 border-b border-slate-100">SKU / 店铺</th>
+                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">品牌 / 类目</th>
+                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">型号 / 配置</th>
+                                        <th className="w-[8%] text-center pb-4 border-b border-slate-100">MTM</th>
+                                        <th className="w-[12%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
                                         <th className="w-[8%] text-center pb-4 border-b border-slate-100">模式 / 点位</th>
                                         <th className="w-[7%] text-center pb-4 border-b border-slate-100">状态</th>
                                         <th className="w-[7%] text-center pb-4 border-b border-slate-100">广告</th>
@@ -807,7 +823,7 @@ export const SKUManagementView = ({
                                 <tbody>
                                     {skus.length === 0 ? (
                                         <tr>
-                                            <td colSpan={9} className="py-20 text-center">
+                                            <td colSpan={10} className="py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
                                                     <Package size={48} className="mb-4 opacity-20" />
                                                     <p className="text-xs font-bold">暂无SKU数据</p>
@@ -816,7 +832,7 @@ export const SKUManagementView = ({
                                         </tr>
                                     ) : sortedAndFilteredSkus.length === 0 ? (
                                         <tr>
-                                            <td colSpan={9} className="py-20 text-center">
+                                            <td colSpan={10} className="py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
                                                     <Package size={48} className="mb-4 opacity-20" />
                                                     <p className="text-xs font-bold">暂无匹配的SKU资产</p>
@@ -834,6 +850,7 @@ export const SKUManagementView = ({
                                                     </td>
                                                     <td className="py-4 border-b border-slate-50 text-center align-middle">{sku.brand || '-'} / {sku.category || '-'}</td>
                                                     <td className="py-4 border-b border-slate-50 text-center align-middle">{sku.model || '-'} / {sku.configuration || '-'}</td>
+                                                    <td className="py-4 border-b border-slate-50 text-center align-middle font-mono">{sku.mtm || '-'}</td>
                                                     <td className="py-4 border-b border-slate-50 font-mono text-[11px] text-right pr-2 leading-tight align-middle">
                                                         <div className="text-orange-600"><span className="text-orange-500/80 mr-1">C:</span>{sku.costPrice ? `¥${sku.costPrice.toFixed(2)}` : '-'}</div>
                                                         <div className="text-green-600 font-bold text-xs"><span className="text-green-500/80 mr-1">S:</span>{sku.sellingPrice ? `¥${sku.sellingPrice.toFixed(2)}` : '-'}</div>
@@ -884,20 +901,21 @@ export const SKUManagementView = ({
                         <table className="w-full text-sm table-fixed">
                             <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                 <tr>
-                                    <th className="w-[25%] text-left pl-4 pb-4 border-b border-slate-100">店铺名称</th>
+                                    <th className="w-[22%] text-left pl-4 pb-4 border-b border-slate-100">店铺名称</th>
                                     <th className="w-[8%] text-center pb-4 border-b border-slate-100">经营模式</th>
+                                    <th className="w-[10%] text-center pb-4 border-b border-slate-100">店铺ID</th>
                                     <th className="w-[8%] text-center pb-4 border-b border-slate-100">SKU总数</th>
-                                    <th className="w-[12%] text-center pb-4 border-b border-slate-100">状态分布 (售/待/下)</th>
-                                    <th className="w-[12%] text-center pb-4 border-b border-slate-100">广告分布 (投/未)</th>
-                                    <th className="w-[12%] text-center pb-4 border-b border-slate-100">模式分布 (仓/直)</th>
-                                    <th className="w-[12%] text-center pb-4 border-b border-slate-100">库存分布 (仓/直)</th>
-                                    <th className="w-[11%] text-center pr-4 pb-4 border-b border-slate-100">操作</th>
+                                    <th className="w-[10%] text-center pb-4 border-b border-slate-100">状态分布 (售/待/下)</th>
+                                    <th className="w-[10%] text-center pb-4 border-b border-slate-100">广告分布 (投/未)</th>
+                                    <th className="w-[10%] text-center pb-4 border-b border-slate-100">模式分布 (仓/直)</th>
+                                    <th className="w-[10%] text-center pb-4 border-b border-slate-100">库存分布 (仓/直)</th>
+                                    <th className="w-[12%] text-center pr-4 pb-4 border-b border-slate-100">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {shops.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="py-20 text-center">
+                                        <td colSpan={9} className="py-20 text-center">
                                             <div className="flex flex-col items-center justify-center text-slate-300">
                                                 <Database size={48} className="mb-4 opacity-20" />
                                                 <p className="text-xs font-bold">暂无店铺数据</p>
@@ -920,6 +938,7 @@ export const SKUManagementView = ({
                                         <tr key={s.id} className="text-xs text-slate-600 hover:bg-slate-50 transition-colors">
                                             <td className="py-4 border-b border-slate-50 text-left pl-4 font-bold text-slate-800">{s.name}</td>
                                             <td className="py-4 border-b border-slate-50 text-center"><span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md text-[10px] font-bold">{s.mode || '自营'}</span></td>
+                                            <td className="py-4 border-b border-slate-50 text-center font-mono">{s.platformId || '-'}</td>
                                             <td className="py-4 border-b border-slate-50 text-center font-mono">{shopSkus.length}</td>
                                             <td className="py-4 border-b border-slate-50 text-center font-mono">
                                                 <span title="在售" className="text-green-600 font-bold">{statusOnSale}</span> / 

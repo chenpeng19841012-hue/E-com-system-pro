@@ -23,6 +23,7 @@ export interface FieldDefinition {
 export interface Shop {
   id: string;
   name:string;
+  platformId?: string;
   mode: string; 
 }
 
@@ -38,6 +39,7 @@ export interface ProductSKU {
   brand: string;
   category: string;
   model?: string;
+  mtm?: string;
   configuration?: string;
   mode?: SKUMode;
   status?: SKUStatus;

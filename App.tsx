@@ -47,7 +47,7 @@ const DATA_KEYS_TO_SNAPSHOT = [
     'fact_shangzhi', 'fact_jingzhuntong', 'fact_customer_service',
     'dim_shops', 'dim_skus', 'dim_agents', 'dim_sku_lists',
     'schema_shangzhi', 'schema_jingzhuntong', 'schema_customer_service',
-    'quoting_data', 'upload_history'
+    'quoting_data', 'upload_history', 'snapshot_settings'
 ];
 
 export const App = () => {

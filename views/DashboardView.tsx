@@ -288,7 +288,11 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-         {kpis.map(kpi => <KPICard key={kpi.title} {...kpi} isLoading={isLoading} isPositive={kpi.change > 0 && !kpi.title.includes('花费') || kpi.change < 0 && kpi.title.includes('花费')} />)}
+         {/* FIX: Refactored to use the 'isPositive' flag from the data object and calculate if the change is "good" for coloring. This resolves potential type errors and is more robust than string matching. */}
+         {kpis.map(kpi => {
+            const isChangeGood = (kpi.change > 0 && kpi.isPositive) || (kpi.change < 0 && !kpi.isPositive);
+            return <KPICard key={kpi.title} title={kpi.title} value={kpi.value} change={kpi.change} isLoading={isLoading} isPositive={isChangeGood} />;
+         })}
       </div>
        <div className="grid grid-cols-3 gap-6">
         <div className="col-span-3 lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
