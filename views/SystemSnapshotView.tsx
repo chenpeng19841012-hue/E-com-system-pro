@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Camera, Settings, History, Trash2, ShieldCheck, AlertCircle, FileText } from 'lucide-react';
+
+import React, { useState, useRef } from 'react';
+import { Camera, Settings, History, Trash2, ShieldCheck, AlertCircle, FileText, UploadCloud, Download } from 'lucide-react';
 import { Snapshot, SnapshotSettings } from '../lib/types';
 import { ConfirmModal } from '../components/ConfirmModal';
 
@@ -10,6 +11,8 @@ interface SystemSnapshotViewProps {
     onRestore: (id: string) => void;
     onDelete: (id: string) => void;
     onUpdateSettings: (settings: SnapshotSettings) => void;
+    onImport: (snapshot: Snapshot) => void;
+    addToast: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
 const formatBytes = (bytes: number, decimals = 2) => {
@@ -21,10 +24,11 @@ const formatBytes = (bytes: number, decimals = 2) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, onDelete, onUpdateSettings }: SystemSnapshotViewProps) => {
+export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, onDelete, onUpdateSettings, onImport, addToast }: SystemSnapshotViewProps) => {
     const [localSettings, setLocalSettings] = useState(settings);
     const [restoreTarget, setRestoreTarget] = useState<Snapshot | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Snapshot | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleSettingsChange = <K extends keyof SnapshotSettings>(key: K, value: SnapshotSettings[K]) => {
         setLocalSettings(prev => ({ ...prev, [key]: value }));
@@ -33,6 +37,57 @@ export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, o
     const handleSaveSettings = () => {
         // Per user request, ensure auto snapshot is always enabled when saving.
         onUpdateSettings({ ...localSettings, autoSnapshotEnabled: true });
+    };
+
+    const handleExport = (snapshotId: string) => {
+        const snapshot = snapshots.find(s => s.id === snapshotId);
+        if (!snapshot) {
+            addToast('error', '导出失败', '未找到指定的快照。');
+            return;
+        }
+        try {
+            const jsonString = JSON.stringify(snapshot, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `shujian_snapshot_${snapshot.id}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            addToast('success', '导出成功', '已开始下载快照文件。');
+        } catch (e) {
+            addToast('error', '导出失败', '无法生成快照文件。');
+        }
+    };
+
+    const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') throw new Error("File content is not readable.");
+                const importedData = JSON.parse(text);
+
+                // Validate snapshot structure
+                if (importedData.id && importedData.type && importedData.size !== undefined && importedData.data) {
+                    onImport(importedData as Snapshot);
+                } else {
+                    throw new Error("文件内容不是一个有效的快照。");
+                }
+            } catch (error: any) {
+                addToast('error', '导入失败', error.message || '无效的JSON文件格式。');
+            }
+        };
+        reader.onerror = () => addToast('error', '读取失败', '无法读取所选文件。');
+        reader.readAsText(file);
+        
+        // Reset file input to allow re-uploading the same file
+        event.target.value = '';
     };
 
     return (
@@ -66,6 +121,8 @@ export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, o
                 <p>您确定要永久删除 <strong className="font-black text-slate-800">{deleteTarget && new Date(deleteTarget.id).toLocaleString()}</strong> 的快照吗？</p>
                 <p className="mt-2 text-rose-500 font-bold">此操作不可撤销。</p>
             </ConfirmModal>
+            
+            <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".json" className="hidden" />
 
             <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn">
                 <div className="mb-8">
@@ -110,9 +167,14 @@ export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, o
                         </div>
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                              <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Camera size={18} className="text-[#70AD47]"/> 手动操作</h3>
-                             <button onClick={onCreate} className="w-full py-3 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all active:scale-95">
-                                立即创建快照
-                            </button>
+                             <div className="space-y-2">
+                                <button onClick={onCreate} className="w-full py-3 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all active:scale-95">
+                                    立即创建快照
+                                </button>
+                                 <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 rounded-lg bg-white border-2 border-slate-200 text-slate-600 font-bold text-sm hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-2 transition-all active:scale-95">
+                                     <UploadCloud size={16} /> 导入快照
+                                </button>
+                             </div>
                         </div>
                     </div>
 
@@ -141,9 +203,10 @@ export const SystemSnapshotView = ({ snapshots, settings, onCreate, onRestore, o
                                                 <span>大小: {formatBytes(snapshot.size)}</span>
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => setRestoreTarget(snapshot)} className="px-3 py-1.5 rounded-md border border-amber-200 bg-amber-50 text-amber-600 font-bold text-xs hover:bg-amber-100">恢复</button>
-                                            <button onClick={() => setDeleteTarget(snapshot)} className="text-rose-500 hover:text-rose-700 p-1.5"><Trash2 size={16}/></button>
+                                        <div className="flex gap-1">
+                                            <button onClick={() => handleExport(snapshot.id)} title="导出" className="text-slate-500 hover:text-white hover:bg-slate-400 p-2 rounded-md transition-colors"><Download size={14}/></button>
+                                            <button onClick={() => setRestoreTarget(snapshot)} title="恢复" className="text-amber-500 hover:text-white hover:bg-amber-400 p-2 rounded-md transition-colors"><History size={14}/></button>
+                                            <button onClick={() => setDeleteTarget(snapshot)} title="删除" className="text-rose-500 hover:text-white hover:bg-rose-400 p-2 rounded-md transition-colors"><Trash2 size={14}/></button>
                                         </div>
                                     </div>
                                 ))

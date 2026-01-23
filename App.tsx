@@ -217,6 +217,17 @@ export const App = () => {
         addToast('success', '设置已保存', '快照设置已更新。');
     };
 
+    const handleImportSnapshot = (importedSnapshot: Snapshot) => {
+        if (snapshots.some(s => s.id === importedSnapshot.id)) {
+            addToast('error', '导入失败', '具有相同时间戳的快照已存在。');
+            return;
+        }
+        const updatedSnapshots = [importedSnapshot, ...snapshots].sort((a, b) => b.id.localeCompare(a.id));
+        setSnapshots(updatedSnapshots);
+        DB.saveData('system_snapshots', updatedSnapshots);
+        addToast('success', '导入成功', `快照 [${new Date(importedSnapshot.id).toLocaleString()}] 已成功导入。`);
+    };
+
 
     const handleUpdateQuotingData = (newData: QuotingData) => {
         setQuotingData(newData);
@@ -663,7 +674,7 @@ export const App = () => {
             />;
         case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} onUpdateSchema={handleUpdateSchema} onClearTable={handleClearTable} addToast={addToast} />;
         case 'data-center': return <DataCenterView onUpload={handleProcessAndUpload} history={uploadHistory} factTables={factTables} schemas={schemas} addToast={addToast} />;
-        case 'system-snapshot': return <SystemSnapshotView snapshots={snapshots} settings={snapshotSettings} onCreate={handleCreateSnapshot} onRestore={handleRestoreSnapshot} onDelete={handleDeleteSnapshot} onUpdateSettings={handleUpdateSnapshotSettings} />;
+        case 'system-snapshot': return <SystemSnapshotView snapshots={snapshots} settings={snapshotSettings} onCreate={handleCreateSnapshot} onRestore={handleRestoreSnapshot} onDelete={handleDeleteSnapshot} onUpdateSettings={handleUpdateSnapshotSettings} onImport={handleImportSnapshot} addToast={addToast} />;
         default: return <DashboardView factTables={factTables} skus={skus} shops={shops} />;
       }
     };
