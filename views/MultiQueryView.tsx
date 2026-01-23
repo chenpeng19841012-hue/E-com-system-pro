@@ -79,9 +79,9 @@ const MetricSelectionModal = ({ isOpen, onClose, shangzhiMetrics, jingzhuntongMe
     );
 };
 
-// 格式化看板数值
+// 业务看板数值精度格式化 (CPC/ROI 1位小数)
 const formatNumberForCard = (value: number, key: string) => {
-    if (key === 'roi' || key === 'cpc') return (value || 0).toFixed(2);
+    if (key === 'roi' || key === 'cpc') return (value || 0).toFixed(1);
     if (key.includes('amount') || key.includes('cost')) return `¥${(value || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
     return (value || 0).toLocaleString();
 };
@@ -96,6 +96,7 @@ const isChangePositive = (key: string, change: number) => {
     return change > 0;
 };
 
+// 趋势图组件 (支持多量级指标归一化缩放)
 const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[], chartMetrics: Set<string>, metricsMap: Map<string, any> }) => {
     const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
     const metricColors = useMemo(() => Array.from(metricsMap.keys()).reduce((acc, key, i) => ({ ...acc, [key]: colors[i % colors.length] }), {}), [metricsMap]);
@@ -110,15 +111,16 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
 
     const selectedMetricsData = Array.from(chartMetrics);
     
-    // 趋势图优化：为每个指标计算其在本周期内的最大值，用于归一化绘图
+    // 算法：为每个勾选指标计算其自身的峰值，用于实现“局部自适应缩放”
     const metricMaxMap = new Map<string, number>();
     selectedMetricsData.forEach(key => {
-        const max = Math.max(...dailyData.map(d => d[key] || 0), 1);
+        const max = Math.max(...dailyData.map(d => d[key] || 0), 0.1); // 防止0除
         metricMaxMap.set(key, max);
     });
     
     const xScale = (index: number) => padding.left + (index / (dailyData.length - 1)) * (width - padding.left - padding.right);
-    // Y轴采用相对比例：(当前值 / 该指标最大值) * 总高度
+    
+    // Y轴比例函数：(当前值 / 该指标最大值) * 画布有效高度
     const yScale = (value: number, metricKey: string) => {
         const max = metricMaxMap.get(metricKey) || 1;
         return height - padding.bottom - (value / max) * (height - padding.top - padding.bottom);
@@ -130,7 +132,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
                 {selectedMetricsData.map(key => (
                     <div key={key} className="flex items-center gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: (metricColors as any)[key] }}></div>
-                        <span className="font-bold text-slate-500">{metricsMap.get(key)?.label} (趋势)</span>
+                        <span className="font-bold text-slate-500">{metricsMap.get(key)?.label}</span>
                     </div>
                 ))}
             </div>
@@ -152,7 +154,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
                     />
                 ))}
             </svg>
-            <div className="mt-2 text-center text-[9px] text-slate-400 font-bold italic">* 不同量级指标已自动进行趋势归一化展示</div>
+            <div className="mt-2 text-center text-[9px] text-slate-400 font-bold italic">* 不同单位量级已自动通过归一化算法对齐，用于观察波动同步性</div>
         </div>
     );
 };
@@ -180,7 +182,9 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const [currentPage, setCurrentPage] = useState(1);
     const [visualisationData, setVisualisationData] = useState<any>(null);
     const [comparisonType, setComparisonType] = useState<'period' | 'year'>('period');
-    const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['paid_amount', 'cost']));
+    
+    // 默认勾选 访客数、成交件数、消耗(花费)
+    const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['uv', 'paid_items', 'cost']));
     
     const ROWS_PER_PAGE = 50;
     const VISUAL_METRICS = ['pv', 'uv', 'paid_items', 'paid_amount', 'cost', 'cpc', 'roi', 'total_order_amount'];
@@ -246,16 +250,16 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${skuCode}`;
                     }
                     if (timeDimension === 'week') {
-                        // 简单的自然周逻辑
-                        const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
-                        const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
-                        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-                        return `${d.getFullYear()}-W${weekNum}-${skuCode}`;
+                        // 自然周：周一为起始
+                        const date = new Date(dateStr);
+                        const day = date.getDay() || 7;
+                        date.setUTCDate(date.getUTCDate() - day + 1);
+                        return `${date.toISOString().split('T')[0]}-${skuCode}`;
                     }
                     return `${dateStr}-${skuCode}`;
                 };
 
-                const processRow = (row: any, isAd: boolean) => {
+                const processRow = (row: any) => {
                     const skuCode = getSkuIdentifier(row)!;
                     const key = getAggregationKey(row.date, skuCode);
                     if (!mergedData.has(key)) {
@@ -264,12 +268,12 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         
                         let displayDate = row.date;
                         if (timeDimension === 'month') displayDate = row.date.substring(0, 7);
-                        else if (timeDimension === 'week') displayDate = key.split('-').slice(0,2).join('-');
+                        else if (timeDimension === 'week') displayDate = key.split('-').slice(0,3).join('-');
 
                         mergedData.set(key, { 
                             date: displayDate,
                             sku_code: skuCode,
-                            sku_shop: { code: skuCode, shopName: shopInfo?.name || row.shop_name || row.account_nickname || '未知店铺' },
+                            sku_shop: { code: skuCode, shopName: shopInfo?.name || row.shop_name || row.account_nickname || '默认店铺' },
                         });
                     }
                     const entry = mergedData.get(key)!;
@@ -278,8 +282,8 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     }
                 };
 
-                filteredShangzhi.forEach(r => processRow(r, false));
-                filteredJingzhuntong.forEach(r => processRow(r, true));
+                filteredShangzhi.forEach(processRow);
+                filteredJingzhuntong.forEach(processRow);
 
                 return Array.from(mergedData.values());
             };
@@ -353,14 +357,14 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const { shangzhiMetricsForModal, jingzhuntongMetricsForModal, allMetricsMap } = useMemo(() => {
         const map = new Map<string, FieldDefinition>();
         [...schemas.shangzhi, ...schemas.jingzhuntong].forEach(f => map.set(f.key, f));
-        map.set('date', { key: 'date', label: '时间段', type: 'TIMESTAMP' });
+        map.set('date', { key: 'date', label: '时间范围', type: 'TIMESTAMP' });
         map.set('sku_shop', { key: 'sku_shop', label: 'SKU / 店铺', type: 'STRING' });
         
-        map.set('pv', { ...(map.get('pv') || {key: 'pv', label:'PV', type:'INTEGER'}), label: '浏览量' });
-        map.set('uv', { ...(map.get('uv') || {key: 'uv', label:'UV', type:'INTEGER'}), label: '访客数' });
-        map.set('paid_items', { ...(map.get('paid_items') || {key: 'paid_items', label:'CA', type:'INTEGER'}), label: '成交件数' });
-        map.set('paid_amount', { ...(map.get('paid_amount') || {key: 'paid_amount', label:'GMV', type:'REAL'}), label: '成交金额' });
-        map.set('cost', { ...(map.get('cost') || {key: 'cost', label:'广告消耗', type:'REAL'}), label: '消耗' });
+        map.set('pv', { ...(map.get('pv') || {key: 'pv', label:'浏览量', type:'INTEGER'}), label: '浏览量' });
+        map.set('uv', { ...(map.get('uv') || {key: 'uv', label:'访客数', type:'INTEGER'}), label: '访客数' });
+        map.set('paid_items', { ...(map.get('paid_items') || {key: 'paid_items', label:'成交件数', type:'INTEGER'}), label: '成交件数' });
+        map.set('paid_amount', { ...(map.get('paid_amount') || {key: 'paid_amount', label:'成交金额', type:'REAL'}), label: '成交金额' });
+        map.set('cost', { ...(map.get('cost') || {key: 'cost', label:'花费', type:'REAL'}), label: '消耗' });
         map.set('total_order_amount', { ...(map.get('total_order_amount') || {key:'total_order_amount', label:'总订单金额', type:'REAL'}), label: '总成交额' });
 
         map.set('cpc', { key: 'cpc', label: 'CPC', type: 'REAL' });
@@ -380,7 +384,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
 
     const handleExport = () => {
         if (queryResult.length === 0) return;
-        const headers = resultHeaders.map(key => allMetricsMap.get(key)?.label || key.replace('_', ' '));
+        const headers = resultHeaders.map(key => allMetricsMap.get(key)?.label || key);
         const dataToExport = queryResult.map(row => {
             return resultHeaders.map(key => {
                 const value = row[key];
@@ -391,8 +395,8 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
         });
         const ws = XLSX.utils.aoa_to_sheet([headers, ...dataToExport]);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "聚合数据");
-        XLSX.writeFile(wb, `多维查询_${new Date().toISOString().slice(0,10)}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "数据聚合报表");
+        XLSX.writeFile(wb, `聚合查询_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
 
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
@@ -416,12 +420,12 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                 <div className="mb-6 flex items-center justify-between">
                    <div>
                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">多维数据查询</h1>
-                       <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">COMPREHENSIVE DATA AGGREGATOR</p>
+                       <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">Comprehensive Data Aggregator</p>
                    </div>
                    {!isDataLoaded && (
                        <div className="flex items-center gap-2 bg-amber-50 text-amber-600 px-4 py-2 rounded-xl border border-amber-100 animate-pulse">
                            <AlertCircle size={16} />
-                           <span className="text-xs font-black">警告：物理库中无同步数据，请先前往「数据中心」上传表格。</span>
+                           <span className="text-xs font-black">警告：物理库中暂无同步数据，请先前往「数据中心」上传表格。</span>
                        </div>
                    )}
                 </div>
@@ -429,7 +433,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                         <div className="space-y-1">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">时间范围</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">选择时间段</label>
                             <div className="flex items-center gap-2">
                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#70AD47]" />
                                 <span className="text-slate-300">-</span>
@@ -437,7 +441,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             </div>
                         </div>
                         <div className="space-y-1">
-                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">时间聚合维度</label>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">时间维度</label>
                              <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#70AD47]">
                                  <option value="day">按天汇总</option>
                                  <option value="week">按周汇总</option>
@@ -445,14 +449,14 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                              </select>
                         </div>
                         <div className="space-y-1">
-                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">关联店铺</label>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">限定店铺</label>
                              <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#70AD47]">
                                  <option value="all">所有店铺</option>
                                  {shops.map((s: Shop) => <option key={s.id} value={s.id}>{s.name}</option>)}
                              </select>
                         </div>
                         <div className="space-y-1">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">指标多选</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">指标筛选</label>
                             <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition-colors">
                                 <span className="font-bold text-sm">{selectedMetrics.length} 个指标已选</span>
                                 <ChevronDown size={16} className="text-slate-400" />
@@ -462,9 +466,9 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
 
                     <div className="flex items-end gap-4">
                         <div className="flex-1 space-y-1">
-                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU 精准过滤</label>
+                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU 精准过滤 (支持模糊匹配)</label>
                              <textarea 
-                                placeholder="输入SKU，以逗号或换行分隔。留空代表查询范围内全量资产。" 
+                                placeholder="输入SKU，以逗号或换行分隔。留空则代表统计范围内全量资产。" 
                                 value={skuInput}
                                 onChange={e => setSkuInput(e.target.value)}
                                 className="w-full h-24 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#70AD47] resize-none"
@@ -477,7 +481,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                 disabled={isLoading} 
                                 className="px-10 py-3 rounded-lg bg-[#70AD47] text-white font-black text-xs hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 disabled:shadow-none disabled:cursor-not-allowed uppercase tracking-widest"
                             >
-                                {isLoading ? '聚合中...' : <><Zap size={14} className="fill-white" /> 执行聚合查询</>}
+                                {isLoading ? '正在穿透计算...' : <><Zap size={14} className="fill-white" /> 执行聚合查询</>}
                             </button>
                         </div>
                     </div>
@@ -520,7 +524,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                     </label>
                                     <p className="text-3xl font-black mt-3 text-slate-800">{formatNumberForCard(mainValue, key)}</p>
                                     <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-50 text-[10px] font-black">
-                                        <span className="text-slate-400 uppercase tracking-tighter">较前一周期</span>
+                                        <span className="text-slate-400 font-bold">环比</span>
                                         {isFinite(change) && (
                                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${isPositive ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
                                                 {isPositive ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
@@ -539,7 +543,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     ) : (
                         <div className="h-[300px] flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-50 rounded-2xl">
                              <TrendingUp size={48} className="mb-4 opacity-10" />
-                             <p className="font-black text-xs uppercase tracking-widest">执行查询以可视化趋势</p>
+                             <p className="font-black text-xs uppercase tracking-widest">请点击按钮执行查询以渲染趋势分析</p>
                         </div>
                     )}
                 </div>
@@ -548,7 +552,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
                         <div className="flex items-center gap-3">
                             <BarChart3 size={20} className="text-[#70AD47]" />
-                            <span className="font-black text-slate-800 uppercase tracking-widest">查询结果明细集</span>
+                            <span className="font-black text-slate-800 uppercase tracking-widest">查询结果明细集 (已聚合)</span>
                         </div>
                         <button 
                             onClick={handleExport} 
@@ -564,19 +568,19 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                 <thead>
                                     <tr className="bg-slate-50/50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                                         {resultHeaders.map(key => (
-                                            <th key={key} className={`py-4 px-4 ${key === 'sku_shop' ? 'w-[300px]' : 'w-[120px]'}`}>{allMetricsMap.get(key)?.label || key.replace('_', ' ')}</th>
+                                            <th key={key} className={`py-4 px-4 ${key === 'sku_shop' ? 'w-[300px]' : 'w-[120px]'}`}>{allMetricsMap.get(key)?.label || key}</th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {isLoading ? (
-                                         <tr><td colSpan={resultHeaders.length} className="py-32 text-center text-slate-400 font-black animate-pulse">正在聚合数据流水...</td></tr>
+                                         <tr><td colSpan={resultHeaders.length} className="py-32 text-center text-slate-400 font-black animate-pulse">正在处理海量流水聚合中...</td></tr>
                                     ) : queryResult.length === 0 ? (
                                         <tr>
                                             <td colSpan={resultHeaders.length} className="py-40 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
                                                      <Zap size={64} className="mb-6 opacity-10" />
-                                                     <p className="font-black text-sm uppercase tracking-widest text-slate-400">准备就绪，点击上方按钮查询</p>
+                                                     <p className="font-black text-sm uppercase tracking-widest text-slate-400">准备就绪，点击上方按钮开始查询</p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -591,7 +595,12 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                                                 <div className="text-[10px] text-slate-400 font-bold mt-1 truncate">{row.sku_shop.shopName}</div>
                                                             </div>
                                                         ) : (row[key] === undefined || row[key] === null) ? '-' : typeof row[key] === 'number' ? 
-                                                            (['cpc', 'roi', 'paid_amount', 'total_order_amount', 'cost'].includes(key) ? row[key].toFixed(1) : Math.round(row[key])) : row[key]}
+                                                            (
+                                                                key === 'paid_amount' ? `¥${Math.round(row[key]).toLocaleString()}` :
+                                                                key === 'cost' ? `¥${Math.round(row[key]).toLocaleString()}` :
+                                                                ['cpc', 'roi'].includes(key) ? row[key].toFixed(1) : 
+                                                                Math.round(row[key]).toLocaleString()
+                                                            ) : row[key]}
                                                     </td>
                                                 ))}
                                             </tr>
@@ -603,7 +612,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                          {queryResult.length > 0 && (
                             <div className="flex justify-between items-center pt-6 px-4">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                    匹配 {queryResult.length} 条数据 / 第 {currentPage} - {totalPages} 页
+                                    共匹配 {queryResult.length} 条数据 / 第 {currentPage} - {totalPages} 页
                                 </span>
                                 <div className="flex gap-2">
                                     <button

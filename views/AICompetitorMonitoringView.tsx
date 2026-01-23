@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Binoculars, ShieldAlert, Zap } from 'lucide-react';
+import { Binoculars, ShieldAlert, Zap, Bot } from 'lucide-react';
 
 export const AICompetitorMonitoringView = () => (
   <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn">
@@ -63,4 +63,3 @@ export const AICompetitorMonitoringView = () => (
     </div>
   </div>
 );
-import { Bot } from 'lucide-react';

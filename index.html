@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -7,12 +8,32 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+        /* 核心布局兜底：防止 Tailwind CDN 失败 */
+        html, body, #root { height: 100%; margin: 0; padding: 0; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f8fafc; }
+        
+        /* 强制保护 Flex 结构，防止侧边栏跑到顶部 */
+        .flex-container { display: flex !important; flex-direction: row !important; height: 100vh !important; width: 100vw !important; overflow: hidden !important; }
+        .sidebar-fixed { flex-shrink: 0 !important; display: flex !important; flex-direction: column !important; }
+        .main-content-fixed { flex: 1 !important; display: flex !important; flex-direction: column !important; overflow: auto !important; position: relative !important; }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out; }
     </style>
+    <script>
+        // 显式配置 Tailwind，增强 JIT 稳定性
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
 <script type="importmap">
 {
   "imports": {
