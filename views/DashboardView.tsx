@@ -57,11 +57,16 @@ export const DashboardView = ({ skus, shops }: any) => {
                     DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
                 ]);
 
-                const aggregate = (sz: any[], jzt: any[]) => ({
-                    gmv: sz.reduce((s, r) => s + (Number(r.paid_amount) || 0), 0),
-                    ca: sz.reduce((s, r) => s + (Number(r.paid_items) || 0), 0),
-                    spend: jzt.reduce((s, r) => s + (Number(r.cost) || 0), 0),
-                });
+                const aggregate = (sz: any[], jzt: any[]) => {
+                    const gmv = sz.reduce((s, r) => s + (Number(r.paid_amount) || 0), 0);
+                    const spend = jzt.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+                    return {
+                        gmv,
+                        ca: sz.reduce((s, r) => s + (Number(r.paid_items) || 0), 0),
+                        spend,
+                        roi: spend > 0 ? gmv / spend : 0
+                    };
+                };
 
                 setData({
                     current: aggregate(currSz, currJzt),
@@ -129,7 +134,7 @@ export const DashboardView = ({ skus, shops }: any) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <KPICard 
                     title="总销售额 (GMV)" 
                     value={`¥${(data.current.gmv || 0).toLocaleString()}`} 
@@ -147,6 +152,12 @@ export const DashboardView = ({ skus, shops }: any) => {
                     value={`¥${(data.current.spend || 0).toLocaleString()}`} 
                     prevValue={data.previous.spend}
                     isCost={true}
+                    loading={isLoading} 
+                />
+                <KPICard 
+                    title="整体 ROI" 
+                    value={(data.current.roi || 0).toFixed(2)} 
+                    prevValue={data.previous.roi}
                     loading={isLoading} 
                 />
             </div>
