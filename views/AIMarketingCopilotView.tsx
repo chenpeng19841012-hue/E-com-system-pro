@@ -1,19 +1,32 @@
+
 import React from 'react';
-import { Rocket } from 'lucide-react';
+import { Rocket, Cpu, Sparkles } from 'lucide-react';
 
 export const AIMarketingCopilotView = () => (
   <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn">
     <div className="mb-8">
       <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 智能营销官</h1>
-      <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">AI MARKETING COPILOT</p>
+      <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">AUTO-PILOT MARKETING OPERATIONS</p>
     </div>
-    <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-100 h-96 flex flex-col items-center justify-center text-slate-300 font-bold text-lg">
-        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-            <Rocket size={32} className="text-slate-400" />
+    <div className="bg-white rounded-[40px] p-20 shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
+        <div className="w-24 h-24 bg-indigo-50 rounded-[30px] rotate-12 flex items-center justify-center mb-10 shadow-xl shadow-indigo-100">
+            <Rocket size={48} className="text-indigo-500 -rotate-12" />
         </div>
-        <h3 className="text-slate-600 font-bold text-xl mb-2">洞察即行动，自动优化广告</h3>
-        <p className="text-slate-400 text-sm">此模块正在全力开发中，敬请期待！</p>
-        <p className="text-slate-400 text-sm mt-1">未来将支持一键创建广告活动、智能预算分配，以及7x24小时无人值守优化。</p>
+        <h3 className="text-3xl font-black text-slate-800 mb-6">自动巡航，精准营销</h3>
+        <p className="text-slate-400 text-sm font-bold max-w-lg leading-relaxed">
+            该模块属于“实验工场”系列。我们正在训练针对京东、淘宝算法的广告调优模型。
+            <br/>启动后，它将像“自动驾驶”一样接管您的广告投放。
+        </p>
+        <div className="grid grid-cols-2 gap-4 mt-12 w-full max-w-md">
+            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col items-center gap-3">
+                <Cpu size={24} className="text-slate-300" />
+                <span className="text-[10px] font-black text-slate-400 uppercase">Core Neural Engine</span>
+            </div>
+            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col items-center gap-3">
+                <Sparkles size={24} className="text-slate-300" />
+                <span className="text-[10px] font-black text-slate-400 uppercase">Strategy Lab</span>
+            </div>
+        </div>
     </div>
   </div>
 );

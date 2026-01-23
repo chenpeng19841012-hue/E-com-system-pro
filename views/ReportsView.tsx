@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Calendar, Bot, FileText, Printer, Download, LoaderCircle, ChevronDown, List, ChevronsUpDown, Edit2, Trash2, X, Plus, Store, CheckSquare, Square } from 'lucide-react';
@@ -54,7 +55,18 @@ const formatNumber = (val: number, type: 'int' | 'float' | 'currency' | 'percent
     }
 };
 
-const ChangeCell = ({ current, previous, isBetterWhenLower = false }: { current: number, previous: number, isBetterWhenLower?: boolean }) => {
+/**
+ * Fix: Explicitly type ChangeCell to ensure React correctly handles reserved props like 'key'
+ * and avoids TypeScript "Property 'key' does not exist" errors during .map() rendering.
+ */
+interface ChangeCellProps {
+    current: number;
+    previous: number;
+    isBetterWhenLower?: boolean;
+    key?: React.Key;
+}
+
+const ChangeCell: React.FC<ChangeCellProps> = ({ current, previous, isBetterWhenLower = false }) => {
     if (previous === 0) return <td className="p-2 text-center border border-slate-200 text-slate-400 font-bold">-</td>;
     const change = ((current - previous) / previous);
     const isPositive = isBetterWhenLower ? change < 0 : change > 0;

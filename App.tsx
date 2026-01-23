@@ -18,6 +18,10 @@ import { AISalesForecastView } from './views/AISalesForecastView';
 import { AIAssistantView } from './views/AIAssistantView';
 import { AIAdImageView } from './views/AIAdImageView';
 import { SystemSnapshotView } from './views/SystemSnapshotView';
+import { AICompetitorMonitoringView } from './views/AICompetitorMonitoringView';
+import { AIMarketingCopilotView } from './views/AIMarketingCopilotView';
+import { DynamicPricingEngineView } from './views/DynamicPricingEngineView';
+import { CustomerLifecycleHubView } from './views/CustomerLifecycleHubView';
 
 import { View, TableType, ToastProps, FieldDefinition, Shop, ProductSKU, CustomerServiceAgent, UploadHistory, QuotingData, SkuList, Snapshot, SnapshotSettings } from './lib/types';
 import { DB } from './lib/db';
@@ -50,8 +54,9 @@ export const App = () => {
     const [quotingData, setQuotingData] = useState<QuotingData>(INITIAL_QUOTING_DATA);
     const [snapshotSettings, setSnapshotSettings] = useState<SnapshotSettings>({ autoSnapshotEnabled: true, retentionDays: 7 });
 
-    // Performance Note: Fact tables (shangzhi/jingzhuntong) are NOT kept in React state anymore.
-    // Views will query the DB directly for specific ranges.
+    // Fact Tables State (Loaded into memory for calculation views)
+    // Fix: Added factTables state to hold large datasets for MultiQueryView and ReportsView
+    const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
 
     const loadMetadata = useCallback(async () => {
         setIsAppLoading(true);
@@ -69,6 +74,13 @@ export const App = () => {
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA)
             ]);
 
+            // Fix: Fetch fact table data during metadata load to ensure it's available for reporting components
+            const [f_sz, f_jzt, f_cs] = await Promise.all([
+                DB.getRange('fact_shangzhi', '1970-01-01', '2099-12-31'),
+                DB.getRange('fact_jingzhuntong', '1970-01-01', '2099-12-31'),
+                DB.getRange('fact_customer_service', '1970-01-01', '2099-12-31')
+            ]);
+
             setShops(s_shops);
             setSkus(s_skus);
             setAgents(s_agents);
@@ -77,6 +89,7 @@ export const App = () => {
             setSnapshotSettings(settings);
             setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
+            setFactTables({ shangzhi: f_sz, jingzhuntong: f_jzt, customer_service: f_cs });
         } finally {
             setIsAppLoading(false);
         }
@@ -90,7 +103,6 @@ export const App = () => {
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
     };
 
-    // Advanced Upload Handler (Chunked for performance)
     const handleProcessAndUpload = async (file: File, targetTable: TableType) => {
         return new Promise<void>((resolve, reject) => {
             const reader = new FileReader();
@@ -100,7 +112,6 @@ export const App = () => {
                     const { data: validData } = parseExcelFile(bstr);
                     const tableName = `fact_${targetTable}`;
 
-                    // Transfrom based on schema
                     const targetSchema = schemas[targetTable];
                     const labelToKeyMap = new Map<string, string>();
                     targetSchema.forEach((field: any) => {
@@ -118,7 +129,6 @@ export const App = () => {
                         return newRow;
                     }).filter(row => row.date);
 
-                    // Bulk Save to IndexedDB
                     await DB.bulkAdd(tableName, processedRows);
 
                     const historyItem: UploadHistory = {
@@ -134,6 +144,9 @@ export const App = () => {
                     setUploadHistory(newHistory);
                     await DB.saveConfig('upload_history', newHistory);
 
+                    // Fix: Reload data from DB to update in-memory factTables state
+                    await loadMetadata();
+
                     addToast('success', '同步完成', `成功导入 ${processedRows.length} 条记录。`);
                     resolve();
                 } catch (err) {
@@ -147,10 +160,11 @@ export const App = () => {
 
     const handleClearTable = async (key: TableType) => {
         await DB.clearTable(`fact_${key}`);
+        // Fix: Update local state after clearing table
+        await loadMetadata();
         addToast('success', '清空成功', `物理表数据已重置。`);
     };
 
-    // ... Metadata handlers remain similar but use DB.saveConfig ...
     const handleUpdateSKU = async (sku: ProductSKU) => {
         const updated = skus.map(s => s.id === sku.id ? sku : s);
         setSkus(updated);
@@ -165,20 +179,26 @@ export const App = () => {
 
         switch (currentView) {
             case 'dashboard': return <DashboardView {...commonProps} />;
-            // FIX: Added shangzhiData and jingzhuntongData props to MultiQueryView to satisfy TypeScript interface
-            case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={[]} jingzhuntongData={[]} />;
-            // FIX: Added factTables prop to ReportsView to satisfy TypeScript interface
-            case 'reports': return <ReportsView {...commonProps} factTables={{}} skuLists={skuLists} onAddNewSkuList={async (l) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
-            case 'data-center': return <DataCenterView onUpload={handleProcessAndUpload} history={uploadHistory} factTables={{}} schemas={schemas} addToast={addToast} />;
-            case 'data-experience': return <DataExperienceView factTables={{}} schemas={schemas} onClearTable={handleClearTable} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
+            // Fix: Passed required shangzhiData and jingzhuntongData props to MultiQueryView
+            case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={factTables.shangzhi} jingzhuntongData={factTables.jingzhuntong} />;
+            // Fix: Passed required factTables prop to ReportsView
+            case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
+            // Fix: Passed real factTables instead of empty object to DataCenterView and DataExperienceView
+            case 'data-center': return <DataCenterView onUpload={handleProcessAndUpload} history={uploadHistory} factTables={factTables} schemas={schemas} addToast={addToast} />;
+            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} onClearTable={handleClearTable} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
             case 'products': return <SKUManagementView {...commonProps} skuLists={skuLists} onAddNewSKU={async (s) => { const n = [{...s, id:Date.now().toString()}, ...skus]; setSkus(n); await DB.saveConfig('dim_skus', n); return true; }} onUpdateSKU={handleUpdateSKU} onDeleteSKU={async (id) => { const n = skus.filter(s=>s.id!==id); setSkus(n); await DB.saveConfig('dim_skus', n); }} onBulkAddSKUs={async (ss) => { const n = [...ss.map((s,i)=>({...s, id:(Date.now()+i).toString()})), ...skus]; setSkus(n); await DB.saveConfig('dim_skus', n); }} onAddNewShop={async (s) => { const n = [{...s, id:Date.now().toString()}, ...shops]; setShops(n); await DB.saveConfig('dim_shops', n); return true; }} onUpdateShop={async (s) => { const n = shops.map(x=>x.id===s.id?s:x); setShops(n); await DB.saveConfig('dim_shops', n); return true; }} onDeleteShop={async (id) => { const n = shops.filter(x=>x.id!==id); setShops(n); await DB.saveConfig('dim_shops', n); }} onBulkAddShops={async (ss) => { const n = [...ss.map((s,i)=>({...s, id:(Date.now()+i).toString()})), ...shops]; setShops(n); await DB.saveConfig('dim_shops', n); }} onAddNewAgent={async (a) => { const n = [{...a, id:Date.now().toString()}, ...agents]; setAgents(n); await DB.saveConfig('dim_agents', n); return true; }} onUpdateAgent={async (a) => { const n = agents.map(x=>x.id===a.id?a:x); setAgents(n); await DB.saveConfig('dim_agents', n); return true; }} onDeleteAgent={async (id) => { const n = agents.filter(x=>x.id!==id); setAgents(n); await DB.saveConfig('dim_agents', n); }} onBulkAddAgents={async (as) => { const n = [...as.map((a,i)=>({...a, id:(Date.now()+i).toString()})), ...agents]; setAgents(n); await DB.saveConfig('dim_agents', n); }} onAddNewSkuList={async (l) => { const n = [{...l, id:Date.now().toString()}, ...skuLists]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={async (id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); }} />;
-            case 'ai-profit-analytics': return <AIProfitAnalyticsView factTables={{}} {...commonProps} />;
-            case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={[]} onUpdateSKU={handleUpdateSKU} {...commonProps} />;
+            case 'ai-profit-analytics': return <AIProfitAnalyticsView {...commonProps} />;
+            // Fix: Passed real factTables.shangzhi instead of empty array to AISmartReplenishmentView
+            case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={factTables.shangzhi} onUpdateSKU={handleUpdateSKU} {...commonProps} />;
             case 'ai-quoting': return <AIQuotingView quotingData={quotingData} onUpdate={async (d) => { setQuotingData(d); await DB.saveConfig('quoting_data', d); }} addToast={addToast} />;
             case 'ai-description': return <AIDescriptionView skus={skus} />;
-            case 'ai-sales-forecast': return <AISalesForecastView skus={skus} shangzhiData={[]} />;
+            case 'ai-sales-forecast': return <AISalesForecastView skus={skus} />;
             case 'ai-cs-assistant': return <AIAssistantView skus={skus} shops={shops} />;
             case 'ai-ad-image': return <AIAdImageView skus={skus} />;
+            case 'ai-competitor-monitoring': return <AICompetitorMonitoringView />;
+            case 'ai-marketing-copilot': return <AIMarketingCopilotView />;
+            case 'dynamic-pricing-engine': return <DynamicPricingEngineView />;
+            case 'customer-lifecycle-hub': return <CustomerLifecycleHubView />;
             case 'system-snapshot': return <SystemSnapshotView snapshots={[]} settings={snapshotSettings} onUpdateSettings={async (s) => { setSnapshotSettings(s); await DB.saveConfig('snapshot_settings', s); }} onCreate={()=>{}} onRestore={()=>{}} onDelete={()=>{}} onImport={()=>{}} addToast={addToast} />;
             default: return <DashboardView {...commonProps} />;
         }

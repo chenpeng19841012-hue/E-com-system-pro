@@ -1,5 +1,7 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { DollarSign, Bot, LoaderCircle, AlertCircle, ChevronsUpDown, Filter, ChevronDown } from 'lucide-react';
+import { DollarSign, Bot, LoaderCircle, AlertCircle, ChevronsUpDown, ChevronDown } from 'lucide-react';
+import { DB } from '../lib/db';
 import { getSkuIdentifier } from '../lib/helpers';
 import { ProductSKU, Shop } from '../lib/types';
 
@@ -34,15 +36,105 @@ const getInitialDates = () => {
     };
 };
 
-export const AIProfitAnalyticsView = ({ factTables, skus, shops }: { factTables: any, skus: ProductSKU[], shops: Shop[] }) => {
+export const AIProfitAnalyticsView = ({ skus, shops, addToast }: { skus: ProductSKU[], shops: Shop[], addToast: any }) => {
     const [startDate, setStartDate] = useState(getInitialDates().startDate);
     const [endDate, setEndDate] = useState(getInitialDates().endDate);
     const [selectedShopIds, setSelectedShopIds] = useState<string[]>([]);
     const [isShopDropdownOpen, setIsShopDropdownOpen] = useState(false);
     const shopDropdownRef = useRef<HTMLDivElement>(null);
     const [sortBy, setSortBy] = useState<{ key: keyof ProfitData, direction: 'asc' | 'desc' }>({ key: 'netProfit', direction: 'desc' });
+    
+    const [isLoading, setIsLoading] = useState(false);
+    const [tableData, setTableData] = useState<ProfitData[]>([]);
+    const [kpis, setKpis] = useState<KpiData>({ totalRevenue: 0, totalCogs: 0, totalAdSpend: 0, totalGrossProfit: 0, totalNetProfit: 0, avgNetProfitMargin: 0 });
+    
     const [aiInsight, setAiInsight] = useState('');
     const [isAiLoading, setIsAiLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [szData, jztData] = await Promise.all([
+                    DB.getRange('fact_shangzhi', startDate, endDate),
+                    DB.getRange('fact_jingzhuntong', startDate, endDate)
+                ]);
+
+                const skuMap = new Map(skus.map(s => [s.code, s]));
+                const shopMap = new Map(shops.map(s => [s.id, s.name]));
+                
+                const adSpendMap = new Map<string, number>();
+                jztData.forEach((r: any) => {
+                    const skuCode = getSkuIdentifier(r);
+                    if (skuCode) {
+                        const key = skuCode;
+                        adSpendMap.set(key, (adSpendMap.get(key) || 0) + Number(r.cost || 0));
+                    }
+                });
+
+                const profitMap = new Map<string, Omit<ProfitData, 'skuCode' | 'netProfitMargin'>>();
+
+                szData.forEach((r: any) => {
+                    const skuCode = getSkuIdentifier(r);
+                    if (!skuCode) return;
+
+                    const skuInfo = skuMap.get(skuCode);
+                    if (!skuInfo) return;
+
+                    if (selectedShopIds.length > 0 && !selectedShopIds.includes(skuInfo.shopId)) return;
+                    
+                    const revenue = Number(r.paid_amount) || 0;
+                    const cogs = (skuInfo.costPrice || 0) * (Number(r.paid_items) || 0);
+                    const adSpendForThisRecord = 0; // JZT distribution is simplified here to SKU level
+                    
+                    const entry = profitMap.get(skuCode) || {
+                        skuName: skuInfo.name,
+                        shopName: shopMap.get(skuInfo.shopId) || '未知',
+                        revenue: 0, cogs: 0, adSpend: 0, grossProfit: 0, netProfit: 0
+                    };
+
+                    entry.revenue += revenue;
+                    entry.cogs += cogs;
+                    entry.grossProfit += (revenue - cogs);
+                    profitMap.set(skuCode, entry);
+                });
+
+                // Re-merge with Ad Spend
+                profitMap.forEach((data, skuCode) => {
+                    data.adSpend = adSpendMap.get(skuCode) || 0;
+                    data.netProfit = data.grossProfit - data.adSpend;
+                });
+
+                let totalRevenue = 0, totalCogs = 0, totalAdSpend = 0, totalGrossProfit = 0, totalNetProfit = 0;
+                
+                const finalTableData = Array.from(profitMap.entries()).map(([skuCode, data]) => {
+                    totalRevenue += data.revenue;
+                    totalCogs += data.cogs;
+                    totalAdSpend += data.adSpend;
+                    totalGrossProfit += data.grossProfit;
+                    totalNetProfit += data.netProfit;
+
+                    return {
+                        skuCode,
+                        ...data,
+                        netProfitMargin: data.revenue > 0 ? data.netProfit / data.revenue : 0,
+                    };
+                });
+
+                setKpis({
+                    totalRevenue, totalCogs, totalAdSpend, totalGrossProfit, totalNetProfit,
+                    avgNetProfitMargin: totalRevenue > 0 ? totalNetProfit / totalRevenue : 0,
+                });
+                setTableData(finalTableData);
+            } catch (err) {
+                console.error("Profit fetching error:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [startDate, endDate, selectedShopIds, skus, shops]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -51,87 +143,12 @@ export const AIProfitAnalyticsView = ({ factTables, skus, shops }: { factTables:
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
     
     const handleToggleShop = (shopId: string) => {
         setSelectedShopIds(prev => prev.includes(shopId) ? prev.filter(id => id !== shopId) : [...prev, shopId]);
     };
-
-    const { kpis, tableData } = useMemo<{ kpis: KpiData, tableData: ProfitData[] }>(() => {
-        const skuMap = new Map(skus.map(s => [s.code, s]));
-        const shopMap = new Map(shops.map(s => [s.id, s.name]));
-        
-        const adSpendMap = new Map<string, number>();
-        factTables.jingzhuntong
-            .filter((r: any) => r.date >= startDate && r.date <= endDate)
-            .forEach((r: any) => {
-                const skuCode = getSkuIdentifier(r);
-                if (skuCode) {
-                    const key = `${r.date}-${skuCode}`;
-                    adSpendMap.set(key, (adSpendMap.get(key) || 0) + Number(r.cost || 0));
-                }
-            });
-
-        const profitMap = new Map<string, Omit<ProfitData, 'skuCode' | 'netProfitMargin'>>();
-
-        factTables.shangzhi
-            .filter((r: any) => r.date >= startDate && r.date <= endDate)
-            .forEach((r: any) => {
-                const skuCode = getSkuIdentifier(r);
-                if (!skuCode) return;
-
-                const skuInfo = skuMap.get(skuCode);
-                if (!skuInfo) return;
-
-                if (selectedShopIds.length > 0 && !selectedShopIds.includes(skuInfo.shopId)) return;
-                
-                const revenue = Number(r.paid_amount) || 0;
-                const cogs = (skuInfo.costPrice || 0) * (Number(r.paid_items) || 0);
-                const adSpend = adSpendMap.get(`${r.date}-${skuCode}`) || 0;
-                const grossProfit = revenue - cogs;
-                const netProfit = grossProfit - adSpend;
-                
-                const entry = profitMap.get(skuCode) || {
-                    skuName: skuInfo.name,
-                    shopName: shopMap.get(skuInfo.shopId) || '未知',
-                    revenue: 0, cogs: 0, adSpend: 0, grossProfit: 0, netProfit: 0
-                };
-
-                entry.revenue += revenue;
-                entry.cogs += cogs;
-                entry.adSpend += adSpend;
-                entry.grossProfit += grossProfit;
-                entry.netProfit += netProfit;
-
-                profitMap.set(skuCode, entry);
-            });
-
-        let totalRevenue = 0, totalCogs = 0, totalAdSpend = 0, totalGrossProfit = 0, totalNetProfit = 0;
-        
-        const finalTableData = Array.from(profitMap.entries()).map(([skuCode, data]) => {
-            totalRevenue += data.revenue;
-            totalCogs += data.cogs;
-            totalAdSpend += data.adSpend;
-            totalGrossProfit += data.grossProfit;
-            totalNetProfit += data.netProfit;
-
-            return {
-                skuCode,
-                ...data,
-                netProfitMargin: data.revenue > 0 ? data.netProfit / data.revenue : 0,
-            };
-        });
-
-        const finalKpis: KpiData = {
-            totalRevenue, totalCogs, totalAdSpend, totalGrossProfit, totalNetProfit,
-            avgNetProfitMargin: totalRevenue > 0 ? totalNetProfit / totalRevenue : 0,
-        };
-
-        return { kpis: finalKpis, tableData: finalTableData };
-    }, [factTables, skus, shops, startDate, endDate, selectedShopIds]);
 
     const sortedTableData = useMemo(() => {
         return [...tableData].sort((a, b) => {
@@ -156,32 +173,25 @@ export const AIProfitAnalyticsView = ({ factTables, skus, shops }: { factTables:
         try {
             const top5 = sortedTableData.slice(0, 5);
             const bottom5 = sortedTableData.slice(-5).reverse();
-            const dataForPrompt = [...top5, ...bottom5];
-
-            if(dataForPrompt.length === 0) {
-                setAiInsight("没有足够的利润数据进行分析。");
+            
+            if(sortedTableData.length === 0) {
+                setAiInsight("没有足够的利润数据进行分析。请先在数据中心上传销售与广告明细。");
                 return;
             }
 
-            const prompt = `...`;
+            const dataStr = top5.concat(bottom5).map(s => `${s.skuName}: GMV=${s.revenue}, 利润率=${(s.netProfitMargin*100).toFixed(2)}%`).join('; ');
+            const prompt = `你是一名资深电商CFO。以下是当前时段的SKU利润表现快照：${dataStr}。请根据这些数据：1. 诊断整体盈利健康度；2. 识别表现最差的SKU并推测原因（如广告浪费、成本过高）；3. 提供3个具体的盈利优化建议。语气简练有力，200字以内。`;
             
-            const requestBody = { model: 'gemini-3-flash-preview', contents: prompt };
             const apiResponse = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({ model: 'gemini-3-flash-preview', contents: prompt })
             });
 
-            if (!apiResponse.ok) {
-                const errorData = await apiResponse.json();
-                throw new Error(errorData.error || 'API request failed');
-            }
-            
+            if (!apiResponse.ok) throw new Error('AI request failed');
             const responseData = await apiResponse.json();
-            const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
-            setAiInsight(text.trim());
+            setAiInsight(responseData.candidates?.[0]?.content?.parts?.[0]?.text || "分析报告生成失败。");
         } catch (err) {
-            console.error(err);
             setAiInsight("AI诊断失败，请检查API密钥或网络连接。");
         } finally {
             setIsAiLoading(false);
@@ -190,102 +200,126 @@ export const AIProfitAnalyticsView = ({ factTables, skus, shops }: { factTables:
 
     const formatCurrency = (val: number) => `¥${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
     const formatPercent = (val: number) => `${(val * 100).toFixed(2)}%`;
-    const kpiCards = [
-        { title: '总收入 (GMV)', value: formatCurrency(kpis.totalRevenue) },
-        { title: '总商品成本 (COGS)', value: formatCurrency(kpis.totalCogs) },
-        { title: '总广告花费', value: formatCurrency(kpis.totalAdSpend) },
-        { title: '总毛利润', value: formatCurrency(kpis.totalGrossProfit) },
-        { title: '总净利润', value: formatCurrency(kpis.totalNetProfit) },
-        { title: '平均净利润率', value: formatPercent(kpis.avgNetProfitMargin) },
-    ];
-    
+
     return (
         <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn space-y-8">
-            <div>
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 利润分析</h1>
-                <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">SKU-LEVEL PROFIT INSIGHTS</p>
-            </div>
-            
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                    <label className="text-sm font-bold text-slate-600 shrink-0">时间范围:</label>
-                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#70AD47]" />
-                    <span className="text-slate-400">-</span>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#70AD47]" />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 利润分析</h1>
+                    <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">SKU-LEVEL PROFIT INTELLIGENCE</p>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-bold text-slate-600 shrink-0">店铺:</label>
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-200">
+                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent border-none text-xs font-bold text-slate-600 px-3 py-1 outline-none" />
+                        <span className="text-slate-300 self-center">-</span>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent border-none text-xs font-bold text-slate-600 px-3 py-1 outline-none" />
+                    </div>
                     <div className="relative" ref={shopDropdownRef}>
-                        <button onClick={() => setIsShopDropdownOpen(prev => !prev)} className="w-48 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-[#70AD47] flex justify-between items-center">
+                        <button onClick={() => setIsShopDropdownOpen(!isShopDropdownOpen)} className="min-w-[160px] bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 flex justify-between items-center shadow-sm">
                             <span className="truncate">{selectedShopIds.length === 0 ? '全部店铺' : `已选 ${selectedShopIds.length} 个`}</span>
-                            <ChevronDown size={16} />
+                            <ChevronDown size={14} className="ml-2 text-slate-400" />
                         </button>
                         {isShopDropdownOpen && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl p-2 flex flex-col">
-                                <div className="flex-1 overflow-y-auto max-h-48 text-sm">
-                                    {shops.map((shop: Shop) => (
-                                        <label key={shop.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer">
-                                            <input type="checkbox" checked={selectedShopIds.includes(shop.id)} onChange={() => handleToggleShop(shop.id)} className="form-checkbox h-3.5 w-3.5 text-[#70AD47] border-slate-300 rounded focus:ring-[#70AD47]" />
-                                            <span className="truncate text-xs">{shop.name}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                                <div className="pt-2 mt-2 border-t border-slate-100">
-                                    <button onClick={() => setSelectedShopIds([])} className="w-full text-center text-xs font-bold text-rose-500 hover:bg-rose-50 p-1 rounded">清空选择</button>
-                                </div>
+                            <div className="absolute top-full right-0 w-64 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-20 p-2 max-h-60 overflow-y-auto">
+                                {shops.map(shop => (
+                                    <label key={shop.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                                        <input type="checkbox" checked={selectedShopIds.includes(shop.id)} onChange={() => handleToggleShop(shop.id)} className="form-checkbox h-4 w-4 text-[#70AD47] rounded" />
+                                        <span className="text-xs font-bold text-slate-700">{shop.name}</span>
+                                    </label>
+                                ))}
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                {kpiCards.map(k => <div key={k.title} className="bg-white p-4 rounded-lg shadow-sm border border-slate-100"><h4 className="text-xs font-bold text-slate-400">{k.title}</h4><p className={`text-2xl font-black mt-2 ${k.title.includes('净利润') && kpis.totalNetProfit < 0 ? 'text-rose-500' : 'text-slate-800'}`}>{k.value}</p></div>)}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+                {[
+                    { title: '总收入 (GMV)', value: formatCurrency(kpis.totalRevenue) },
+                    { title: '货品成本 (COGS)', value: formatCurrency(kpis.totalCogs) },
+                    { title: '广告花费', value: formatCurrency(kpis.totalAdSpend) },
+                    { title: '总毛利', value: formatCurrency(kpis.totalGrossProfit) },
+                    { title: '总净利润', value: formatCurrency(kpis.totalNetProfit), highlight: kpis.totalNetProfit < 0 },
+                    { title: '平均净利润率', value: formatPercent(kpis.avgNetProfitMargin), highlight: kpis.avgNetProfitMargin < 0 },
+                ].map(k => (
+                    <div key={k.title} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{k.title}</h4>
+                        {isLoading ? (
+                            <div className="h-8 bg-slate-50 animate-pulse rounded mt-2 w-3/4"></div>
+                        ) : (
+                            <p className={`text-2xl font-black mt-2 ${k.highlight ? 'text-rose-500' : 'text-slate-800'}`}>{k.value}</p>
+                        )}
+                    </div>
+                ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-6">
-                <div className="col-span-3 lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6 min-h-[400px]">
-                     <table className="w-full text-xs">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 p-8 min-h-[500px]">
+                     <table className="w-full text-[11px]">
                         <thead>
-                            <tr className="text-left text-slate-500 font-bold">
+                            <tr className="text-left text-slate-400 font-black uppercase tracking-widest border-b border-slate-100">
                                 {(['skuName', 'revenue', 'grossProfit', 'adSpend', 'netProfit', 'netProfitMargin'] as const).map(key => (
-                                     <th key={key} className="p-2 border-b cursor-pointer" onClick={() => handleSort(key)}>
+                                     <th key={key} className="pb-4 px-2 cursor-pointer group" onClick={() => handleSort(key)}>
                                         <div className="flex items-center gap-1">
                                             { {skuName: 'SKU / 店铺', revenue: '收入', grossProfit: '毛利润', adSpend: '广告费', netProfit: '净利润', netProfitMargin: '净利润率'}[key] }
-                                            {sortBy.key === key && <ChevronsUpDown size={12} />}
+                                            <ChevronsUpDown size={12} className={`opacity-0 group-hover:opacity-100 transition-opacity ${sortBy.key === key ? 'opacity-100 text-[#70AD47]' : ''}`} />
                                         </div>
                                     </th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedTableData.map(row => (
-                                <tr key={row.skuCode} className="hover:bg-slate-50">
-                                    <td className="p-2 border-b border-slate-100"><div className="font-bold text-slate-800 truncate" title={row.skuName}>{row.skuName}</div><div className="text-[10px] text-slate-400">{row.shopName}</div></td>
-                                    <td className="p-2 border-b border-slate-100 font-mono">{formatCurrency(row.revenue)}</td>
-                                    <td className="p-2 border-b border-slate-100 font-mono">{formatCurrency(row.grossProfit)}</td>
-                                    <td className="p-2 border-b border-slate-100 font-mono">{formatCurrency(row.adSpend)}</td>
-                                    <td className={`p-2 border-b border-slate-100 font-mono font-bold ${row.netProfit < 0 ? 'text-rose-500' : 'text-green-600'}`}>{formatCurrency(row.netProfit)}</td>
-                                    <td className={`p-2 border-b border-slate-100 font-mono font-bold ${row.netProfitMargin < 0 ? 'text-rose-500' : 'text-green-600'}`}>{formatPercent(row.netProfitMargin)}</td>
-                                </tr>
-                            ))}
+                            {isLoading ? (
+                                <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-bold animate-pulse">正在穿透海量记录计算利润...</td></tr>
+                            ) : sortedTableData.length === 0 ? (
+                                <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-bold italic">当前周期无销售记录</td></tr>
+                            ) : (
+                                sortedTableData.map(row => (
+                                    <tr key={row.skuCode} className="hover:bg-slate-50 transition-colors group">
+                                        <td className="py-4 px-2 border-b border-slate-50 max-w-[200px]">
+                                            <div className="font-black text-slate-800 truncate" title={row.skuName}>{row.skuName}</div>
+                                            <div className="text-[10px] text-slate-400 font-bold mt-0.5">{row.shopName}</div>
+                                        </td>
+                                        <td className="py-4 px-2 border-b border-slate-50 font-mono font-bold text-slate-600">{formatCurrency(row.revenue)}</td>
+                                        <td className="py-4 px-2 border-b border-slate-50 font-mono text-slate-500">{formatCurrency(row.grossProfit)}</td>
+                                        <td className="py-4 px-2 border-b border-slate-50 font-mono text-rose-400">{formatCurrency(row.adSpend)}</td>
+                                        <td className={`py-4 px-2 border-b border-slate-50 font-mono font-black ${row.netProfit < 0 ? 'text-rose-500' : 'text-green-600'}`}>{formatCurrency(row.netProfit)}</td>
+                                        <td className={`py-4 px-2 border-b border-slate-50 font-mono font-black ${row.netProfitMargin < 0 ? 'text-rose-500' : 'text-green-600'}`}>{formatPercent(row.netProfitMargin)}</td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                      </table>
-                     {tableData.length === 0 && <div className="py-20 text-center text-slate-400">暂无符合条件的利润数据</div>}
                 </div>
-                 <div className="col-span-3 lg:col-span-1 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-                     <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Bot size={18} className="text-[#70AD47]"/> AI 盈利诊断</h3>
-                     <button onClick={handleAiAnalysis} disabled={isAiLoading} className="w-full mb-4 py-2.5 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2">
-                        {isAiLoading ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16} />}
-                        分析当前数据
+                 <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 h-fit">
+                     <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
+                         <Bot size={20} className="text-[#70AD47]"/> 
+                         AI 盈利诊断官
+                     </h3>
+                     <button 
+                        onClick={handleAiAnalysis} 
+                        disabled={isAiLoading || sortedTableData.length === 0} 
+                        className="w-full mb-6 py-3 rounded-2xl bg-[#70AD47] text-white font-black text-xs shadow-lg shadow-[#70AD47]/20 hover:bg-[#5da035] transition-all flex items-center justify-center gap-2 disabled:bg-slate-100 disabled:text-slate-300 disabled:shadow-none"
+                    >
+                        {isAiLoading ? <LoaderCircle size={16} className="animate-spin" /> : <DollarSign size={16} />}
+                        执行深度盈利诊断
                     </button>
-                    <div className="bg-slate-50/70 rounded-lg p-4 min-h-[200px]">
+                    <div className="bg-slate-50/70 rounded-2xl p-6 min-h-[300px]">
                         {isAiLoading ? (
-                             <div className="flex flex-col items-center justify-center h-full text-slate-400"><LoaderCircle size={24} className="animate-spin mb-2" /><p className="text-xs font-bold">AI正在分析...</p></div>
+                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                <LoaderCircle size={28} className="animate-spin mb-4" />
+                                <p className="text-xs font-bold">AI 正在审计财务明细...</p>
+                            </div>
                         ) : aiInsight ? (
-                             <div className="text-xs text-slate-600 space-y-2 leading-relaxed whitespace-pre-wrap">{aiInsight.split('\n').map((line, i) => <p key={i}>{line}</p>)}</div>
+                             <div className="text-xs text-slate-600 space-y-4 leading-relaxed whitespace-pre-wrap font-medium">
+                                 {aiInsight}
+                             </div>
                         ) : (
-                             <div className="flex flex-col items-center justify-center h-full text-slate-300 text-center"><Bot size={32} className="mb-2 opacity-50" /><p className="text-xs font-bold">点击按钮，<br/>让AI为您诊断盈利状况</p></div>
+                             <div className="flex flex-col items-center justify-center h-full text-slate-300 text-center opacity-60">
+                                 <Bot size={48} className="mb-4" />
+                                 <p className="text-xs font-black uppercase tracking-widest">Awaiting Analysis</p>
+                                 <p className="text-[10px] mt-2 font-bold">点击上方按钮启动审计</p>
+                             </div>
                         )}
                     </div>
                  </div>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
     LayoutGrid, 
@@ -19,7 +20,7 @@ import {
     Rocket,
     Tags,
     Heart,
-    Camera // Import Camera icon for snapshot view
+    FlaskConical // New icon for lab/beta
 } from 'lucide-react';
 import { View } from '../lib/types';
 
@@ -72,30 +73,30 @@ export const Sidebar = ({ currentView, setCurrentView, isSidebarCollapsed, setIs
                    </div>
                 )}
 
-                {!isSidebarCollapsed && <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">核心分析</div>}
+                {!isSidebarCollapsed && <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">核心分析中心</div>}
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<LayoutGrid size={18} />} label="AI驾驶舱" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Search size={18} />} label="多维查询" active={currentView === 'multiquery'} onClick={() => setCurrentView('multiquery')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<FileText size={18} />} label="运营报表" active={currentView === 'reports'} onClick={() => setCurrentView('reports')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Package size={18} />} label="资产管理" active={currentView === 'products'} onClick={() => setCurrentView('products')} />
                 
-                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">AI 洞察与决策</div>}
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<PackagePlus size={18} />} label="AI 智能补货" active={currentView === 'ai-smart-replenishment'} onClick={() => setCurrentView('ai-smart-replenishment')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Binoculars size={18} />} label="AI 竞品监控" active={currentView === 'ai-competitor-monitoring'} onClick={() => setCurrentView('ai-competitor-monitoring')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Calculator size={18} />} label="AI产品报价" active={currentView === 'ai-quoting'} onClick={() => setCurrentView('ai-quoting')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<MessageCircle size={18} />} label="AI智能客服助手" active={currentView === 'ai-cs-assistant'} onClick={() => setCurrentView('ai-cs-assistant')} />
+                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">AI 智能决策</div>}
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<DollarSign size={18} />} label="AI 利润分析" active={currentView === 'ai-profit-analytics'} onClick={() => setCurrentView('ai-profit-analytics')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<PackagePlus size={18} />} label="AI 智能补货" active={currentView === 'ai-smart-replenishment'} onClick={() => setCurrentView('ai-smart-replenishment')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<TrendingUp size={18} />} label="AI销售预测" active={currentView === 'ai-sales-forecast'} onClick={() => setCurrentView('ai-sales-forecast')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Binoculars size={18} />} label="AI 竞品监控" active={currentView === 'ai-competitor-monitoring'} onClick={() => setCurrentView('ai-competitor-monitoring')} />
 
-                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">AI 执行与创造</div>}
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Rocket size={18} />} label="AI 智能营销官" active={currentView === 'ai-marketing-copilot'} onClick={() => setCurrentView('ai-marketing-copilot')} />
+                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">AI 运营工具</div>}
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Calculator size={18} />} label="AI产品报价" active={currentView === 'ai-quoting'} onClick={() => setCurrentView('ai-quoting')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<MessageCircle size={18} />} label="智能客服助手" active={currentView === 'ai-cs-assistant'} onClick={() => setCurrentView('ai-cs-assistant')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Bot size={18} />} label="AI文案生成" active={currentView === 'ai-description'} onClick={() => setCurrentView('ai-description')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Image size={18} />} label="AI广告图" active={currentView === 'ai-ad-image'} onClick={() => setCurrentView('ai-ad-image')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Tags size={18} />} label="动态定价引擎" active={currentView === 'dynamic-pricing-engine'} onClick={() => setCurrentView('dynamic-pricing-engine')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Heart size={18} />} label="客户生命周期管理" active={currentView === 'customer-lifecycle-hub'} onClick={() => setCurrentView('customer-lifecycle-hub')} />
 
-                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">数据工程</div>}
+                {!isSidebarCollapsed && <div className="px-4 py-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-slate-600">实验与工程</div>}
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Database size={18} />} label="数据中心" active={currentView === 'data-center'} onClick={() => setCurrentView('data-center')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<Eye size={18} />} label="数据体验" active={currentView === 'data-experience'} onClick={() => setCurrentView('data-experience')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Rocket size={18} className="opacity-50"/>} label="智能营销官" active={currentView === 'ai-marketing-copilot'} onClick={() => setCurrentView('ai-marketing-copilot')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Tags size={18} className="opacity-50"/>} label="动态定价引擎" active={currentView === 'dynamic-pricing-engine'} onClick={() => setCurrentView('dynamic-pricing-engine')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Heart size={18} className="opacity-50"/>} label="客户生命周期" active={currentView === 'customer-lifecycle-hub'} onClick={() => setCurrentView('customer-lifecycle-hub')} />
             </div>
 
             <div className="p-4 border-t border-slate-800">
