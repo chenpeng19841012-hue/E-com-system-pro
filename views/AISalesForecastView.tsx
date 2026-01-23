@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { TrendingUp, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, CalendarDays, BarChartHorizontalBig } from 'lucide-react';
 import { ProductSKU } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
@@ -95,17 +94,28 @@ export const AISalesForecastView = ({ skus, shangzhiData }: AISalesForecastViewP
                 请开始预测。
             `;
             
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const response = await ai.models.generateContent({
+            const requestBody = {
                 model: 'gemini-3-flash-preview',
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json",
                 }
+            };
+
+            const apiResponse = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
+
+            if (!apiResponse.ok) {
+                const errorData = await apiResponse.json();
+                throw new Error(errorData.error || 'API request failed');
+            }
             
-            const resultText = response.text.trim();
-            const resultJson = JSON.parse(resultText) as ForecastResult;
+            const responseData = await apiResponse.json();
+            const resultText = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
+            const resultJson = JSON.parse(resultText.trim()) as ForecastResult;
             setForecastResult(resultJson);
 
         } catch (err: any) {

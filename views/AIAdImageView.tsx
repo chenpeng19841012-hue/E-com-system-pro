@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { Image as ImageIcon, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Download } from 'lucide-react';
 import { ProductSKU } from '../lib/types';
 
@@ -38,11 +37,9 @@ export const AIAdImageView = ({ skus }: AIAdImageViewProps) => {
         setGeneratedImageUrl(null);
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            
             const fullPrompt = `${prompt} 风格为${style}。`;
 
-            const response = await ai.models.generateContent({
+            const requestBody = {
                 model: 'gemini-2.5-flash-image',
                 contents: { parts: [{ text: fullPrompt }] },
                 config: {
@@ -50,10 +47,23 @@ export const AIAdImageView = ({ skus }: AIAdImageViewProps) => {
                         aspectRatio: aspectRatio,
                     },
                 },
+            };
+
+            const apiResponse = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
 
+            if (!apiResponse.ok) {
+                const errorData = await apiResponse.json();
+                throw new Error(errorData.error || 'API request failed');
+            }
+
+            const responseData = await apiResponse.json();
+
             let foundImage = false;
-            for (const part of response.candidates[0].content.parts) {
+            for (const part of responseData.candidates[0].content.parts) {
                 if (part.inlineData) {
                     const base64String = part.inlineData.data;
                     const imageUrl = `data:${part.inlineData.mimeType};base64,${base64String}`;

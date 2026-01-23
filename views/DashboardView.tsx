@@ -1,8 +1,14 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { TrendingUp, ArrowUp, ArrowDown, Bot, LoaderCircle, AlertCircle, BarChart, PieChart, ShoppingCart, CheckSquare, Square } from 'lucide-react';
 import { getSkuIdentifier } from '../lib/helpers';
+
+// FIX: Added KpiItem interface to strongly type the kpis array and resolve type inference issues.
+interface KpiItem {
+    title: string;
+    value: string;
+    change: number;
+    isPositive: boolean;
+}
 
 const KPICard = ({ title, value, change, isPositive, isLoading }: { title: string, value: string, change: number, isPositive: boolean, isLoading: boolean }) => {
     const changeColor = change === 0 ? 'text-slate-500' : isPositive ? 'text-green-500' : 'text-rose-500';
@@ -101,7 +107,6 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
     const [isAiLoading, setIsAiLoading] = useState<boolean>(true);
     const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['gmv', 'ca']));
 
-    // FIX: Define interfaces for dashboard data to ensure type safety.
     interface DailyData {
         date: string;
         gmv: number;
@@ -145,17 +150,16 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
             
             const dailyDataMap = new Map<string, any>();
             
-            // Initialize daily data with 0s for all dates in the range
             const start = new Date(startDate);
             const end = new Date(endDate);
-            for (let d = start; d <= end; d.setDate(d.getDate() + 1)) {
-                 dailyDataMap.set(d.toISOString().split('T')[0], { gmv: 0, ca: 0, cogs: 0, cost: 0 });
+            for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                 dailyDataMap.set(d.toISOString().split('T')[0], { gmv: 0, ca: 0, cogs: 0, cost: 0, adSpend: 0 });
             }
 
             factTables.shangzhi
                 .filter((r: any) => r.date >= startDate && r.date <= endDate)
                 .forEach((r: any) => {
-                    const entry = dailyDataMap.get(r.date) || { gmv: 0, ca: 0, cogs: 0, cost: 0 };
+                    const entry = dailyDataMap.get(r.date) || { gmv: 0, ca: 0, cogs: 0, cost: 0, adSpend: 0 };
                     const skuCode = getSkuIdentifier(r);
                     const skuInfo = skuMap.get(skuCode);
                     entry.gmv += Number(r.paid_amount) || 0;
@@ -167,8 +171,8 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
             factTables.jingzhuntong
                 .filter((r: any) => r.date >= startDate && r.date <= endDate)
                 .forEach((r: any) => {
-                     const entry = dailyDataMap.get(r.date) || { gmv: 0, ca: 0, cogs: 0, cost: 0 };
-                     entry.cost += Number(r.cost || 0);
+                     const entry = dailyDataMap.get(r.date) || { gmv: 0, ca: 0, cogs: 0, cost: 0, adSpend: 0 };
+                     entry.adSpend += Number(r.cost || 0);
                      dailyDataMap.set(r.date, entry);
                 });
             
@@ -177,16 +181,15 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
             const skuGmv: Record<string, number> = {};
 
             const dailyDataArray: DailyData[] = Array.from(dailyDataMap.entries()).map(([date, values]) => {
-                const profit = values.gmv - values.cogs - values.cost;
-                const roi = values.cost > 0 ? values.gmv / values.cost : 0;
+                const profit = values.gmv - values.cogs - values.adSpend;
+                const roi = values.adSpend > 0 ? values.gmv / values.adSpend : 0;
                 totalGmv += values.gmv;
                 totalCA += values.ca;
-                totalAdSpend += values.cost;
+                totalAdSpend += values.adSpend;
                 totalProfit += profit;
                 return { date, ...values, profit, roi };
             }).sort((a, b) => a.date.localeCompare(b.date));
 
-            // Calculate rankings separately as daily aggregation doesn't have sku/shop info
             factTables.shangzhi.filter((r: any) => r.date >= startDate && r.date <= endDate)
                 .forEach((r: any) => {
                     const gmv = Number(r.paid_amount) || 0;
@@ -212,7 +215,6 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
 
         let currentStartDate: Date, currentEndDate: Date;
         if (timeRange === 'custom') {
-            // FIX: Return a well-typed empty state to prevent property access errors.
             if (!customStartDate || !customEndDate) return { current: emptyMetrics, previous: emptyMetrics };
             currentStartDate = new Date(customStartDate + 'T00:00:00');
             currentEndDate = new Date(customEndDate + 'T00:00:00');
@@ -237,7 +239,7 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
     }, [timeRange, customStartDate, customEndDate, factTables, skus, shops]);
 
     const { current, previous } = dashboardData;
-    const kpis = [
+    const kpis: KpiItem[] = [
         { title: '总GMV', value: `¥${Math.round(current.gmv / 1000)}k`, change: (previous.gmv === 0 ? (current.gmv > 0 ? Infinity : 0) : (current.gmv - previous.gmv) / previous.gmv), isPositive: true },
         { title: '总CA', value: current.ca.toLocaleString(), change: (previous.ca === 0 ? (current.ca > 0 ? Infinity : 0) : (current.ca - previous.ca) / previous.ca), isPositive: true },
         { title: '广告花费', value: `¥${Math.round(current.adSpend / 1000)}k`, change: (previous.adSpend === 0 ? (current.adSpend > 0 ? Infinity : 0) : (current.adSpend - previous.adSpend) / previous.adSpend), isPositive: false },
@@ -252,12 +254,22 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
             }
             setIsAiLoading(true);
             try {
-                // FIX: Use process.env.API_KEY directly without casting.
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                const prompt = `...`; // Prompt remains similar, just needs updated metric names if needed.
-                const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-                // FIX: Use response.text property to get the generated text safely.
-                setAiInsight(response.text?.trim() || "AI洞察返回为空。");
+                const prompt = `...`;
+                const requestBody = { model: 'gemini-3-flash-preview', contents: prompt };
+                const apiResponse = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!apiResponse.ok) {
+                    const errorData = await apiResponse.json();
+                    throw new Error(errorData.error || 'API request failed');
+                }
+                
+                const responseData = await apiResponse.json();
+                const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
+                setAiInsight(text.trim() || "AI洞察返回为空。");
             } catch (err) { setAiInsight("AI洞察生成失败。"); } finally { setIsAiLoading(false); }
         };
         generateInsight();
@@ -288,10 +300,9 @@ export const DashboardView = ({ factTables, skus, shops }: { factTables: any, sk
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-         {/* FIX: Refactored to use the 'isPositive' flag from the data object and calculate if the change is "good" for coloring. This resolves potential type errors and is more robust than string matching. */}
-         {kpis.map(kpi => {
-            const isChangeGood = (kpi.change > 0 && kpi.isPositive) || (kpi.change < 0 && !kpi.isPositive);
-            return <KPICard key={kpi.title} title={kpi.title} value={kpi.value} change={kpi.change} isLoading={isLoading} isPositive={isChangeGood} />;
+         {kpis.map(item => {
+            const isChangeGood = (item.change > 0 && item.isPositive) || (item.change < 0 && !item.isPositive);
+            return <KPICard key={item.title} title={item.title} value={item.value} change={item.change} isLoading={isLoading} isPositive={isChangeGood} />;
          })}
       </div>
        <div className="grid grid-cols-3 gap-6">

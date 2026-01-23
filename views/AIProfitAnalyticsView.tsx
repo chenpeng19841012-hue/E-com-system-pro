@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { DollarSign, Bot, LoaderCircle, AlertCircle, ChevronsUpDown, Filter, ChevronDown } from 'lucide-react';
 import { getSkuIdentifier } from '../lib/helpers';
 import { ProductSKU, Shop } from '../lib/types';
@@ -164,12 +163,23 @@ export const AIProfitAnalyticsView = ({ factTables, skus, shops }: { factTables:
                 return;
             }
 
-            const promptData = `...`;
             const prompt = `...`;
             
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-            setAiInsight(response.text.trim());
+            const requestBody = { model: 'gemini-3-flash-preview', contents: prompt };
+            const apiResponse = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!apiResponse.ok) {
+                const errorData = await apiResponse.json();
+                throw new Error(errorData.error || 'API request failed');
+            }
+            
+            const responseData = await apiResponse.json();
+            const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
+            setAiInsight(text.trim());
         } catch (err) {
             console.error(err);
             setAiInsight("AI诊断失败，请检查API密钥或网络连接。");

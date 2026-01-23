@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { MessageCircle, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Clipboard } from 'lucide-react';
 import { ProductSKU, Shop } from '../lib/types';
 
@@ -27,7 +26,6 @@ export const AIAssistantView = ({ skus, shops }: AIAssistantViewProps) => {
         setGeneratedResponse('');
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
             const sku = skus.find(s => s.id === selectedSkuId);
             const shop = sku ? shops.find(sh => sh.id === sku.shopId) : null;
 
@@ -71,12 +69,25 @@ export const AIAssistantView = ({ skus, shops }: AIAssistantViewProps) => {
                 请直接生成你作为客服的回复内容。
             `;
             
-            const response = await ai.models.generateContent({
+            const requestBody = {
                 model: 'gemini-3-flash-preview',
                 contents: prompt,
+            };
+
+            const apiResponse = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
 
-            setGeneratedResponse(response.text.trim());
+            if (!apiResponse.ok) {
+                const errorData = await apiResponse.json();
+                throw new Error(errorData.error || 'API request failed');
+            }
+
+            const responseData = await apiResponse.json();
+            const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
+            setGeneratedResponse(text.trim());
 
         } catch (err: any) {
             console.error(err);

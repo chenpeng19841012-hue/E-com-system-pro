@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import { Bot, ChevronDown, Sparkles, Clipboard, LoaderCircle, AlertCircle } from 'lucide-react';
 import { ProductSKU } from '../lib/types';
 
@@ -45,7 +44,6 @@ export const AIDescriptionView = ({ skus }: AIDescriptionViewProps) => {
         setGeneratedDescription('');
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
             const sku = skus.find(s => s.id === selectedSkuId);
 
             const prompt = `
@@ -73,12 +71,25 @@ export const AIDescriptionView = ({ skus }: AIDescriptionViewProps) => {
                 请直接生成最终的文案，不要包含任何“好的，这是生成的文案：”等多余的引导性语句。
             `;
 
-            const response = await ai.models.generateContent({
+            const requestBody = {
                 model: 'gemini-3-flash-preview',
                 contents: prompt,
+            };
+
+            const apiResponse = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
             });
+
+            if (!apiResponse.ok) {
+                const errorData = await apiResponse.json();
+                throw new Error(errorData.error || 'API request failed');
+            }
             
-            setGeneratedDescription(response.text.trim());
+            const responseData = await apiResponse.json();
+            const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
+            setGeneratedDescription(text.trim());
 
         } catch (err: any) {
             console.error(err);
