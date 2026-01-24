@@ -330,27 +330,27 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-    // 获取动态列宽 - 适配 1920 屏，核心指标严格定义宽度，确保无滚动条
+    // 获取动态列宽 - 严格按照最新需求，适配 1920 屏，确保无滚动条
     const getColumnWidth = (key: string) => {
         switch (key) {
-            case 'sku_shop': return 'w-[120px]'; 
-            case 'date': return 'w-[90px]';     
+            case 'sku_shop': return 'w-[110px]'; 
+            case 'date': return 'w-[80px]';     
             case 'pv':
             case 'uv': return 'w-[70px]';
-            case 'cost': return 'w-[80px]';     
+            case 'paid_amount': return 'w-[75px]';
+            case 'cost': return 'w-[70px]';     
             case 'paid_users':
-            case 'paid_items': return 'w-[75px]';
+            case 'paid_items':
             case 'cpc':
             case 'roi': return 'w-[70px]';      
-            case 'paid_amount': return 'w-[90px]';
-            default: return 'w-[80px]';        
+            default: return 'w-[70px]';        
         }
     };
 
-    // 获取对齐样式 - 严格按需求：SKU左，时间/金额/花费右，其他居中
+    // 获取数据对齐样式 - 严格按需求：时间居中，SKU左，金额/花费右，其他居中
     const getTextAlign = (key: string) => {
         if (key === 'sku_shop') return 'text-left pl-2';
-        if (['date', 'paid_amount', 'cost'].includes(key)) return 'text-right pr-2';
+        if (['paid_amount', 'cost'].includes(key)) return 'text-right pr-2';
         return 'text-center'; 
     };
 
@@ -453,7 +453,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                 <thead>
                                     <tr className="bg-slate-100/50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                                         {resultHeaders.map(key => (
-                                            <th key={key} className={`py-4 px-2 border-b border-slate-200 ${getColumnWidth(key)} ${getTextAlign(key)}`}>{allMetricsMap.get(key)?.label || key}</th>
+                                            <th key={key} className={`py-4 px-2 border-b border-slate-200 ${getColumnWidth(key)} text-center`}>{allMetricsMap.get(key)?.label || key}</th>
                                         ))}
                                     </tr>
                                 </thead>
