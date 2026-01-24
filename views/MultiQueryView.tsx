@@ -330,19 +330,19 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-    // 获取动态列宽 - 极致压缩以适配 1920 屏幕
+    // 获取动态列宽 - 适配 1920 屏，核心指标严格定义宽度
     const getColumnWidth = (key: string) => {
         switch (key) {
-            case 'sku_shop': return 'min-w-[180px] max-w-[200px]'; 
-            case 'date': return 'w-[110px]';     
+            case 'sku_shop': return 'min-w-[160px]'; 
+            case 'date': return 'w-[90px]';     
             case 'pv':
-            case 'uv': return 'w-[80px]';
-            case 'cost': return 'w-[100px]';     
+            case 'uv': return 'w-[70px]';
+            case 'cost': return 'w-[80px]';     
             case 'paid_users':
-            case 'paid_items': return 'w-[80px]';
+            case 'paid_items': return 'w-[75px]';
             case 'cpc':
-            case 'roi': return 'w-[75px]';      
-            case 'paid_amount': return 'w-[110px]';
+            case 'roi': return 'w-[70px]';      
+            case 'paid_amount': return 'w-[90px]';
             default: return 'w-[80px]';        
         }
     };
@@ -351,7 +351,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const getTextAlign = (key: string) => {
         if (key === 'sku_shop') return 'text-left pl-2';
         if (['date', 'paid_amount', 'cost'].includes(key)) return 'text-right pr-2';
-        return 'text-center px-1'; 
+        return 'text-center'; 
     };
 
     return (
@@ -466,14 +466,14 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                         paginatedResult.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-100/50 transition-colors group">
                                                 {resultHeaders.map(key => (
-                                                    <td key={key} className={`py-3 text-[11px] text-slate-600 truncate font-mono ${getTextAlign(key)}`}>
+                                                    <td key={key} className={`py-3 px-1.5 text-[11px] text-slate-600 truncate font-mono ${getTextAlign(key)}`}>
                                                         {key === 'sku_shop' ? (
                                                             <div className="truncate text-left">
                                                                 <div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div>
                                                                 <div className="text-[9px] text-slate-400 font-bold mt-0.5 truncate">{row.sku_shop.shopName}</div>
                                                             </div>
                                                         ) : key === 'date' ? (
-                                                            <span className="font-black text-slate-500">{row.date}</span>
+                                                            <span className="font-black text-slate-500 whitespace-nowrap">{row.date}</span>
                                                         ) : (row[key] == null) ? '-' : typeof row[key] === 'number' ? formatMetricValue(row[key], key) : row[key]}
                                                     </td>
                                                 ))}
