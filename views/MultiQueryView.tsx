@@ -330,34 +330,34 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-    // 获取动态列宽 - 极致缩短
+    // 获取动态列宽 - 极致压缩以适配 1920 屏幕
     const getColumnWidth = (key: string) => {
         switch (key) {
-            case 'sku_shop': return 'w-[160px]'; 
-            case 'date': return 'w-[130px]';     
+            case 'sku_shop': return 'min-w-[180px] max-w-[200px]'; 
+            case 'date': return 'w-[110px]';     
             case 'pv':
-            case 'uv':
-            case 'cost': return 'w-[105px]';     
+            case 'uv': return 'w-[80px]';
+            case 'cost': return 'w-[100px]';     
             case 'paid_users':
-            case 'paid_items':
+            case 'paid_items': return 'w-[80px]';
             case 'cpc':
-            case 'roi': return 'w-[85px]';      
-            case 'paid_amount': return 'w-[160px]';
-            default: return 'w-[100px]';        
+            case 'roi': return 'w-[75px]';      
+            case 'paid_amount': return 'w-[110px]';
+            default: return 'w-[80px]';        
         }
     };
 
-    // 获取对齐样式
+    // 获取对齐样式 - 严格按需求：SKU左，时间/金额/花费右，其他居中
     const getTextAlign = (key: string) => {
-        if (key === 'sku_shop') return 'text-left pl-4';
-        if (['date', 'paid_amount', 'cost'].includes(key)) return 'text-right pr-6';
-        return 'text-center'; 
+        if (key === 'sku_shop') return 'text-left pl-2';
+        if (['date', 'paid_amount', 'cost'].includes(key)) return 'text-right pr-2';
+        return 'text-center px-1'; 
     };
 
     return (
         <>
             <MetricSelectionModal isOpen={isMetricModalOpen} onClose={() => setIsMetricModalOpen(false)} shangzhiMetrics={shangzhiMetricsForModal} jingzhuntongMetrics={jingzhuntongMetricsForModal} selectedMetrics={selectedMetrics} onConfirm={(m: string[]) => { setSelectedMetrics(m); setIsMetricModalOpen(false); }} />
-            <div className="p-8 w-full max-w-[1600px] mx-auto animate-fadeIn">
+            <div className="p-8 w-full max-w-[1920px] mx-auto animate-fadeIn">
                 <div className="mb-6 flex items-center justify-between">
                    <div>
                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">多维数据查询</h1>
@@ -395,7 +395,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         </div>
                     </div>
                     <div className="flex items-end gap-4">
-                        <textarea placeholder="输入SKU编码，以逗号或换行分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="flex-1 h-24 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 focus:border-[#70AD47] outline-none resize-none" />
+                        <textarea placeholder="输入SKU编码，以逗号或换行分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="flex-1 h-24 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#70AD47] resize-none" />
                         <div className="flex gap-4 pb-1">
                             <button onClick={handleReset} className="px-8 py-3 rounded-lg border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 uppercase">重置</button>
                             <button onClick={handleQuery} disabled={isLoading} className="px-10 py-3 rounded-lg bg-[#70AD47] text-white font-black text-xs hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase">
@@ -442,18 +442,18 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     {visualisationData ? <div className="bg-slate-50/30 p-4 rounded-2xl border border-slate-100"><TrendChart dailyData={visualisationData.dailyData} chartMetrics={chartMetrics} metricsMap={allMetricsMap} /></div> : null}
                 </div>
 
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 min-h-[400px]">
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-100">
                     <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
                         <div className="flex items-center gap-3"><BarChart3 size={20} className="text-[#70AD47]" /><span className="font-black text-slate-800 uppercase tracking-widest">查询结果明细集 (已聚合)</span></div>
                         <button onClick={() => {}} className="flex items-center gap-2 px-6 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-black text-[10px] hover:bg-slate-50 shadow-sm transition-all"><Download size={14} /> 导出 EXCEL 报表</button>
                     </div>
                     <div className="p-4">
                         <div className="overflow-x-auto rounded-xl border border-slate-100">
-                            <table className="w-full text-sm table-fixed border-collapse">
+                            <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className="bg-slate-100/50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                                         {resultHeaders.map(key => (
-                                            <th key={key} className={`py-4 px-4 text-center border-b border-slate-200 ${getColumnWidth(key)}`}>{allMetricsMap.get(key)?.label || key}</th>
+                                            <th key={key} className={`py-4 border-b border-slate-200 ${getColumnWidth(key)} ${getTextAlign(key)}`}>{allMetricsMap.get(key)?.label || key}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -466,11 +466,11 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                         paginatedResult.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-100/50 transition-colors group">
                                                 {resultHeaders.map(key => (
-                                                    <td key={key} className={`py-4 text-xs text-slate-600 truncate font-mono ${getTextAlign(key)}`}>
+                                                    <td key={key} className={`py-3 text-[11px] text-slate-600 truncate font-mono ${getTextAlign(key)}`}>
                                                         {key === 'sku_shop' ? (
-                                                            <div className="truncate text-left pl-4">
+                                                            <div className="truncate text-left">
                                                                 <div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div>
-                                                                <div className="text-[10px] text-slate-400 font-bold mt-1 truncate">{row.sku_shop.shopName}</div>
+                                                                <div className="text-[9px] text-slate-400 font-bold mt-0.5 truncate">{row.sku_shop.shopName}</div>
                                                             </div>
                                                         ) : key === 'date' ? (
                                                             <span className="font-black text-slate-500">{row.date}</span>
