@@ -330,10 +330,10 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-    // 获取动态列宽 - 适配 1920 屏，核心指标严格定义宽度
+    // 获取动态列宽 - 适配 1920 屏，核心指标严格定义宽度，确保无滚动条
     const getColumnWidth = (key: string) => {
         switch (key) {
-            case 'sku_shop': return 'min-w-[160px]'; 
+            case 'sku_shop': return 'w-[120px]'; 
             case 'date': return 'w-[90px]';     
             case 'pv':
             case 'uv': return 'w-[70px]';
@@ -448,12 +448,12 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         <button onClick={() => {}} className="flex items-center gap-2 px-6 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-black text-[10px] hover:bg-slate-50 shadow-sm transition-all"><Download size={14} /> 导出 EXCEL 报表</button>
                     </div>
                     <div className="p-4">
-                        <div className="overflow-x-auto rounded-xl border border-slate-100">
+                        <div className="overflow-x-auto rounded-xl border border-slate-100 no-scrollbar">
                             <table className="w-full text-sm border-collapse">
                                 <thead>
                                     <tr className="bg-slate-100/50 text-slate-400 font-black text-[10px] uppercase tracking-widest">
                                         {resultHeaders.map(key => (
-                                            <th key={key} className={`py-4 border-b border-slate-200 ${getColumnWidth(key)} ${getTextAlign(key)}`}>{allMetricsMap.get(key)?.label || key}</th>
+                                            <th key={key} className={`py-4 px-2 border-b border-slate-200 ${getColumnWidth(key)} ${getTextAlign(key)}`}>{allMetricsMap.get(key)?.label || key}</th>
                                         ))}
                                     </tr>
                                 </thead>
