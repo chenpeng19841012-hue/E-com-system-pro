@@ -119,8 +119,8 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
     }
 
     const width = 800;
-    const height = 250;
-    const padding = { top: 40, right: 20, bottom: 30, left: 40 };
+    const height = 125; // 高度缩短一半 (250 -> 125)
+    const padding = { top: 20, right: 20, bottom: 25, left: 40 };
 
     const selectedMetricsData = Array.from(chartMetrics);
     
@@ -208,10 +208,10 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
                         key={key}
                         cx={xScale(hoveredIndex)}
                         cy={yScale(dailyData[hoveredIndex][key] || 0, key)}
-                        r="4"
+                        r="3"
                         fill="white"
                         stroke={METRIC_COLORS[key]}
-                        strokeWidth="2.5"
+                        strokeWidth="2"
                     />
                 ))}
             </svg>
@@ -578,19 +578,20 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             <button onClick={() => setComparisonType('year')} className={`px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${comparisonType === 'year' ? 'bg-white text-slate-800 shadow-sm border border-slate-200/50' : 'text-slate-400'}`}>同比去年同期</button>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
+                    {/* 均等 8*1 布局调整 (grid-cols-2 md:grid-cols-4 -> lg:grid-cols-8) */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-10">
                         {VISUAL_METRICS.map(key => {
                             const metricLabel = allMetricsMap.get(key)?.label || key;
                             const metricColor = METRIC_COLORS[key] || '#94a3b8';
 
                             if (!visualisationData) {
                                 return (
-                                    <div key={key} className="p-6 rounded-2xl bg-slate-50/50 border border-slate-100 group">
-                                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer">
-                                            <input type="checkbox" checked={chartMetrics.has(key)} onChange={() => setChartMetrics(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;})} className="form-checkbox h-3.5 w-3.5 bg-transparent border-slate-300 rounded-sm text-[#70AD47] focus:ring-0" />
+                                    <div key={key} className="p-4 rounded-2xl bg-slate-50/50 border border-slate-100 group">
+                                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer truncate">
+                                            <input type="checkbox" checked={chartMetrics.has(key)} onChange={() => setChartMetrics(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;})} className="form-checkbox h-3 w-3 bg-transparent border-slate-300 rounded-sm text-[#70AD47] focus:ring-0" />
                                             {metricLabel}
                                         </label>
-                                        <p className="text-3xl font-black mt-3 text-slate-200">-</p>
+                                        <p className="text-xl font-black mt-2 text-slate-200">-</p>
                                     </div>
                                 );
                             }
@@ -601,24 +602,23 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             const isPositive = isChangePositive(key, change);
 
                             return (
-                                <div key={key} style={{ borderColor: chartMetrics.has(key) ? `${metricColor}30` : '' }} className={`p-6 rounded-2xl bg-white border border-slate-100 shadow-sm group hover:border-slate-200 transition-all`}>
-                                    <label style={{ color: metricColor }} className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest cursor-pointer`}>
+                                <div key={key} style={{ borderColor: chartMetrics.has(key) ? `${metricColor}30` : '' }} className={`p-4 rounded-2xl bg-white border border-slate-100 shadow-sm group hover:border-slate-200 transition-all`}>
+                                    <label style={{ color: metricColor }} className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest cursor-pointer truncate`}>
                                         <input 
                                             type="checkbox" 
                                             checked={chartMetrics.has(key)} 
                                             onChange={() => setChartMetrics(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;})} 
                                             style={{ color: metricColor }}
-                                            className={`form-checkbox h-3.5 w-3.5 bg-transparent border-slate-200 rounded-sm focus:ring-0`}
+                                            className={`form-checkbox h-3 w-3 bg-transparent border-slate-200 rounded-sm focus:ring-0`}
                                         />
                                         {metricLabel}
                                     </label>
-                                    <p className="text-3xl font-black mt-3 text-slate-800">{formatMetricValue(mainValue, key)}</p>
-                                    <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-50 text-[10px] font-black">
-                                        <span className="text-slate-400 font-bold">环比</span>
+                                    <p className="text-xl font-black mt-2 text-slate-800 truncate">{formatMetricValue(mainValue, key)}</p>
+                                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-50 text-[9px] font-black">
                                         {isFinite(change) && (
-                                            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${isPositive ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                {isPositive ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                                                {Math.abs(change).toFixed(1)}%
+                                            <span className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full ${isPositive ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                {isPositive ? <ArrowUp size={8} /> : <ArrowDown size={8} />}
+                                                {Math.abs(change).toFixed(0)}%
                                             </span>
                                         )}
                                     </div>
@@ -627,13 +627,13 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         })}
                     </div>
                     {visualisationData?.dailyData ? (
-                        <div className="bg-slate-50/30 p-6 rounded-2xl border border-slate-100 overflow-visible">
+                        <div className="bg-slate-50/30 p-4 rounded-2xl border border-slate-100 overflow-visible">
                              <TrendChart dailyData={visualisationData.dailyData} chartMetrics={chartMetrics} metricsMap={allMetricsMap} />
                         </div>
                     ) : (
-                        <div className="h-[300px] flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-50 rounded-2xl">
-                             <TrendingUp size={48} className="mb-4 opacity-10" />
-                             <p className="font-black text-xs uppercase tracking-widest">请点击按钮执行查询以渲染趋势分析</p>
+                        <div className="h-[150px] flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-50 rounded-2xl">
+                             <TrendingUp size={32} className="mb-2 opacity-10" />
+                             <p className="font-black text-[10px] uppercase tracking-widest">请点击按钮执行查询以渲染趋势分析</p>
                         </div>
                     )}
                 </div>
