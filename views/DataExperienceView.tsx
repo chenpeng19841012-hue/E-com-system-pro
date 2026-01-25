@@ -239,19 +239,34 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
         const { tableType, sku, shop, start, end } = appliedFilters;
         const tableData = factTables[tableType] || [];
 
+        // 解析多值 SKU
+        const searchTerms = sku.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
+
         return tableData.filter((row: any) => {
-            // SKU 筛选 (SKU, 商品ID, 广告跟单ID)
-            const rowSku = getSkuIdentifier(row);
-            const rowProdId = row.product_id || '';
-            const rowTrackedId = row.tracked_sku_id || '';
-            const skuMatch = !sku || 
-                             String(rowSku).includes(sku) || 
-                             String(rowProdId).includes(sku) || 
-                             String(rowTrackedId).includes(sku);
+            // SKU 筛选 (SKU, 商品ID, 跟单SKU ID)
+            const rowSku = String(getSkuIdentifier(row) || '');
+            const rowProdId = String(row.product_id || '');
+            const rowTrackedId = String(row.tracked_sku_id || '');
+            
+            let skuMatch = searchTerms.length === 0;
+            if (!skuMatch) {
+                // 如果输入了 SKU，任意一个检索项匹配到其中一个字段即可
+                skuMatch = searchTerms.some(term => 
+                    rowSku.includes(term) || 
+                    rowProdId.includes(term) || 
+                    rowTrackedId.includes(term)
+                );
+            }
             
             // 店铺筛选
             const rowShop = row.shop_name || '';
-            const shopMatch = !shop || rowShop === shop;
+            let shopMatch = true;
+            if (shop === "__EMPTY__") {
+                // 专门搜索未绑定店铺的记录
+                shopMatch = !rowShop || rowShop.trim() === '';
+            } else if (shop) {
+                shopMatch = rowShop === shop;
+            }
             
             // 日期筛选
             const rowDate = row.date || '';
@@ -499,7 +514,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                     <div className="relative">
                                         <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
                                         <input 
-                                            placeholder="SKU / 商品ID / 广告ID" 
+                                            placeholder="SKU / 商品ID / 跟单SKU ID (多值用逗号隔开)" 
                                             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47]" 
                                             value={skuSearch}
                                             onChange={(e) => setSkuSearch(e.target.value)}
@@ -519,7 +534,8 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                             onChange={e => setShopSearch(e.target.value)}
                                             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47] appearance-none"
                                         >
-                                            <option value="">所有店铺</option>
+                                            <option value="">所有店铺数据</option>
+                                            <option value="__EMPTY__" className="text-rose-500 font-bold">无店铺名称 (待清洗)</option>
                                             {shops.map((s:Shop) => <option key={s.id} value={s.name}>{s.name}</option>)}
                                         </select>
                                         <ChevronDown size={14} className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
