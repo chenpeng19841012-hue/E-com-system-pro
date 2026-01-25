@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCcw } from 'lucide-react';
+import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCcw, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
@@ -183,6 +183,14 @@ const formatDateForDisplay = (dateValue: any): string => {
     return dateStr;
 };
 
+interface FilterCriteria {
+    tableType: TableType;
+    sku: string;
+    shop: string;
+    start: string;
+    end: string;
+}
+
 export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, addToast }: any) => {
     const [activeTab, setActiveTab] = useState<DataExpSubView>('preview');
     const [selectedSchemaType, setSelectedSchemaType] = useState<TableType>('shangzhi');
@@ -192,56 +200,83 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
     const [isDeleteSelectedModalOpen, setIsDeleteSelectedModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
     
-    // 增强搜索状态
+    // 搜索表单状态
+    const [tableTypeSearch, setTableTypeSearch] = useState<TableType>('shangzhi');
     const [skuSearch, setSkuSearch] = useState('');
     const [shopSearch, setShopSearch] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    
+    // 实际应用的筛选条件
+    const [appliedFilters, setAppliedFilters] = useState<FilterCriteria | null>(null);
+    
+    // 分页状态
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 50;
     
     // 选择状态
     const [selectedRowIds, setSelectedRowIds] = useState<Set<any>>(new Set());
 
     const currentSchema = schemas[selectedSchemaType] || [];
     
-    let displaySchema = [...currentSchema];
-    if (selectedSchemaType === 'customer_service') {
-        const dateField = currentSchema.find(field => field.key === 'date');
-        if (dateField) {
-            displaySchema = [dateField, ...currentSchema.filter(field => field.key !== 'date')];
+    // 处理动态表头显示
+    const displaySchema = useMemo(() => {
+        const type = appliedFilters?.tableType || tableTypeSearch;
+        const schema = schemas[type] || [];
+        if (type === 'customer_service') {
+            const dateField = schema.find((f:any) => f.key === 'date');
+            if (dateField) {
+                return [dateField, ...schema.filter((f:any) => f.key !== 'date')];
+            }
         }
-    }
+        return schema;
+    }, [appliedFilters, tableTypeSearch, schemas]);
     
     const sortedSchema = [...currentSchema].sort((a, b) => (a.required === b.required ? 0 : a.required ? -1 : 1));
 
     const filteredData = useMemo(() => {
-        const tableData = factTables[selectedSchemaType] || [];
-        
+        if (!appliedFilters) return [];
+        const { tableType, sku, shop, start, end } = appliedFilters;
+        const tableData = factTables[tableType] || [];
+
         return tableData.filter((row: any) => {
-            // SKU 筛选 (SKU, 商品ID, 广告SKU ID)
+            // SKU 筛选 (SKU, 商品ID, 广告跟单ID)
             const rowSku = getSkuIdentifier(row);
             const rowProdId = row.product_id || '';
             const rowTrackedId = row.tracked_sku_id || '';
-            const skuMatch = !skuSearch || 
-                             String(rowSku).includes(skuSearch) || 
-                             String(rowProdId).includes(skuSearch) || 
-                             String(rowTrackedId).includes(skuSearch);
+            const skuMatch = !sku || 
+                             String(rowSku).includes(sku) || 
+                             String(rowProdId).includes(sku) || 
+                             String(rowTrackedId).includes(sku);
             
             // 店铺筛选
             const rowShop = row.shop_name || '';
-            const shopMatch = !shopSearch || rowShop === shopSearch;
+            const shopMatch = !shop || rowShop === shop;
             
             // 日期筛选
             const rowDate = row.date || '';
-            const dateMatch = (!startDate || rowDate >= startDate) && 
-                              (!endDate || rowDate <= endDate);
+            const dateMatch = (!start || rowDate >= start) && 
+                              (!end || rowDate <= end);
             
             return skuMatch && shopMatch && dateMatch;
         });
-    }, [skuSearch, shopSearch, startDate, endDate, factTables, selectedSchemaType]);
+    }, [appliedFilters, factTables]);
 
-    // 处理全选/取消全选
+    const paginatedData = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return filteredData.slice(start, start + PAGE_SIZE);
+    }, [filteredData, currentPage]);
+
+    const totalPages = Math.ceil(filteredData.length / PAGE_SIZE);
+
+    const handleExecuteSearch = () => {
+        setAppliedFilters({ tableType: tableTypeSearch, sku: skuSearch, shop: shopSearch, start: startDate, end: endDate });
+        setCurrentPage(1);
+        setSelectedRowIds(new Set());
+    };
+
     const handleSelectAll = () => {
-        if (selectedRowIds.size === filteredData.length) {
+        if (selectedRowIds.size === filteredData.length && filteredData.length > 0) {
             setSelectedRowIds(new Set());
         } else {
             setSelectedRowIds(new Set(filteredData.map(r => r.id)));
@@ -291,13 +326,15 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
     };
 
     const handleConfirmClearData = () => {
-        onClearTable(selectedSchemaType);
+        onClearTable(appliedFilters?.tableType || tableTypeSearch);
         setIsClearModalOpen(false);
         setSelectedRowIds(new Set());
+        setAppliedFilters(null);
     };
 
     const handleConfirmDeleteSelected = async () => {
-        await onDeleteRows(selectedSchemaType, Array.from(selectedRowIds));
+        if (!appliedFilters) return;
+        await onDeleteRows(appliedFilters.tableType, Array.from(selectedRowIds));
         setSelectedRowIds(new Set());
         setIsDeleteSelectedModalOpen(false);
     };
@@ -307,6 +344,10 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
         setShopSearch('');
         setStartDate('');
         setEndDate('');
+        setTableTypeSearch('shangzhi');
+        setAppliedFilters(null);
+        setCurrentPage(1);
+        setSelectedRowIds(new Set());
     };
 
     return (
@@ -319,7 +360,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                 confirmText="确认清空"
                 confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20"
             >
-                <p>您确定要清空 <strong className="font-black text-slate-800">[{getTableName(selectedSchemaType)}]</strong> 表的所有物理记录吗？</p>
+                <p>您确定要清空 <strong className="font-black text-slate-800">[{getTableName(appliedFilters?.tableType || tableTypeSearch)}]</strong> 表的所有物理记录吗？</p>
                 <p className="mt-2 text-rose-500 font-bold">此操作将移除全量历史导入数据，不可恢复。</p>
             </ConfirmModal>
 
@@ -361,25 +402,9 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
             />
 
             <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn space-y-8">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">数据体验中心</h1>
-                        <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">物理层数据资产清洗与管理</p>
-                    </div>
-                     <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
-                        {['shangzhi', 'jingzhuntong', 'customer_service'].map((t) => (
-                             <button 
-                                key={t}
-                                onClick={() => {
-                                    setSelectedSchemaType(t as TableType);
-                                    setSelectedRowIds(new Set());
-                                }}
-                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all capitalize ${selectedSchemaType === t ? 'bg-[#70AD47] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
-                            >
-                                {getTableName(t as TableType)}明细
-                            </button>
-                        ))}
-                    </div>
+                <div>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">数据体验中心</h1>
+                    <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">物理层数据清洗与元数据治理</p>
                 </div>
 
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[700px] flex flex-col">
@@ -400,15 +425,26 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
 
                     {activeTab === 'schema' && (
                         <div className="p-8 bg-slate-50/30 flex-1">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                    <Database size={18} className="text-[#70AD47]" />
-                                    {getTableName(selectedSchemaType)} 字段映射映射逻辑
-                                </h3>
-                                <div className="flex gap-2">
-                                    <button onClick={handleResetSchema} title="重置为默认结构" className="p-2 text-slate-400 hover:text-white hover:bg-orange-400 rounded-lg transition-colors bg-white border border-slate-200 shadow-sm"><RotateCcw size={16} /></button>
-                                    <button onClick={() => setIsAddFieldModalOpen(true)} title="添加新字段" className="p-2 text-slate-400 hover:text-white hover:bg-[#70AD47] rounded-lg transition-colors bg-white border border-slate-200 shadow-sm"><Plus size={16} /></button>
-                                    <button onClick={handleDeleteData} title="清空此表全量物理数据" className="p-2 text-slate-400 hover:text-white hover:bg-rose-500 rounded-lg transition-colors bg-white border border-slate-200 shadow-sm"><Trash2 size={16} /></button>
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                                <div className="space-y-1 min-w-[300px]">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">选择目标管理表</label>
+                                    <div className="relative">
+                                        <select 
+                                            value={selectedSchemaType}
+                                            onChange={e => setSelectedSchemaType(e.target.value as TableType)}
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm"
+                                        >
+                                            <option value="shangzhi">商智明细 (fact_shangzhi)</option>
+                                            <option value="jingzhuntong">广告明细 (fact_jingzhuntong)</option>
+                                            <option value="customer_service">客服明细 (fact_customer_service)</option>
+                                        </select>
+                                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 self-end">
+                                    <button onClick={handleResetSchema} title="重置为默认结构" className="flex items-center gap-2 px-4 py-3 text-orange-600 hover:text-white hover:bg-orange-500 rounded-xl transition-all bg-white border border-slate-200 shadow-sm font-bold text-xs"><RotateCcw size={14} /> 重置结构</button>
+                                    <button onClick={() => setIsAddFieldModalOpen(true)} title="添加新字段" className="flex items-center gap-2 px-4 py-3 text-[#70AD47] hover:text-white hover:bg-[#70AD47] rounded-xl transition-all bg-white border border-slate-200 shadow-sm font-bold text-xs"><Plus size={14} /> 新增映射</button>
+                                    <button onClick={handleDeleteData} title="清空全量物理数据" className="flex items-center gap-2 px-4 py-3 text-rose-500 hover:text-white hover:bg-rose-500 rounded-xl transition-all bg-white border border-slate-200 shadow-sm font-bold text-xs"><Trash2 size={14} /> 清空数据</button>
                                 </div>
                             </div>
 
@@ -446,7 +482,20 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                         <div className="flex-1 flex flex-col min-h-0">
                             {/* 组合筛选区域 */}
                             <div className="p-6 border-b border-slate-100 bg-slate-50/50 space-y-4">
-                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    <div className="relative">
+                                        <Database size={16} className="absolute left-3 top-2.5 text-slate-400" />
+                                        <select 
+                                            value={tableTypeSearch}
+                                            onChange={e => setTableTypeSearch(e.target.value as TableType)}
+                                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47] appearance-none"
+                                        >
+                                            <option value="shangzhi">商智销售明细</option>
+                                            <option value="jingzhuntong">广告投放明细</option>
+                                            <option value="customer_service">客服接待明细</option>
+                                        </select>
+                                        <ChevronDown size={14} className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
+                                    </div>
                                     <div className="relative">
                                         <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
                                         <input 
@@ -454,13 +503,14 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47]" 
                                             value={skuSearch}
                                             onChange={(e) => setSkuSearch(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleExecuteSearch()}
                                         />
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Calendar size={16} className="text-slate-400 shrink-0" />
-                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47]" />
+                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="flex-1 px-2 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-[#70AD47]" />
                                         <span className="text-slate-300">-</span>
-                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47]" />
+                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="flex-1 px-2 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-[#70AD47]" />
                                     </div>
                                     <div className="relative">
                                         <Store size={16} className="absolute left-3 top-2.5 text-slate-400" />
@@ -469,23 +519,26 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                             onChange={e => setShopSearch(e.target.value)}
                                             className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-[#70AD47] appearance-none"
                                         >
-                                            <option value="">所有店铺数据</option>
+                                            <option value="">所有店铺</option>
                                             {shops.map((s:Shop) => <option key={s.id} value={s.name}>{s.name}</option>)}
                                         </select>
+                                        <ChevronDown size={14} className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={resetFilters} className="flex-1 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
-                                            <RefreshCcw size={14} /> 清空筛选
+                                            <RefreshCcw size={14} /> 清空
                                         </button>
-                                        <button className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors">
-                                            执行检索
+                                        <button onClick={handleExecuteSearch} className="flex-1 px-4 py-2 bg-[#70AD47] text-white rounded-lg text-xs font-bold hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all active:scale-95">
+                                            立即检索
                                         </button>
                                     </div>
                                  </div>
 
                                  <div className="flex items-center justify-between">
                                      <div className="flex items-center gap-4">
-                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">筛选结果: {filteredData.length} 行</span>
+                                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            {appliedFilters ? `物理源: ${getTableName(appliedFilters.tableType)} | 命中: ${filteredData.length} 行` : '请设定条件并检索物理表'}
+                                         </span>
                                          {selectedRowIds.size > 0 && (
                                              <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-50 px-2 py-1 rounded">已选择: {selectedRowIds.size} 行</span>
                                          )}
@@ -496,7 +549,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                                 onClick={() => setIsDeleteSelectedModalOpen(true)}
                                                 className="flex items-center gap-2 px-6 py-2 bg-rose-500 text-white rounded-lg text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-all active:scale-95"
                                              >
-                                                 <Trash2 size={14} /> 批量删除选中行
+                                                 <Trash2 size={14} /> 批量物理删除
                                              </button>
                                          )}
                                      </div>
@@ -519,8 +572,18 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {filteredData.length > 0 ? (
-                                            filteredData.slice(0, 500).map((row: any, rIdx: number) => (
+                                        {!appliedFilters ? (
+                                             <tr>
+                                                <td colSpan={displaySchema.length + 1} className="py-40 text-center">
+                                                    <div className="flex flex-col items-center justify-center text-slate-300">
+                                                        <Search size={64} className="mb-4 opacity-10" />
+                                                        <p className="font-black tracking-widest text-sm uppercase italic">请输入条件并检索物理记录</p>
+                                                        <p className="text-xs mt-2 font-bold opacity-60">数据仅在点击“立即检索”后从本地库提取</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : paginatedData.length > 0 ? (
+                                            paginatedData.map((row: any, rIdx: number) => (
                                                 <tr key={row.id || rIdx} className={`hover:bg-slate-50 transition-colors ${selectedRowIds.has(row.id) ? 'bg-[#70AD47]/5' : ''}`}>
                                                     <td className="px-6 py-3 border-b border-slate-50 w-12">
                                                         <button onClick={() => handleSelectRow(row.id)} className={`${selectedRowIds.has(row.id) ? 'text-[#70AD47]' : 'text-slate-200'} hover:text-[#70AD47] transition-colors`}>
@@ -528,7 +591,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                                         </button>
                                                     </td>
                                                     {displaySchema.map((f:FieldDefinition) => (
-                                                        <td key={f.key} className={`px-6 py-3 border-b border-slate-50 ${f.key === 'sku_code' || f.key === 'product_id' ? 'font-mono font-bold text-slate-800' : 'text-slate-600'}`}>
+                                                        <td key={f.key} className={`px-6 py-3 border-b border-slate-50 ${f.key === 'sku_code' || f.key === 'product_id' || f.key === 'tracked_sku_id' ? 'font-mono font-bold text-slate-800' : 'text-slate-600'}`}>
                                                             {f.key === 'date' ? formatDateForDisplay(row[f.key]) : (row[f.key] ?? '-')}
                                                         </td>
                                                     ))}
@@ -540,19 +603,41 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                                     <div className="flex flex-col items-center justify-center text-slate-300">
                                                         <Database size={64} className="mb-4 opacity-10" />
                                                         <p className="font-black tracking-widest text-sm uppercase italic">没有匹配的物理记录</p>
-                                                        <p className="text-xs mt-2 font-bold opacity-60">请尝试调整筛选条件或在数据中心同步新表</p>
                                                     </div>
                                                 </td>
                                             </tr>
                                         )}
                                     </tbody>
                                 </table>
-                                {filteredData.length > 500 && (
-                                    <div className="p-4 text-center bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-t border-slate-100">
-                                        提示：仅展示前 500 条匹配数据，请缩小筛选范围以管理特定记录
-                                    </div>
-                                )}
                             </div>
+                            
+                            {/* 分页控制 */}
+                            {appliedFilters && filteredData.length > 0 && (
+                                <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        展示 {(currentPage-1)*PAGE_SIZE + 1} - {Math.min(currentPage*PAGE_SIZE, filteredData.length)} / 共 {filteredData.length} 行
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            disabled={currentPage === 1}
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <div className="text-xs font-black text-slate-600 px-4">
+                                            第 {currentPage} / {totalPages} 页
+                                        </div>
+                                        <button 
+                                            disabled={currentPage === totalPages}
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
