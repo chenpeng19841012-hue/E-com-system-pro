@@ -220,16 +220,37 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
             const managedSkuCodes = skus.length > 0 ? new Set(skus.map(s => s.code)) : null;
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             const skuCodeToInfoMap = new Map(skus.map((s: ProductSKU) => [s.code, s]));
+            
+            // 获取当前选中的店铺对象，用于对比物理表中的 shop_name
+            const currentSelectedShop = selectedShopId !== 'all' ? shops.find(s => s.id === selectedShopId) : null;
 
             const getDataForPeriod = (start: string, end: string) => {
                 const filterFunc = (row: any) => {
                     const skuCode = getSkuIdentifier(row);
                     if (!row.date || !skuCode) return false;
-                    if (managedSkuCodes && !managedSkuCodes.has(skuCode)) return false;
+                    
+                    // 时间范围过滤
                     if (start && row.date < start) return false;
                     if (end && row.date > end) return false;
+                    
+                    // SKU 精准搜索过滤
                     if (parsedSkus.length > 0 && !parsedSkus.includes(skuCode)) return false;
-                    if (selectedShopId !== 'all' && skuCodeToInfoMap.get(skuCode)?.shopId !== selectedShopId) return false;
+                    
+                    // 店铺限定逻辑优化：双向校验
+                    if (currentSelectedShop) {
+                        const assetShopId = skuCodeToInfoMap.get(skuCode)?.shopId;
+                        const physicalShopName = row.shop_name;
+                        
+                        // 命中规则：资产库归属匹配 OR 物理表店铺名称匹配
+                        const isAssetMatch = assetShopId === currentSelectedShop.id;
+                        const isPhysicalMatch = physicalShopName === currentSelectedShop.name;
+                        
+                        if (!isAssetMatch && !isPhysicalMatch) return false;
+                    } else if (managedSkuCodes && !managedSkuCodes.has(skuCode)) {
+                        // 如果未限定店铺，默认还是只看已录入资产库的（防止脏数据污染），道友若需全量可去掉此判断
+                        return false;
+                    }
+
                     return true;
                 };
                 const fSz = (shangzhiData || []).filter(filterFunc);
@@ -254,7 +275,8 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     if (!merged.has(key)) {
                         const sInfo = skuCodeToInfoMap.get(sCode);
                         const shopInfo = shops.find(s => s.id === sInfo?.shopId);
-                        merged.set(key, { date: row.date, sku_code: sCode, sku_shop: { code: sCode, shopName: shopInfo?.name || row.shop_name || '默认店铺' } });
+                        // 展示逻辑：优先展示物理表的店铺名，因为道友反映物理表已有准确名称
+                        merged.set(key, { date: row.date, sku_code: sCode, sku_shop: { code: sCode, shopName: row.shop_name || shopInfo?.name || '未知店铺' } });
                     }
                     const ent = merged.get(key)!;
                     mAgg.forEach(m => { if (row[m] != null) ent[m] = (ent[m] || 0) + Number(row[m]); });

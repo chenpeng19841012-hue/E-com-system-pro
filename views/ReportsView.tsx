@@ -262,15 +262,29 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
                 const calculateForPeriod = (start: string, end: string) => {
                     const szData = factTables.shangzhi.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        const isShop = shopSkuCodes.has(code || '');
+                        
+                        // 归属逻辑优化：
+                        // 1. 资产匹配 (Dim)
+                        const isAssetMatch = shopSkuCodes.has(code || '');
+                        // 2. 物理匹配 (Fact)
+                        const isPhysicalMatch = r.shop_name === shop.name;
+                        
+                        const isShop = isAssetMatch || isPhysicalMatch;
                         const isList = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        
                         return r.date >= start && r.date <= end && isShop && isList;
                     });
 
                     const jztData = factTables.jingzhuntong.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        const isShop = shopSkuCodes.has(code || '');
+                        
+                        // 同理优化广告表匹配
+                        const isAssetMatch = shopSkuCodes.has(code || '');
+                        const isPhysicalMatch = r.shop_name === shop.name;
+                        
+                        const isShop = isAssetMatch || isPhysicalMatch;
                         const isList = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        
                         return r.date >= start && r.date <= end && isShop && isList;
                     });
 
