@@ -247,7 +247,6 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         
                         if (!isAssetMatch && !isPhysicalMatch) return false;
                     } else if (managedSkuCodes && !managedSkuCodes.has(skuCode)) {
-                        // 如果未限定店铺，默认还是只看已录入资产库的（防止脏数据污染），道友若需全量可去掉此判断
                         return false;
                     }
 
@@ -256,7 +255,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                 const fSz = (shangzhiData || []).filter(filterFunc);
                 const fJzt = (jingzhuntongData || []).filter(filterFunc);
                 const merged = new Map<string, any>();
-                const mAgg = new Set([...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount']);
+                const mAgg = new Set([...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'paid_customers', 'total_order_amount']);
 
                 const getAggregationKey = (dStr: string, sCode: string) => {
                     const d = new Date(dStr);
@@ -275,11 +274,19 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     if (!merged.has(key)) {
                         const sInfo = skuCodeToInfoMap.get(sCode);
                         const shopInfo = shops.find(s => s.id === sInfo?.shopId);
-                        // 展示逻辑：优先展示物理表的店铺名，因为道友反映物理表已有准确名称
                         merged.set(key, { date: row.date, sku_code: sCode, sku_shop: { code: sCode, shopName: row.shop_name || shopInfo?.name || '未知店铺' } });
                     }
                     const ent = merged.get(key)!;
-                    mAgg.forEach(m => { if (row[m] != null) ent[m] = (ent[m] || 0) + Number(row[m]); });
+                    
+                    mAgg.forEach(m => { 
+                        // 特殊口径对齐：成交人数 (自营) vs 成交客户数 (POP)
+                        if (m === 'paid_users') {
+                            const val = (Number(row.paid_users) || Number(row.paid_customers) || 0);
+                            ent[m] = (ent[m] || 0) + val;
+                        } else {
+                            if (row[m] != null) ent[m] = (ent[m] || 0) + Number(row[m]); 
+                        }
+                    });
                 };
                 fSz.forEach(proc); fJzt.forEach(proc);
                 return Array.from(merged.values());
@@ -297,6 +304,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                 compEnd = new Date(mainEnd); compEnd.setFullYear(compEnd.getFullYear() - 1);
             }
             const compData = getDataForPeriod(compStart.toISOString().split('T')[0], compEnd.toISOString().split('T')[0]);
+            
             const calcTotals = (data: any[]) => {
                 const t = data.reduce((acc, row) => {
                     [...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount'].forEach(k => { acc[k] = (acc[k] || 0) + (Number(row[k]) || 0); });
@@ -352,7 +360,6 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-    // 获取动态列宽 - 严格按照最新需求，适配 1920 屏，确保无滚动条
     const getColumnWidth = (key: string) => {
         switch (key) {
             case 'sku_shop': return 'w-[110px]'; 
@@ -369,7 +376,6 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
         }
     };
 
-    // 获取数据对齐样式 - 严格按需求：时间居中，SKU左，金额/花费右，其他居中
     const getTextAlign = (key: string) => {
         if (key === 'sku_shop') return 'text-left pl-2';
         if (['paid_amount', 'cost'].includes(key)) return 'text-right pr-2';
@@ -444,7 +450,6 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             const comp = visualisationData.compTotals[key] || 0;
                             const chg = getChange(main, comp);
                             const isG = chg > 0; const isD = chg < 0;
-                            // 维持红涨绿跌
                             const bg = isG ? 'bg-rose-200/60' : isD ? 'bg-green-200/60' : 'bg-white';
                             const brd = isG ? 'border-rose-300' : isD ? 'border-green-300' : 'border-slate-100';
                             const txt = isG ? 'text-rose-700' : isD ? 'text-green-800' : 'text-slate-400';

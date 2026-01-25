@@ -226,11 +226,9 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
         setAiCommentary('');
         
         try {
-            // Determine time ranges
             const currentStart = startDate;
             const currentEnd = endDate;
             
-            // Calculate previous period
             const sDate = new Date(startDate);
             const eDate = new Date(endDate);
             const diffDays = Math.ceil((eDate.getTime() - sDate.getTime()) / 86400000) + 1;
@@ -257,41 +255,43 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
                 : shops;
 
             const finalReportData: ShopReportData[] = targetShops.map(shop => {
-                const shopSkuCodes = new Set(skus.filter(s => s.shopId === shop.id).map(s => s.code));
+                const shopSkuCodesFromAssets = new Set(skus.filter(s => s.shopId === shop.id).map(s => s.code));
                 
                 const calculateForPeriod = (start: string, end: string) => {
+                    // 获取该店铺在此时间段物理表中出现的所有 SKU（用于补充未录入资产库的 SKU）
+                    const physicalShopSkuCodes = new Set<string>();
+                    factTables.shangzhi.forEach((r: any) => {
+                        if (r.shop_name === shop.name) {
+                            const code = getSkuIdentifier(r);
+                            if (code) physicalShopSkuCodes.add(code);
+                        }
+                    });
+
+                    // 最终该店铺参与计算的 SKU 全集
+                    const combinedShopSkuCodes = new Set([...shopSkuCodesFromAssets, ...physicalShopSkuCodes]);
+
                     const szData = factTables.shangzhi.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        
-                        // 归属逻辑优化：
-                        // 1. 资产匹配 (Dim)
-                        const isAssetMatch = shopSkuCodes.has(code || '');
-                        // 2. 物理匹配 (Fact)
-                        const isPhysicalMatch = r.shop_name === shop.name;
-                        
-                        const isShop = isAssetMatch || isPhysicalMatch;
-                        const isList = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
-                        
-                        return r.date >= start && r.date <= end && isShop && isList;
+                        // 归属判断：资产库匹配 OR 物理名称匹配
+                        const isShop = combinedShopSkuCodes.has(code || '') || r.shop_name === shop.name;
+                        // 清单限制（如果有）
+                        const isListMatch = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        return r.date >= start && r.date <= end && isShop && isListMatch;
                     });
 
                     const jztData = factTables.jingzhuntong.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        
-                        // 同理优化广告表匹配
-                        const isAssetMatch = shopSkuCodes.has(code || '');
-                        const isPhysicalMatch = r.shop_name === shop.name;
-                        
-                        const isShop = isAssetMatch || isPhysicalMatch;
-                        const isList = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
-                        
-                        return r.date >= start && r.date <= end && isShop && isList;
+                        // 广告表同样使用穿透后的 SKU 全集进行匹配
+                        const isShop = combinedShopSkuCodes.has(code || '') || r.shop_name === shop.name;
+                        const isListMatch = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        return r.date >= start && r.date <= end && isShop && isListMatch;
                     });
 
                     const agg = {
                         pv: szData.reduce((s: any, r: any) => s + (Number(r.pv) || 0), 0),
                         uv: szData.reduce((s: any, r: any) => s + (Number(r.uv) || 0), 0),
-                        buyers: szData.reduce((s: any, r: any) => s + (Number(r.paid_users) || 0), 0),
+                        // 核心优化：成交人数口径对齐（自营 paid_users vs POP paid_customers）
+                        buyers: szData.reduce((s: any, r: any) => s + (Number(r.paid_users) || Number(r.paid_customers) || 0), 0),
                         orders: szData.reduce((s: any, r: any) => s + (Number(r.paid_orders) || 0), 0),
                         ca: szData.reduce((s: any, r: any) => s + (Number(r.paid_items) || 0), 0),
                         gmv: szData.reduce((s: any, r: any) => s + (Number(r.paid_amount) || 0), 0),
