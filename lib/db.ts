@@ -31,6 +31,17 @@ export const DB = {
     });
   },
 
+  async deleteRows(tableName: string, ids: any[]): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([tableName], 'readwrite');
+      const store = transaction.objectStore(tableName);
+      ids.forEach(id => store.delete(id));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  },
+
   async bulkAdd(tableName: string, rows: any[]): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {

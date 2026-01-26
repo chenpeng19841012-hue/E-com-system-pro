@@ -1,11 +1,44 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCcw, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCcw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
 import { ConfirmModal } from '../components/ConfirmModal';
+
+const ProgressModal = ({ isOpen, current, total }: { isOpen: boolean, current: number, total: number }) => {
+    if (!isOpen) return null;
+    const percent = Math.floor((current / total) * 100);
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md p-10 text-center animate-fadeIn">
+                <div className="relative w-24 h-24 mx-auto mb-8">
+                    <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                    <div 
+                        className="absolute inset-0 border-4 border-[#70AD47] rounded-full transition-all duration-500" 
+                        style={{ clipPath: `inset(0 0 0 0)`, transform: `rotate(${percent * 3.6}deg)` }}
+                    ></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <LoaderCircle className="animate-spin text-[#70AD47]" size={40} />
+                    </div>
+                </div>
+                <h3 className="text-xl font-black text-slate-800 mb-2">正在执行物理空间清理</h3>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-8">正在永久移除选定记录...</p>
+                
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-4">
+                    <div className="bg-[#70AD47] h-full transition-all duration-300" style={{ width: `${percent}%` }}></div>
+                </div>
+                
+                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase">
+                    <span>进度: {percent}%</span>
+                    <span>{current.toLocaleString()} / {total.toLocaleString()} 行</span>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const AddFieldModal = ({ isOpen, onClose, onConfirm, existingKeys }: { isOpen: boolean, onClose: () => void, onConfirm: (field: FieldDefinition) => void, existingKeys: string[] }) => {
     const [label, setLabel] = useState('');
@@ -191,7 +224,7 @@ interface FilterCriteria {
     end: string;
 }
 
-export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, addToast }: any) => {
+export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, onRefreshData, addToast }: any) => {
     const [activeTab, setActiveTab] = useState<DataExpSubView>('preview');
     const [selectedSchemaType, setSelectedSchemaType] = useState<TableType>('shangzhi');
     const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
@@ -199,6 +232,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [isDeleteSelectedModalOpen, setIsDeleteSelectedModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
+    const [deleteProgress, setDeleteProgress] = useState<{ current: number, total: number } | null>(null);
     
     // 搜索表单状态
     const [tableTypeSearch, setTableTypeSearch] = useState<TableType>('shangzhi');
@@ -349,9 +383,32 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
 
     const handleConfirmDeleteSelected = async () => {
         if (!appliedFilters) return;
-        await onDeleteRows(appliedFilters.tableType, Array.from(selectedRowIds));
-        setSelectedRowIds(new Set());
+        const allIdsToDelete = Array.from(selectedRowIds);
+        const total = allIdsToDelete.length;
+        
         setIsDeleteSelectedModalOpen(false);
+        setDeleteProgress({ current: 0, total });
+
+        // 分片删除逻辑，防止海量删除时 UI 卡死
+        const CHUNK_SIZE = 5000;
+        try {
+            for (let i = 0; i < total; i += CHUNK_SIZE) {
+                const chunk = allIdsToDelete.slice(i, i + CHUNK_SIZE);
+                await onDeleteRows(appliedFilters.tableType, chunk);
+                setDeleteProgress({ current: Math.min(i + CHUNK_SIZE, total), total });
+                // 给主线程留出渲染进度条的时间
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            // 全部删除完成后，触发一次全量重载
+            await onRefreshData();
+            addToast('success', '物理删除完成', `已成功从物理库中永久移除 ${total} 条数据空间。`);
+        } catch (e) {
+            addToast('error', '删除异常', '物理层写入失败，请检查数据库连接。');
+        } finally {
+            setSelectedRowIds(new Set());
+            setDeleteProgress(null);
+        }
     };
 
     const resetFilters = () => {
@@ -367,6 +424,8 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
 
     return (
         <>
+            <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} />
+            
             <ConfirmModal
                 isOpen={isClearModalOpen}
                 title="确认清空物理表"
@@ -387,8 +446,8 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                 confirmText="立即删除"
                 confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20"
             >
-                <p>您当前选择了 <strong className="font-black text-rose-600">{selectedRowIds.size}</strong> 条记录。</p>
-                <p className="mt-2 text-slate-600">删除操作将直接修改本地物理表，不可撤销。确认继续吗？</p>
+                <p>您当前选择了 <strong className="font-black text-rose-600">{selectedRowIds.size.toLocaleString()}</strong> 条记录。</p>
+                <p className="mt-2 text-slate-600">删除操作将直接修改本地物理库，释放存储配额，且不可撤销。确认继续吗？</p>
             </ConfirmModal>
 
             <ConfirmModal
@@ -553,10 +612,10 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                  <div className="flex items-center justify-between">
                                      <div className="flex items-center gap-4">
                                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                            {appliedFilters ? `物理源: ${getTableName(appliedFilters.tableType)} | 命中: ${filteredData.length} 行` : '请设定条件并检索物理表'}
+                                            {appliedFilters ? `物理源: ${getTableName(appliedFilters.tableType)} | 命中: ${filteredData.length.toLocaleString()} 行` : '请设定条件并检索物理表'}
                                          </span>
                                          {selectedRowIds.size > 0 && (
-                                             <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-50 px-2 py-1 rounded">已选择: {selectedRowIds.size} 行</span>
+                                             <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-50 px-2 py-1 rounded">已选择: {selectedRowIds.size.toLocaleString()} 行</span>
                                          )}
                                      </div>
                                      <div className="flex gap-2">
@@ -631,7 +690,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                             {appliedFilters && filteredData.length > 0 && (
                                 <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
                                     <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                        展示 {(currentPage-1)*PAGE_SIZE + 1} - {Math.min(currentPage*PAGE_SIZE, filteredData.length)} / 共 {filteredData.length} 行
+                                        展示 {(currentPage-1)*PAGE_SIZE + 1} - {Math.min(currentPage*PAGE_SIZE, filteredData.length)} / 共 {filteredData.length.toLocaleString()} 行
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button 

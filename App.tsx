@@ -102,9 +102,7 @@ export const App = () => {
     }, [shops, skus, agents, skuLists, quotingData, isAppLoading, handleAutoCloudPush]);
 
     const loadMetadata = useCallback(async () => {
-        setIsAppLoading(true);
         try {
-            await handleAutoCloudPull();
             const [s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
@@ -126,10 +124,28 @@ export const App = () => {
             setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             setFactTables({ shangzhi: f_sz, jingzhuntong: f_jzt, customer_service: f_cs });
-        } finally { setIsAppLoading(false); }
+        } catch (e) {}
     }, []);
 
-    useEffect(() => { loadMetadata(); }, [loadMetadata]);
+    useEffect(() => { 
+        const init = async () => {
+            setIsAppLoading(true);
+            await handleAutoCloudPull();
+            await loadMetadata();
+            setIsAppLoading(false);
+        };
+        init();
+    }, [loadMetadata]);
+
+    const onDeleteRows = async (tableType: TableType, ids: any[]) => {
+        try {
+            await DB.deleteRows(`fact_${tableType}`, ids);
+            // 这里不在这里触发 loadMetadata，让子组件在 Chunk 循环后触发一次即可
+        } catch (e) {
+            addToast('error', '物理删除失败', '操作数据库时发生错误。');
+            throw e;
+        }
+    };
 
     const renderView = () => {
         if (isAppLoading) return <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black"><SyncIcon size={32} className={`mb-4 text-brand ${isCloudSyncing ? 'animate-spin' : ''}`} /><p className="tracking-widest uppercase text-xs">云舟引擎启航中...</p></div>;
@@ -141,7 +157,7 @@ export const App = () => {
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
             case 'data-center': return <DataCenterView onUpload={async ()=>{}} onBatchUpdate={async ()=>{}} history={uploadHistory} factTables={factTables} shops={shops} schemas={schemas} addToast={addToast} />;
             case 'cloud-sync': return <CloudSyncView addToast={addToast} />;
-            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={async ()=>{}} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
+            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={onDeleteRows} onRefreshData={loadMetadata} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
             case 'products': return <SKUManagementView {...commonProps} skuLists={skuLists} onAddNewSKU={async ()=>true} onUpdateSKU={async ()=>true} onDeleteSKU={()=>{}} onBulkAddSKUs={()=>{}} onAddNewShop={async ()=>true} onUpdateShop={async ()=>true} onDeleteShop={()=>{}} onBulkAddShops={()=>{}} onAddNewAgent={async ()=>true} onUpdateAgent={async ()=>true} onDeleteAgent={()=>{}} onBulkAddAgents={()=>{}} onAddNewSkuList={async ()=>true} onUpdateSkuList={async ()=>true} onDeleteSkuList={()=>{}} />;
             case 'ai-profit-analytics': return <AIProfitAnalyticsView {...commonProps} />;
             case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={factTables.shangzhi} onUpdateSKU={async ()=>true} {...commonProps} />;
