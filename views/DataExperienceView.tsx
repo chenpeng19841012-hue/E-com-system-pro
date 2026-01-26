@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCcw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle } from 'lucide-react';
+import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
@@ -272,6 +272,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
         if (!appliedFilters) return [];
         const { tableType, sku, shop, start, end } = appliedFilters;
         const tableData = factTables[tableType] || [];
+        const directoryShopNames = new Set(shops.map((s: Shop) => s.name));
 
         // 解析多值 SKU
         const searchTerms = sku.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
@@ -298,6 +299,9 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
             if (shop === "__EMPTY__") {
                 // 专门搜索未绑定店铺的记录
                 shopMatch = !rowShop || rowShop.trim() === '';
+            } else if (shop === "__OTHER__") {
+                // 逻辑：有店名，但不在名录中
+                shopMatch = rowShop && rowShop.trim() !== '' && !directoryShopNames.has(rowShop);
             } else if (shop) {
                 shopMatch = rowShop === shop;
             }
@@ -309,7 +313,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
             
             return skuMatch && shopMatch && dateMatch;
         });
-    }, [appliedFilters, factTables]);
+    }, [appliedFilters, factTables, shops]);
 
     const paginatedData = useMemo(() => {
         const start = (currentPage - 1) * PAGE_SIZE;
@@ -595,13 +599,15 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                         >
                                             <option value="">所有店铺数据</option>
                                             <option value="__EMPTY__" className="text-rose-500 font-bold">无店铺名称 (待清洗)</option>
+                                            <option value="__OTHER__" className="text-amber-600 font-bold">其他的店铺 (非名录内)</option>
                                             {shops.map((s:Shop) => <option key={s.id} value={s.name}>{s.name}</option>)}
                                         </select>
                                         <ChevronDown size={14} className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" />
                                     </div>
                                     <div className="flex gap-2">
                                         <button onClick={resetFilters} className="flex-1 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
-                                            <RefreshCcw size={14} /> 清空
+                                            {/* Fix typo 'RefreshCcw' to 'RefreshCw' and use the imported icon component. */}
+                                            <RefreshCw size={14} /> 清空
                                         </button>
                                         <button onClick={handleExecuteSearch} className="flex-1 px-4 py-2 bg-[#70AD47] text-white rounded-lg text-xs font-bold hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all active:scale-95">
                                             立即检索
