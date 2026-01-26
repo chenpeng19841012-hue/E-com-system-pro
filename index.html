@@ -8,13 +8,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap">
     <style>
-        html, body, #root { height: 100%; margin: 0; padding: 0; }
+        html, body, #root { 
+            height: 100vh; 
+            width: 100vw;
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden;
+        }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             background-color: #f8fafc;
             -webkit-font-smoothing: antialiased;
         }
         
+        /* 自定义滚动条 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -24,9 +31,10 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out; }
 
-        /* 隐藏滚动条但保留滚动 */
-        .overflow-y-auto { scrollbar-width: none; }
-        .overflow-y-auto::-webkit-scrollbar { display: none; }
+        /* 统一边框盒模型 */
+        *, ::before, ::after {
+            box-sizing: border-box;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -37,7 +45,7 @@
                     },
                     colors: {
                         brand: '#70AD47',
-                        navy: '#0F172A',
+                        navy: '#020617',
                     }
                 }
             }

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { CloudSync, Download, UploadCloud, ShieldCheck, AlertCircle, RefreshCw, Database, Settings2, Code2, Copy, CheckCircle2, Activity, Terminal } from 'lucide-react';
+import { CloudSync, Download, UploadCloud, ShieldCheck, AlertCircle, RefreshCw, Database, Settings2, Code2, Copy, CheckCircle2, Activity, Terminal, Loader2 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { createClient } from '@supabase/supabase-js';
 
@@ -15,6 +15,10 @@ export const CloudSyncView = ({ addToast }: any) => {
     const [autoSync, setAutoSync] = useState(false);
     const [showSql, setShowSql] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+
+    // 进度追踪状态
+    const [syncProgress, setSyncProgress] = useState(0);
+    const [syncStatus, setSyncStatus] = useState('');
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -66,46 +70,73 @@ export const CloudSyncView = ({ addToast }: any) => {
             addToast('error', '同步失败', '请先配置 Supabase 参数。');
             return;
         }
+        
         setIsProcessing(true);
+        setSyncProgress(0);
+        setSyncStatus('正在扫描本地物理记录...');
+        
         try {
             const supabase = createClient(supabaseUrl, supabaseKey);
             const tablesToSync = [
-                { local: 'fact_shangzhi', remote: 'fact_shangzhi', conflict: 'date,sku_code' },
-                { local: 'fact_jingzhuntong', remote: 'fact_jingzhuntong', conflict: 'date,tracked_sku_id,account_nickname' },
-                { local: 'fact_customer_service', remote: 'fact_customer_service', conflict: 'date,agent_account' }
+                { local: 'fact_shangzhi', remote: 'fact_shangzhi', conflict: 'date,sku_code', label: '商智销售表' },
+                { local: 'fact_jingzhuntong', remote: 'fact_jingzhuntong', conflict: 'date,tracked_sku_id,account_nickname', label: '广告投放表' },
+                { local: 'fact_customer_service', remote: 'fact_customer_service', conflict: 'date,agent_account', label: '客服接待表' }
             ];
             
-            let totalPushed = 0;
+            // 1. 先统计总行数用于百分比计算
+            let totalRowsToSync = 0;
+            const tableDataMap: Record<string, any[]> = {};
             for (const table of tablesToSync) {
-                const localData = await DB.getTableRows(table.local);
+                const data = await DB.getTableRows(table.local);
+                tableDataMap[table.local] = data;
+                totalRowsToSync += data.length;
+            }
+
+            if (totalRowsToSync === 0) {
+                setSyncStatus('未检测到本地数据，同步终止。');
+                setIsProcessing(false);
+                return;
+            }
+
+            let processedRows = 0;
+
+            // 2. 开始逐表同步
+            for (const table of tablesToSync) {
+                const localData = tableDataMap[table.local];
                 if (localData.length === 0) continue;
 
                 const cleanData = localData.map(({ id, ...rest }: any) => {
                     if (rest.date instanceof Date) rest.date = rest.date.toISOString().split('T')[0];
-                    // 处理可能的 undefined 为 null，Postgres 不接受 undefined
                     Object.keys(rest).forEach(key => {
                         if (rest[key] === undefined) rest[key] = null;
                     });
                     return rest;
                 });
 
-                const CHUNK_SIZE = 500; // 减小批次大小以提高稳定性
+                const CHUNK_SIZE = 500; 
                 for (let i = 0; i < cleanData.length; i += CHUNK_SIZE) {
                     const chunk = cleanData.slice(i, i + CHUNK_SIZE);
+                    
+                    setSyncStatus(`正在同步 ${table.label}: ${i} / ${localData.length} 行`);
+                    
                     const { error } = await supabase
                         .from(table.remote)
                         .upsert(chunk, { onConflict: table.conflict });
 
                     if (error) {
                         if (error.message.includes("column") && error.message.includes("not found")) {
-                            throw new Error(`云端表 [${table.remote}] 结构过旧，缺少字段: ${error.message}。请删除旧表并重新运行 SQL 脚本。`);
+                            throw new Error(`云端表 [${table.remote}] 结构不兼容，缺少字段。请重新执行 SQL 脚本。`);
                         }
                         throw new Error(`[${table.remote}] 写入失败: ${error.message}`);
                     }
+                    
+                    processedRows += chunk.length;
+                    setSyncProgress(Math.floor((processedRows / totalRowsToSync) * 100));
                 }
-                totalPushed += localData.length;
             }
 
+            // 3. 同步配置
+            setSyncStatus('正在备份系统配置信息...');
             const configData = await DB.getAllConfigs();
             const configPayload = Object.entries(configData).map(([key, data]) => ({ key, data }));
             if (configPayload.length > 0) {
@@ -114,18 +145,26 @@ export const CloudSyncView = ({ addToast }: any) => {
 
             const now = new Date().toLocaleString();
             setLastSync(now);
+            setSyncProgress(100);
+            setSyncStatus('同步任务圆满完成');
             await DB.saveConfig('cloud_sync_config', { url: supabaseUrl, key: supabaseKey, lastSync: now, autoSync });
-            addToast('success', '物理推送成功', `已向云端同步 ${totalPushed} 条完整业务记录。`);
+            addToast('success', '同步成功', `已向云端同步 ${totalRowsToSync} 条完整业务记录。`);
         } catch (e: any) {
             console.error(e);
+            setSyncStatus(`同步中断: ${e.message}`);
             addToast('error', '物理推送失败', e.message);
         } finally {
-            setIsProcessing(false);
+            setTimeout(() => {
+                setIsProcessing(false);
+                setSyncProgress(0);
+                setSyncStatus('');
+            }, 2000);
         }
     };
 
     const handleCloudPull = async () => {
         setIsProcessing(true);
+        setSyncStatus('正在从云端拉取数据镜像...');
         try {
             const supabase = createClient(supabaseUrl, supabaseKey);
             const tables = ['fact_shangzhi', 'fact_jingzhuntong', 'fact_customer_service'];
@@ -139,20 +178,19 @@ export const CloudSyncView = ({ addToast }: any) => {
             addToast('error', '拉取失败', e.message);
         } finally {
             setIsProcessing(false);
+            setSyncStatus('');
         }
     };
 
-    const sqlScript = `-- 注意：如果提示列不存在，请先运行此行删除旧表再重新执行：
+    const sqlScript = `-- 运行前建议清空旧结构：
 -- DROP TABLE IF EXISTS fact_shangzhi, fact_jingzhuntong, fact_customer_service, app_config;
 
--- 1. 创建配置表
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
   data JSONB,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. 创建商智表 (完整字段定义)
 CREATE TABLE IF NOT EXISTS fact_shangzhi (
   id BIGSERIAL PRIMARY KEY,
   date DATE NOT NULL,
@@ -203,7 +241,6 @@ CREATE TABLE IF NOT EXISTS fact_shangzhi (
   UNIQUE(date, sku_code)
 );
 
--- 3. 创建广告投放表 (完整字段)
 CREATE TABLE IF NOT EXISTS fact_jingzhuntong (
   id BIGSERIAL PRIMARY KEY,
   date DATE NOT NULL,
@@ -234,7 +271,6 @@ CREATE TABLE IF NOT EXISTS fact_jingzhuntong (
   UNIQUE(date, tracked_sku_id, account_nickname)
 );
 
--- 4. 创建客服接待表 (完整字段)
 CREATE TABLE IF NOT EXISTS fact_customer_service (
   id BIGSERIAL PRIMARY KEY,
   date DATE NOT NULL,
@@ -267,13 +303,11 @@ CREATE TABLE IF NOT EXISTS fact_customer_service (
   UNIQUE(date, agent_account)
 );
 
--- 5. 关闭 RLS
 ALTER TABLE app_config DISABLE ROW LEVEL SECURITY;
 ALTER TABLE fact_shangzhi DISABLE ROW LEVEL SECURITY;
 ALTER TABLE fact_jingzhuntong DISABLE ROW LEVEL SECURITY;
 ALTER TABLE fact_customer_service DISABLE ROW LEVEL SECURITY;
 
--- 6. 刷新缓存 (重要)
 NOTIFY pgrst, 'reload schema';`;
 
     return (
@@ -293,7 +327,7 @@ NOTIFY pgrst, 'reload schema';`;
                         云端状态: {
                             connectionStatus === 'testing' ? '测试中...' :
                             connectionStatus === 'success' ? '正常连接' :
-                            connectionStatus === 'error' ? '表结构不兼容' : '待测试'
+                            connectionStatus === 'error' ? '结构待更新' : '待测试'
                         }
                     </div>
                 </div>
@@ -328,22 +362,22 @@ NOTIFY pgrst, 'reload schema';`;
                             <h4 className="text-sm font-black uppercase tracking-wider">更新 SQL 结构</h4>
                         </div>
                         <p className="text-[10px] text-slate-400 font-medium leading-relaxed mb-6">
-                            由于系统增加了新指标（如加购转化率），您必须在 Supabase 的 <span className="text-white font-black underline">SQL Editor</span> 中运行最新的完整脚本。
+                            若同步报错 "Column not found"，请在 Supabase SQL Editor 运行此脚本补全字段。
                         </p>
                         <button 
                             onClick={() => setShowSql(!showSql)}
                             className="w-full py-3 bg-[#70AD47] rounded-xl text-[11px] font-black text-white hover:bg-[#5da035] transition-all shadow-lg shadow-[#70AD47]/20"
                         >
-                            {showSql ? '隐藏最新 SQL 脚本' : '查看最新 SQL 脚本'}
+                            {showSql ? '隐藏 SQL 脚本' : '查看 SQL 脚本'}
                         </button>
                         
                         {showSql && (
                             <div className="mt-4 bg-slate-800 rounded-2xl p-4 relative group">
-                                <pre className="text-[9px] text-slate-300 font-mono overflow-x-auto max-h-[400px] leading-relaxed">
+                                <pre className="text-[9px] text-slate-300 font-mono overflow-x-auto max-h-[300px] leading-relaxed">
                                     {sqlScript}
                                 </pre>
                                 <button 
-                                    onClick={() => { navigator.clipboard.writeText(sqlScript); addToast('success', '已复制', '请在 Supabase SQL Editor 中粘贴运行。'); }}
+                                    onClick={() => { navigator.clipboard.writeText(sqlScript); addToast('success', '已复制', '请在 Supabase 中运行。'); }}
                                     className="absolute top-4 right-4 p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all"
                                 >
                                     <Copy size={14} className="text-white"/>
@@ -354,22 +388,54 @@ NOTIFY pgrst, 'reload schema';`;
                 </div>
 
                 <div className="lg:col-span-8 space-y-8">
-                    <div className="bg-white rounded-[40px] p-10 border border-slate-100 shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center gap-10">
+                    <div className="bg-white rounded-[40px] p-10 border border-slate-100 shadow-xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-[#70AD47]/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                        <div className="flex-1 relative z-10">
-                            <h3 className="text-4xl font-black text-slate-900 mb-6">数据库级持久化同步</h3>
-                            <p className="text-slate-500 text-sm font-bold leading-relaxed mb-10 max-w-xl">
-                                执行全量推送将把您本地上传的所有历史数据同步到云端数据库。如果云端字段缺失，同步将失败并提示您更新 SQL 结构。
-                            </p>
-                            <div className="flex flex-wrap gap-4">
-                                <button 
-                                    onClick={handleCloudPush}
-                                    disabled={isProcessing}
-                                    className="px-10 py-5 rounded-[20px] bg-[#70AD47] text-white font-black text-sm flex items-center gap-3 hover:bg-[#5da035] shadow-2xl shadow-[#70AD47]/30 active:scale-95 disabled:opacity-50 transition-all"
-                                >
-                                    {isProcessing ? <RefreshCw className="animate-spin" size={20} /> : <UploadCloud size={20} />}
-                                    执行全量推送
-                                </button>
+                        
+                        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-10">
+                            <div className="flex-1 space-y-6">
+                                <h3 className="text-4xl font-black text-slate-900">同步任务中心</h3>
+                                <p className="text-slate-500 text-sm font-bold leading-relaxed max-w-xl">
+                                    将本地 IndexedDB 存储的所有业务明细推送至云端 PostgreSQL。这允许您实现跨设备协作或使用外部 BI 工具。
+                                </p>
+                                
+                                {isProcessing && (
+                                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 animate-fadeIn space-y-4">
+                                        <div className="flex justify-between items-end">
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">当前状态</p>
+                                                <p className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                                                    <Loader2 size={12} className="animate-spin text-[#70AD47]" />
+                                                    {syncStatus}
+                                                </p>
+                                            </div>
+                                            <p className="text-xl font-black text-[#70AD47]">{syncProgress}%</p>
+                                        </div>
+                                        <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-[#70AD47] transition-all duration-500 ease-out shadow-[0_0_12px_rgba(112,173,71,0.4)]"
+                                                style={{ width: `${syncProgress}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-4 pt-4">
+                                    <button 
+                                        onClick={handleCloudPush}
+                                        disabled={isProcessing}
+                                        className="px-10 py-5 rounded-[20px] bg-[#70AD47] text-white font-black text-sm flex items-center gap-3 hover:bg-[#5da035] shadow-2xl shadow-[#70AD47]/30 active:scale-95 disabled:bg-slate-200 disabled:shadow-none transition-all"
+                                    >
+                                        {isProcessing ? <RefreshCw className="animate-spin" size={20} /> : <UploadCloud size={20} />}
+                                        执行全量推送
+                                    </button>
+                                    <button 
+                                        onClick={handleCloudPull}
+                                        disabled={isProcessing}
+                                        className="px-10 py-5 rounded-[20px] bg-white text-slate-600 border border-slate-200 font-black text-sm flex items-center gap-3 hover:bg-slate-50 transition-all"
+                                    >
+                                        从云端拉取
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -377,24 +443,24 @@ NOTIFY pgrst, 'reload schema';`;
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="p-8 bg-slate-50 rounded-[32px] border border-slate-100">
                             <Activity size={24} className="text-[#70AD47] mb-6" />
-                            <h4 className="text-lg font-black text-slate-800">上次同步概览</h4>
+                            <h4 className="text-lg font-black text-slate-800">上次同步记录</h4>
                             <div className="mt-4 space-y-2">
                                 <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-slate-400">同步时间:</span>
-                                    <span className="text-slate-700">{lastSync || '尚未进行'}</span>
+                                    <span className="text-slate-400">时间:</span>
+                                    <span className="text-slate-700">{lastSync || '无数据'}</span>
                                 </div>
                                 <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-slate-400">状态:</span>
-                                    <span className="text-green-600">字段自动映射开启</span>
+                                    <span className="text-slate-400">引擎状态:</span>
+                                    <span className="text-green-600">双向对齐就绪</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="p-8 bg-amber-50 rounded-[32px] border border-amber-100">
-                             <AlertCircle size={24} className="text-amber-500 mb-6" />
-                             <h4 className="text-lg font-black text-amber-900">故障排除</h4>
-                             <p className="mt-4 text-amber-700 text-[11px] font-bold leading-relaxed">
-                                如果提示 "column ... not found"，说明云端表的结构落后于系统版本。请使用左侧提供的最新 SQL 脚本覆盖云端表定义。
+                        <div className="p-8 bg-blue-600 rounded-[32px] text-white shadow-xl shadow-blue-100">
+                             <ShieldCheck size={24} className="mb-6 opacity-80" />
+                             <h4 className="text-lg font-black">安全性声明</h4>
+                             <p className="mt-4 text-blue-50 text-[11px] font-bold leading-relaxed">
+                                云同步使用标准 HTTPS 加密。您的本地数据在同步过程中仅通过安全通道写入您私有的 Supabase 实例。
                              </p>
                         </div>
                     </div>
