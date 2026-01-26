@@ -42,6 +42,17 @@ export const DB = {
     });
   },
 
+  async getTableRows(tableName: string): Promise<any[]> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([tableName], 'readonly');
+      const store = transaction.objectStore(tableName);
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
   async getRange(tableName: string, startDate: string, endDate: string): Promise<any[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -74,6 +85,25 @@ export const DB = {
       const request = store.get(key);
       request.onsuccess = () => resolve(request.result !== undefined ? request.result : defaultValue);
       request.onerror = () => resolve(defaultValue);
+    });
+  },
+
+  async getAllConfigs(): Promise<Record<string, any>> {
+    const db = await this.getDB();
+    return new Promise((resolve) => {
+      const transaction = db.transaction(['app_config'], 'readonly');
+      const store = transaction.objectStore('app_config');
+      const items: any = {};
+      const cursorReq = store.openCursor();
+      cursorReq.onsuccess = (e: any) => {
+          const cursor = e.target.result;
+          if (cursor) {
+              items[cursor.key] = cursor.value;
+              cursor.continue();
+          } else {
+              resolve(items);
+          }
+      };
     });
   },
 
