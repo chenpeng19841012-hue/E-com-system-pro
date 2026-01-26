@@ -1,197 +1,157 @@
+
 import React, { useState } from 'react';
-import { MessageCircle, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Clipboard } from 'lucide-react';
+import { MessageCircle, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Clipboard, UserCircle, ShieldCheck } from 'lucide-react';
 import { ProductSKU, Shop } from '../lib/types';
+import { GoogleGenAI } from "@google/genai";
 
-interface AIAssistantViewProps {
-    skus: ProductSKU[];
-    shops: Shop[];
-}
-
-export const AIAssistantView = ({ skus, shops }: AIAssistantViewProps) => {
+export const AIAssistantView = ({ skus, shops }: { skus: ProductSKU[], shops: Shop[] }) => {
     const [selectedSkuId, setSelectedSkuId] = useState<string>('');
-    const [customerQuestion, setCustomerQuestion] = useState('');
-    const [responseTone, setResponseTone] = useState('友好&有帮助');
-    const [generatedResponse, setGeneratedResponse] = useState('');
+    const [question, setQuestion] = useState('');
+    const [response, setResponse] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [copyButtonText, setCopyButtonText] = useState('复制回复');
 
-    const handleGenerate = async () => {
-        if (!customerQuestion) {
-            setError('客户问题不能为空。');
-            return;
-        }
+    const handleAsk = async () => {
+        if (!question) return;
         setIsLoading(true);
         setError('');
-        setGeneratedResponse('');
-
+        
         try {
             const sku = skus.find(s => s.id === selectedSkuId);
-            const shop = sku ? shops.find(sh => sh.id === sku.shopId) : null;
+            const shop = shops.find(sh => sh.id === sku?.shopId);
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+            const context = sku ? `
+                当前咨询商品: ${sku.name}
+                规格配置: ${sku.configuration}
+                价格: 前台价¥${sku.sellingPrice}, 促销价¥${sku.promoPrice}
+                库存: 入仓${sku.warehouseStock}件, 厂直${sku.factoryStock}件
+                所属店铺: ${shop?.name} (${shop?.mode})
+            ` : '通用咨询';
 
             const prompt = `
-                作为一名资深、耐心且专业的电商客服代表，你的任务是根据提供的商品信息，准确、清晰地回答客户的问题。
-
-                **客服准则:**
-                1.  **信息准确性:** 只能使用“商品信息”中提供的数据进行回答。如果信息不存在，必须明确告知客户“关于您咨询的[具体问题点]，我需要进一步查询确认”，然后引导客户等待或联系更高级别的支持。绝不允许猜测或编造信息。
-                2.  **语气风格:** 严格按照指定的“回复语调”进行沟通。
-                3.  **简洁清晰:** 回答应直截了当，易于理解。
-
-                ---
-
-                **商品信息:**
-                -   **商品名称:** ${sku?.name || '未选定商品'}
-                -   **SKU编码:** ${sku?.code || 'N/A'}
-                -   **品牌:** ${sku?.brand || 'N/A'}
-                -   **型号:** ${sku?.model || 'N/A'}
-                -   **核心配置:** ${sku?.configuration || 'N/A'}
-                -   **品类:** ${sku?.category || 'N/A'}
-                -   **所属店铺:** ${shop?.name || 'N/A'}
-                -   **销售状态:** ${sku?.status || 'N/A'}
-                -   **销售模式:** ${sku?.mode || 'N/A'}
-                -   **前台售价:** ${sku?.sellingPrice ? `¥${sku.sellingPrice.toFixed(2)}` : '请以页面价格为准'}
-                -   **促销价:** ${sku?.promoPrice ? `¥${sku.promoPrice.toFixed(2)}` : '暂无特别促销价'}
-                -   **入仓库存:** ${sku?.warehouseStock !== undefined ? `${sku.warehouseStock} 件` : '需要查询'}
-                -   **厂直库存:** ${sku?.factoryStock !== undefined ? `${sku.factoryStock} 件` : '需要查询'}
-                -   **总库存:** ${sku ? `${(sku.warehouseStock || 0) + (sku.factoryStock || 0)} 件` : '需要查询'}
-                -   **广告状态:** ${sku?.advertisingStatus || 'N/A'}
-
-                ---
-
-                **客户问题:**
-                "${customerQuestion}"
-
-                **回复语调:**
-                ${responseTone}
-
-                ---
-
-                请直接生成你作为客服的回复内容。
+                你现在是“云舟”系统的首席金牌客服。
+                
+                业务背景: ${context}
+                
+                客户问题: "${question}"
+                
+                指令:
+                1. 语气要礼貌、专业、热情。
+                2. 必须根据提供的业务背景准确回答，严禁编造库存或价格。
+                3. 如果问题涉及价格优惠，要表现出愿意为客户申请的态度。
+                4. 回复要简练，多用短句。
+                
+                直接输出回复话术。
             `;
-            
-            const requestBody = {
+
+            const result = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
                 contents: prompt,
-            };
-
-            const apiResponse = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
             });
 
-            if (!apiResponse.ok) {
-                const errorData = await apiResponse.json();
-                throw new Error(errorData.error || 'API request failed');
-            }
-
-            const responseData = await apiResponse.json();
-            const text = responseData.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
-            setGeneratedResponse(text.trim());
-
+            setResponse(result.text || '');
         } catch (err: any) {
-            console.error(err);
-            setError(`回复生成失败: ${err.message || '请检查API Key或网络连接'}`);
+            setError(`客服大脑暂时掉线: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(generatedResponse);
-        setCopyButtonText('复制成功!');
-        setTimeout(() => setCopyButtonText('复制回复'), 2000);
-    };
-
     return (
-        <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn">
-            <div className="mb-8">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI智能客服助手</h1>
-                <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">AI-POWERED CUSTOMER SERVICE ASSISTANT</p>
+        <div className="p-8 max-w-[1200px] mx-auto animate-fadeIn">
+            <div className="mb-10">
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight">智能客服助手</h1>
+                <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">AI-Powered CS Copilot</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Input Panel */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 space-y-6">
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">1. 关联商品 (可选)</label>
-                         <div className="relative">
-                           <select 
-                                value={selectedSkuId} 
-                                onChange={e => setSelectedSkuId(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:border-[#70AD47] appearance-none"
-                            >
-                                <option value="">通用问题 (不关联特定商品)</option>
-                                {skus.map(sku => <option key={sku.id} value={sku.id}>{sku.name} ({sku.code})</option>)}
-                            </select>
-                            <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[700px]">
+                {/* Header */}
+                <div className="bg-slate-50 px-8 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#70AD47] rounded-full flex items-center justify-center text-white shadow-lg shadow-[#70AD47]/20">
+                            <Bot size={20} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-black text-slate-800">云舟金牌客服 AI</p>
+                            <p className="text-[10px] text-green-600 font-bold flex items-center gap-1">
+                                <ShieldCheck size={10} /> 实时资产同步已开启
+                            </p>
                         </div>
                     </div>
-
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">2. 输入客户问题 *</label>
-                        <textarea
-                            value={customerQuestion}
-                            onChange={e => setCustomerQuestion(e.target.value)}
-                            placeholder="例如：这款电脑有现货吗？什么时候能发货？"
-                            className="w-full h-32 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#70AD47] resize-y"
-                        ></textarea>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">3. 选择回复语调</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['友好&有帮助', '专业&简洁', '共情&关怀'].map(item => (
-                                <button key={item} onClick={() => setResponseTone(item)} className={`px-4 py-2 text-xs font-bold rounded-lg border-2 transition-all ${responseTone === item ? 'bg-[#70AD47] border-[#70AD47] text-white' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-[#70AD47]'}`}>{item}</button>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    <div className="pt-6 border-t border-slate-100">
-                         <button 
-                            onClick={handleGenerate} 
-                            disabled={isLoading}
-                            className="w-full py-4 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed">
-                            {isLoading ? <><LoaderCircle size={16} className="animate-spin" /> 正在生成...</> : <><Sparkles size={16} className="fill-white"/> 生成回复建议</>}
-                        </button>
+                    <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase">当前关联商品:</label>
+                        <select 
+                            value={selectedSkuId} 
+                            onChange={e => setSelectedSkuId(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 outline-none focus:border-[#70AD47]"
+                        >
+                            <option value="">通用模式</option>
+                            {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
                     </div>
                 </div>
 
-                {/* Output Panel */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <Bot size={18} className="text-[#70AD47]" />
-                            AI 回复建议
-                        </h3>
-                         {generatedResponse && (
-                            <button onClick={handleCopy} className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors">
-                                <Clipboard size={14} /> {copyButtonText}
-                            </button>
-                         )}
-                    </div>
+                {/* Chat Area */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
+                    {question && (
+                        <div className="flex justify-end gap-3">
+                            <div className="bg-slate-800 text-white px-5 py-3 rounded-2xl rounded-tr-none text-sm font-medium shadow-sm max-w-[70%]">
+                                {question}
+                            </div>
+                            <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-slate-400">
+                                <UserCircle size={20} />
+                            </div>
+                        </div>
+                    )}
                     
-                    <div className="flex-1 bg-slate-50/70 rounded-lg p-6 overflow-y-auto">
-                        {isLoading ? (
-                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                <LoaderCircle size={32} className="animate-spin mb-4" />
-                                <p className="font-bold">AI客服正在思考中...</p>
+                    {isLoading ? (
+                        <div className="flex gap-3 animate-pulse">
+                            <div className="w-8 h-8 bg-[#70AD47]/20 rounded-full"></div>
+                            <div className="bg-white border border-slate-100 px-5 py-3 rounded-2xl rounded-tl-none w-32 h-10"></div>
+                        </div>
+                    ) : response ? (
+                        <div className="flex gap-3 animate-fadeIn">
+                            <div className="w-8 h-8 bg-[#70AD47] rounded-full flex items-center justify-center text-white shrink-0">
+                                <Bot size={16} />
                             </div>
-                        ) : error ? (
-                            <div className="flex flex-col items-center justify-center h-full text-rose-500 bg-rose-50 rounded-lg p-4">
-                                <AlertCircle size={32} className="mb-4" />
-                                <p className="font-bold text-sm text-center">{error}</p>
+                            <div className="bg-white border border-slate-100 px-5 py-3 rounded-2xl rounded-tl-none text-sm font-bold text-slate-700 shadow-sm max-w-[80%] leading-relaxed">
+                                {response}
+                                <button 
+                                    onClick={() => {navigator.clipboard.writeText(response);}}
+                                    className="block mt-3 text-[10px] text-[#70AD47] hover:underline"
+                                >
+                                    点击复制回复话术
+                                </button>
                             </div>
-                        ) : generatedResponse ? (
-                            <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
-                                {generatedResponse}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                                <MessageCircle size={48} className="mb-4 opacity-50" />
-                                <p className="font-bold text-center">输入客户问题，<br/>让AI助您一臂之力</p>
-                            </div>
-                        )}
+                        </div>
+                    ) : null}
+
+                    {error && (
+                        <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-500 text-xs font-bold text-center">
+                            {error}
+                        </div>
+                    )}
+                </div>
+
+                {/* Input Area */}
+                <div className="p-6 bg-white border-t border-slate-100">
+                    <div className="relative flex items-center">
+                        <input 
+                            value={question}
+                            onChange={e => setQuestion(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleAsk()}
+                            placeholder="在此输入客户提出的问题，AI 将根据 SKU 资产库生成回复..."
+                            className="w-full pl-6 pr-32 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:border-[#70AD47]"
+                        />
+                        <button 
+                            onClick={handleAsk}
+                            disabled={isLoading || !question}
+                            className="absolute right-2 bg-[#70AD47] text-white px-6 py-2.5 rounded-xl font-black text-xs hover:bg-[#5da035] transition-all disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isLoading ? <LoaderCircle size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            获取建议
+                        </button>
                     </div>
                 </div>
             </div>

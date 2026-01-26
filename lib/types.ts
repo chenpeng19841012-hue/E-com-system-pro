@@ -1,5 +1,5 @@
 
-export type View = 'dashboard' | 'multiquery' | 'reports' | 'ai-description' | 'ai-sales-forecast' | 'ai-cs-assistant' | 'ai-ad-image' | 'ai-quoting' | 'products' | 'data-experience' | 'data-center' | 'ai-profit-analytics' | 'ai-smart-replenishment' | 'ai-competitor-monitoring' | 'ai-marketing-copilot' | 'dynamic-pricing-engine' | 'customer-lifecycle-hub' | 'system-snapshot';
+export type View = 'dashboard' | 'multiquery' | 'reports' | 'ai-description' | 'ai-sales-forecast' | 'ai-cs-assistant' | 'ai-ad-image' | 'ai-quoting' | 'products' | 'data-experience' | 'data-center' | 'ai-profit-analytics' | 'ai-smart-replenishment' | 'ai-competitor-monitoring' | 'ai-marketing-copilot' | 'dynamic-pricing-engine' | 'customer-lifecycle-hub' | 'system-snapshot' | 'cloud-sync';
 export type TableType = 'shangzhi' | 'jingzhuntong' | 'customer_service';
 export type ProductSubView = 'sku' | 'shop' | 'agent' | 'list';
 export type DataExpSubView = 'preview' | 'schema';

@@ -1,10 +1,11 @@
 
 /**
- * Advanced IndexedDB Wrapper for Shujian E-com System
- * Optimized for millions of rows (2.4M+ records).
+ * Advanced IndexedDB Wrapper with Cloud Sync capabilities
  */
+import { createClient } from '@supabase/supabase-js';
+
 const DB_NAME = 'ShujianDB';
-const DB_VERSION = 3; // Incremented version for index support
+const DB_VERSION = 3;
 
 export const DB = {
   getDB(): Promise<IDBDatabase> {
@@ -15,20 +16,14 @@ export const DB = {
       
       request.onupgradeneeded = (event: any) => {
         const db = event.target.result;
-        
-        // Dynamic Data Stores (Fact Tables)
         const factTables = ['fact_shangzhi', 'fact_jingzhuntong', 'fact_customer_service'];
         factTables.forEach(tableName => {
           if (!db.objectStoreNames.contains(tableName)) {
-            // We use an auto-incrementing key for rows to allow duplicate SKUs on different dates
             const store = db.createObjectStore(tableName, { keyPath: 'id', autoIncrement: true });
-            // CRITICAL: Create indices for fast querying without full table scans
             store.createIndex('date', 'date', { unique: false });
             store.createIndex('sku_date', ['sku_code', 'date'], { unique: false });
           }
         });
-
-        // Config Store for metadata
         if (!db.objectStoreNames.contains('app_config')) {
           db.createObjectStore('app_config');
         }
@@ -36,21 +31,17 @@ export const DB = {
     });
   },
 
-  // Save multiple rows efficiently using a single transaction
   async bulkAdd(tableName: string, rows: any[]): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([tableName], 'readwrite');
       const store = transaction.objectStore(tableName);
-      
       rows.forEach(row => store.put(row));
-      
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
   },
 
-  // Optimized range query: only fetch what you need from disk
   async getRange(tableName: string, startDate: string, endDate: string): Promise<any[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -59,7 +50,6 @@ export const DB = {
       const index = store.index('date');
       const range = IDBKeyRange.bound(startDate, endDate);
       const request = index.getAll(range);
-      
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -70,9 +60,9 @@ export const DB = {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['app_config'], 'readwrite');
       const store = transaction.objectStore('app_config');
-      const request = store.put(data, key);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      store.put(data, key);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
     });
   },
 
@@ -92,9 +82,69 @@ export const DB = {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([tableName], 'readwrite');
       const store = transaction.objectStore(tableName);
-      const request = store.clear();
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      store.clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
     });
+  },
+
+  async exportFullDatabase(): Promise<string> {
+    const db = await this.getDB();
+    const exportData: any = {
+      version: DB_VERSION,
+      timestamp: new Date().toISOString(),
+      tables: {}
+    };
+
+    const tableNames = ['fact_shangzhi', 'fact_jingzhuntong', 'fact_customer_service', 'app_config'];
+    
+    for (const tableName of tableNames) {
+      const transaction = db.transaction([tableName], 'readonly');
+      const store = transaction.objectStore(tableName);
+      
+      if (tableName === 'app_config') {
+          exportData.tables[tableName] = await new Promise((resolve) => {
+              const items: any = {};
+              const cursorReq = store.openCursor();
+              cursorReq.onsuccess = (e: any) => {
+                  const cursor = e.target.result;
+                  if (cursor) {
+                      items[cursor.key] = cursor.value;
+                      cursor.continue();
+                  } else {
+                      resolve(items);
+                  }
+              };
+          });
+      } else {
+          exportData.tables[tableName] = await new Promise((resolve) => {
+              const request = store.getAll();
+              request.onsuccess = () => resolve(request.result);
+          });
+      }
+    }
+    return JSON.stringify(exportData);
+  },
+
+  async importFullDatabase(jsonString: string): Promise<void> {
+    const data = JSON.parse(jsonString);
+    const db = await this.getDB();
+    const tableNames = Object.keys(data.tables);
+
+    for (const tableName of tableNames) {
+      const transaction = db.transaction([tableName], 'readwrite');
+      const store = transaction.objectStore(tableName);
+      store.clear();
+      
+      if (tableName === 'app_config') {
+          const configItems = data.tables[tableName];
+          for (const key in configItems) {
+              store.put(configItems[key], key);
+          }
+      } else {
+          const rows = data.tables[tableName];
+          rows.forEach((row: any) => store.put(row));
+      }
+    }
   }
 };

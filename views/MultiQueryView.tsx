@@ -236,7 +236,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     // SKU 精准搜索过滤
                     if (parsedSkus.length > 0 && !parsedSkus.includes(skuCode)) return false;
                     
-                    // 店铺限定逻辑优化：双向校验
+                    // 店铺限定逻辑优化：双轨制校验
                     if (currentSelectedShop) {
                         const assetShopId = skuCodeToInfoMap.get(skuCode)?.shopId;
                         const physicalShopName = row.shop_name;
@@ -246,12 +246,11 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         const isPhysicalMatch = physicalShopName === currentSelectedShop.name;
                         
                         if (!isAssetMatch && !isPhysicalMatch) return false;
-                    } else if (managedSkuCodes && !managedSkuCodes.has(skuCode)) {
-                        return false;
                     }
 
                     return true;
                 };
+
                 const fSz = (shangzhiData || []).filter(filterFunc);
                 const fJzt = (jingzhuntongData || []).filter(filterFunc);
                 const merged = new Map<string, any>();
@@ -274,12 +273,19 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     if (!merged.has(key)) {
                         const sInfo = skuCodeToInfoMap.get(sCode);
                         const shopInfo = shops.find(s => s.id === sInfo?.shopId);
-                        merged.set(key, { date: row.date, sku_code: sCode, sku_shop: { code: sCode, shopName: row.shop_name || shopInfo?.name || '未知店铺' } });
+                        merged.set(key, { 
+                            date: row.date, 
+                            sku_code: sCode, 
+                            sku_shop: { 
+                                code: sCode, 
+                                shopName: row.shop_name || shopInfo?.name || '未知店铺' 
+                            } 
+                        });
                     }
                     const ent = merged.get(key)!;
                     
                     mAgg.forEach(m => { 
-                        // 特殊口径对齐：成交人数 (自营) vs 成交客户数 (POP)
+                        // 口径合并核心优化：成交人数 (自营 paid_users) + 成交客户数 (POP paid_customers)
                         if (m === 'paid_users') {
                             const val = (Number(row.paid_users) || Number(row.paid_customers) || 0);
                             ent[m] = (ent[m] || 0) + val;
@@ -342,7 +348,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
         map.set('sku_shop', { key: 'sku_shop', label: 'SKU / 店铺', type: 'STRING' });
         map.set('pv', { key: 'pv', label: '浏览量', type: 'INTEGER' });
         map.set('uv', { key: 'uv', label: '访客数', type: 'INTEGER' });
-        map.set('paid_users', { key: 'paid_users', label: '成交人数', type: 'INTEGER' });
+        map.set('paid_users', { key: 'paid_users', label: '成交买家数', type: 'INTEGER' }); // 统一标签
         map.set('paid_items', { key: 'paid_items', label: '成交件数', type: 'INTEGER' });
         map.set('paid_amount', { key: 'paid_amount', label: '成交金额', type: 'REAL' });
         map.set('paid_conversion_rate', { key: 'paid_conversion_rate', label: '成交转化率', type: 'REAL' });

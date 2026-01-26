@@ -4,32 +4,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-com System PRO | 电商运营管理系统</title>
+    <title>云舟 | 智能电商运营管理系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap">
     <style>
-        /* 核心布局兜底：防止 Tailwind CDN 失败 */
         html, body, #root { height: 100%; margin: 0; padding: 0; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f8fafc; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background-color: #f8fafc;
+            -webkit-font-smoothing: antialiased;
+        }
         
-        /* 强制保护 Flex 结构，防止侧边栏跑到顶部 */
-        .flex-container { display: flex !important; flex-direction: row !important; height: 100vh !important; width: 100vw !important; overflow: hidden !important; }
-        .sidebar-fixed { flex-shrink: 0 !important; display: flex !important; flex-direction: column !important; }
-        .main-content-fixed { flex: 1 !important; display: flex !important; flex-direction: column !important; overflow: auto !important; position: relative !important; }
-
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slideIn { animation: slideIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .animate-fadeIn { animation: fadeIn 0.5s ease-out; }
+
+        /* 隐藏滚动条但保留滚动 */
+        .overflow-y-auto { scrollbar-width: none; }
+        .overflow-y-auto::-webkit-scrollbar { display: none; }
     </style>
     <script>
-        // 显式配置 Tailwind，增强 JIT 稳定性
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                     },
+                    colors: {
+                        brand: '#70AD47',
+                        navy: '#0F172A',
+                    }
                 }
             }
         }
@@ -45,7 +54,8 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "xlsx": "https://esm.sh/xlsx@^0.18.5"
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.91.1"
   }
 }
 </script>

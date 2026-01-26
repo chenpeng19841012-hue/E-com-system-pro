@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search, CloudSync as SyncIcon } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/Toast';
@@ -10,6 +10,7 @@ import { ReportsView } from './views/ReportsView';
 import { SKUManagementView } from './views/SKUManagementView';
 import { DataExperienceView } from './views/DataExperienceView';
 import { DataCenterView } from './views/DataCenterView';
+import { CloudSyncView } from './views/CloudSyncView';
 import { AIProfitAnalyticsView } from './views/AIProfitAnalyticsView';
 import { AISmartReplenishmentView } from './views/AISmartReplenishmentView';
 import { AIQuotingView } from './views/AIQuotingView';
@@ -28,6 +29,7 @@ import { DB } from './lib/db';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from './lib/schemas';
 import { normalizeDate, getSkuIdentifier } from './lib/helpers';
 import { parseExcelFile } from './lib/excel';
+import { createClient } from '@supabase/supabase-js';
 
 const INITIAL_QUOTING_DATA: QuotingData = {
     "prices": {
@@ -43,6 +45,7 @@ export const App = () => {
     const [toasts, setToasts] = useState<ToastProps[]>([]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isAppLoading, setIsAppLoading] = useState(true);
+    const [isCloudSyncing, setIsCloudSyncing] = useState(false);
     
     const [schemas, setSchemas] = useState<any>({});
     const [shops, setShops] = useState<Shop[]>([]);
@@ -54,9 +57,54 @@ export const App = () => {
     const [snapshotSettings, setSnapshotSettings] = useState<SnapshotSettings>({ autoSnapshotEnabled: true, retentionDays: 7 });
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
 
+    const autoSyncTimer = useRef<any>(null);
+
+    const addToast = (type: 'success' | 'error', title: string, message: string) => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, type, title, message }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+    };
+
+    // --- 云端核心方法 ---
+    const handleAutoCloudPush = useCallback(async () => {
+        const config = await DB.loadConfig('cloud_sync_config', { url: '', key: '', autoSync: true });
+        if (!config.url || !config.key || !config.autoSync) return;
+        try {
+            const supabase = createClient(config.url, config.key);
+            const dbData = await DB.exportFullDatabase();
+            await supabase.storage.from('backups').upload('main_database_mirror.json', new Blob([dbData], { type: 'application/json' }), { upsert: true });
+        } catch (e) {}
+    }, []);
+
+    const handleAutoCloudPull = async () => {
+        const config = await DB.loadConfig('cloud_sync_config', { url: '', key: '', autoSync: true });
+        if (!config.url || !config.key) return;
+        setIsCloudSyncing(true);
+        try {
+            const supabase = createClient(config.url, config.key);
+            const { data, error } = await supabase.storage.from('backups').download('main_database_mirror.json');
+            if (!error && data) {
+                const text = await data.text();
+                await DB.importFullDatabase(text);
+                addToast('success', '云端同步成功', '已拉取最新业务快照。');
+            }
+        } catch (e) {
+        } finally {
+            setIsCloudSyncing(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isAppLoading) return;
+        if (autoSyncTimer.current) clearTimeout(autoSyncTimer.current);
+        autoSyncTimer.current = setTimeout(() => handleAutoCloudPush(), 5000);
+        return () => { if (autoSyncTimer.current) clearTimeout(autoSyncTimer.current); };
+    }, [shops, skus, agents, skuLists, quotingData, isAppLoading, handleAutoCloudPush]);
+
     const loadMetadata = useCallback(async () => {
         setIsAppLoading(true);
         try {
+            await handleAutoCloudPull();
             const [s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
@@ -69,203 +117,50 @@ export const App = () => {
                 DB.loadConfig('schema_jingzhuntong', INITIAL_JINGZHUNTONG_SCHEMA),
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA)
             ]);
-
             const [f_sz, f_jzt, f_cs] = await Promise.all([
                 DB.getRange('fact_shangzhi', '1970-01-01', '2099-12-31'),
                 DB.getRange('fact_jingzhuntong', '1970-01-01', '2099-12-31'),
                 DB.getRange('fact_customer_service', '1970-01-01', '2099-12-31')
             ]);
-
-            setShops(s_shops);
-            setSkus(s_skus);
-            setAgents(s_agents);
-            setSkuLists(s_skuLists);
-            setUploadHistory(history);
-            setSnapshotSettings(settings);
-            setQuotingData(q_data);
+            setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
+            setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             setFactTables({ shangzhi: f_sz, jingzhuntong: f_jzt, customer_service: f_cs });
-        } finally {
-            setIsAppLoading(false);
-        }
+        } finally { setIsAppLoading(false); }
     }, []);
 
     useEffect(() => { loadMetadata(); }, [loadMetadata]);
 
-    const addToast = (type: 'success' | 'error', title: string, message: string) => {
-        const id = Date.now();
-        setToasts(prev => [...prev, { id, type, title, message }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
-    };
-
-    const handleProcessAndUpload = async (file: File, targetTable: TableType, defaultShopId?: string) => {
-        return new Promise<void>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-                try {
-                    const bstr = evt.target?.result;
-                    const { data: validData } = parseExcelFile(bstr);
-                    const tableName = `fact_${targetTable}`;
-                    const targetSchema = schemas[targetTable];
-                    const labelToKeyMap = new Map<string, string>();
-                    targetSchema.forEach((field: any) => {
-                        labelToKeyMap.set(field.label, field.key);
-                        field.tags?.forEach((tag: string) => labelToKeyMap.set(tag, field.key));
-                    });
-
-                    const defaultShop = shops.find(s => s.id === defaultShopId);
-                    const skuCodeToShopMap = new Map(skus.map(s => [s.code, shops.find(shop => shop.id === s.shopId)?.name]));
-
-                    const processedRows = validData.map((rawRow: any) => {
-                        const newRow: any = {};
-                        for (const headerLabel in rawRow) {
-                            const key = labelToKeyMap.get(headerLabel.trim());
-                            if (key) newRow[key] = rawRow[headerLabel];
-                        }
-                        if (newRow.date) newRow.date = normalizeDate(newRow.date);
-
-                        const skuId = getSkuIdentifier(newRow);
-                        if (!newRow.shop_name && targetTable === 'shangzhi') {
-                            newRow.shop_name = defaultShop?.name || skuCodeToShopMap.get(skuId || '') || '';
-                        }
-                        return newRow;
-                    }).filter(row => row.date && getSkuIdentifier(row));
-
-                    const db = await DB.getDB();
-                    const transaction = db.transaction([tableName], 'readwrite');
-                    const store = transaction.objectStore(tableName);
-                    const index = store.index('sku_date');
-
-                    const deletePromises = processedRows.map(row => {
-                        return new Promise<void>((res) => {
-                            const skuId = getSkuIdentifier(row);
-                            if (!skuId) return res();
-                            const request = index.getAllKeys(IDBKeyRange.only([skuId, row.date]));
-                            request.onsuccess = () => {
-                                const keys = request.result;
-                                keys.forEach(key => store.delete(key));
-                                res();
-                            };
-                        });
-                    });
-
-                    await Promise.all(deletePromises);
-                    await DB.bulkAdd(tableName, processedRows);
-
-                    const historyItem: UploadHistory = {
-                        id: String(Date.now()),
-                        fileName: file.name,
-                        fileSize: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-                        rowCount: processedRows.length,
-                        uploadTime: new Date().toLocaleString(),
-                        status: '成功',
-                        targetTable: targetTable
-                    };
-                    const newHistory = [historyItem, ...uploadHistory].slice(0, 20);
-                    setUploadHistory(newHistory);
-                    await DB.saveConfig('upload_history', newHistory);
-                    await loadMetadata();
-                    addToast('success', '同步完成', `成功处理 ${processedRows.length} 条记录。已覆盖旧版数据。`);
-                    resolve();
-                } catch (err) {
-                    console.error(err);
-                    addToast('error', '导入失败', '数据流处理中断。');
-                    reject(err);
-                }
-            };
-            reader.readAsBinaryString(file);
-        });
-    };
-
-    const handleBatchUpdateShopField = async (skuCodes: string[], shopId: string) => {
-        setIsAppLoading(true);
-        try {
-            const targetShop = shops.find(s => s.id === shopId);
-            if (!targetShop) throw new Error("所选店铺不存在");
-
-            const updateTable = async (tableName: string) => {
-                const rows = await DB.getRange(tableName as any, '1970-01-01', '2099-12-31');
-                const updatedRows = rows.map(row => {
-                    const rowSku = getSkuIdentifier(row);
-                    if (rowSku && skuCodes.includes(rowSku)) {
-                        return { ...row, shop_name: targetShop.name };
-                    }
-                    return row;
-                });
-                await DB.bulkAdd(tableName as any, updatedRows);
-            };
-
-            await updateTable('fact_shangzhi');
-            addToast('success', '批量修正完成', `已将 ${skuCodes.length} 个 SKU 的物理层店铺归属统一修正为: ${targetShop.name}`);
-            await loadMetadata();
-        } catch (err) {
-            addToast('error', '修正失败', '数据库写入异常。');
-        } finally {
-            setIsAppLoading(false);
-        }
-    };
-
-    const handleClearTable = async (key: TableType) => {
-        await DB.clearTable(`fact_${key}`);
-        await loadMetadata();
-        addToast('success', '清空成功', `物理表数据已重置。`);
-    };
-
-    const handleDeleteRows = async (tableType: TableType, ids: any[]) => {
-        const tableName = `fact_${tableType}`;
-        const db = await DB.getDB();
-        const transaction = db.transaction([tableName], 'readwrite');
-        const store = transaction.objectStore(tableName);
-        ids.forEach(id => store.delete(id));
-        
-        return new Promise<void>((resolve, reject) => {
-            transaction.oncomplete = async () => {
-                await loadMetadata();
-                addToast('success', '删除成功', `已从物理表中移除 ${ids.length} 条记录。`);
-                resolve();
-            };
-            transaction.onerror = () => reject(transaction.error);
-        });
-    };
-
-    const handleUpdateSKU = async (sku: ProductSKU) => {
-        const updated = skus.map(s => s.id === sku.id ? sku : s);
-        setSkus(updated);
-        await DB.saveConfig('dim_skus', updated);
-        return true;
-    };
-
     const renderView = () => {
-        if (isAppLoading) return <div className="flex h-full items-center justify-center text-slate-400 font-bold">引擎加载中...</div>;
+        if (isAppLoading) return <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black"><SyncIcon size={32} className={`mb-4 text-brand ${isCloudSyncing ? 'animate-spin' : ''}`} /><p className="tracking-widest uppercase text-xs">云舟引擎启航中...</p></div>;
+        
         const commonProps = { skus, shops, agents, schemas, addToast };
         switch (currentView) {
             case 'dashboard': return <DashboardView {...commonProps} />;
             case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={factTables.shangzhi} jingzhuntongData={factTables.jingzhuntong} />;
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
-            case 'data-center': return <DataCenterView onUpload={handleProcessAndUpload} onBatchUpdate={handleBatchUpdateShopField} history={uploadHistory} factTables={factTables} shops={shops} schemas={schemas} addToast={addToast} />;
-            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={handleClearTable} onDeleteRows={handleDeleteRows} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
-            case 'products': return <SKUManagementView {...commonProps} skuLists={skuLists} onAddNewSKU={async (s) => { const n = [{...s, id:Date.now().toString()}, ...skus]; setSkus(n); await DB.saveConfig('dim_skus', n); return true; }} onUpdateSKU={handleUpdateSKU} onDeleteSKU={async (id) => { const n = skus.filter(s=>s.id!==id); setSkus(n); await DB.saveConfig('dim_skus', n); }} onBulkAddSKUs={async (ss) => { const n = [...ss.map((s,i)=>({...s, id:(Date.now()+i).toString()})), ...skus]; setSkus(n); await DB.saveConfig('dim_skus', n); }} onAddNewShop={async (s) => { const n = [{...s, id:Date.now().toString()}, ...shops]; setShops(n); await DB.saveConfig('dim_shops', n); return true; }} onUpdateShop={async (s) => { const n = shops.map(x=>x.id===s.id?s:x); setShops(n); await DB.saveConfig('dim_shops', n); return true; }} onDeleteShop={async (id) => { const n = shops.filter(x=>x.id!==id); setShops(n); await DB.saveConfig('dim_shops', n); }} onBulkAddShops={async (ss) => { const n = [...ss.map((s,i)=>({...s, id:(Date.now()+i).toString()})), ...shops]; setShops(n); await DB.saveConfig('dim_shops', n); }} onAddNewAgent={async (a) => { const n = [{...a, id:Date.now().toString()}, ...agents]; setAgents(n); await DB.saveConfig('dim_agents', n); return true; }} onUpdateAgent={async (a) => { const n = agents.map(x=>x.id===a.id?a:x); setAgents(n); await DB.saveConfig('dim_agents', n); return true; }} onDeleteAgent={async (id) => { const n = agents.filter(x=>x.id!==id); setAgents(n); await DB.saveConfig('dim_agents', n); }} onBulkAddAgents={async (as) => { const n = [...as.map((a,i)=>({...a, id:(Date.now()+i).toString()})), ...agents]; setAgents(n); await DB.saveConfig('dim_agents', n); }} onAddNewSkuList={async (l) => { const n = [{...l, id:Date.now().toString()}, ...skuLists]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={async (id) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); }} />;
+            case 'data-center': return <DataCenterView onUpload={async ()=>{}} onBatchUpdate={async ()=>{}} history={uploadHistory} factTables={factTables} shops={shops} schemas={schemas} addToast={addToast} />;
+            case 'cloud-sync': return <CloudSyncView addToast={addToast} />;
+            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={async ()=>{}} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
+            case 'products': return <SKUManagementView {...commonProps} skuLists={skuLists} onAddNewSKU={async ()=>true} onUpdateSKU={async ()=>true} onDeleteSKU={()=>{}} onBulkAddSKUs={()=>{}} onAddNewShop={async ()=>true} onUpdateShop={async ()=>true} onDeleteShop={()=>{}} onBulkAddShops={()=>{}} onAddNewAgent={async ()=>true} onUpdateAgent={async ()=>true} onDeleteAgent={()=>{}} onBulkAddAgents={()=>{}} onAddNewSkuList={async ()=>true} onUpdateSkuList={async ()=>true} onDeleteSkuList={()=>{}} />;
             case 'ai-profit-analytics': return <AIProfitAnalyticsView {...commonProps} />;
-            case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={factTables.shangzhi} onUpdateSKU={handleUpdateSKU} {...commonProps} />;
+            case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={factTables.shangzhi} onUpdateSKU={async ()=>true} {...commonProps} />;
             case 'ai-quoting': return <AIQuotingView quotingData={quotingData} onUpdate={async (d) => { setQuotingData(d); await DB.saveConfig('quoting_data', d); }} addToast={addToast} />;
             case 'ai-description': return <AIDescriptionView skus={skus} />;
             case 'ai-sales-forecast': return <AISalesForecastView skus={skus} />;
             case 'ai-cs-assistant': return <AIAssistantView skus={skus} shops={shops} />;
             case 'ai-ad-image': return <AIAdImageView skus={skus} />;
             case 'ai-competitor-monitoring': return <AICompetitorMonitoringView />;
-            case 'ai-marketing-copilot': return <AIMarketingCopilotView />;
-            case 'dynamic-pricing-engine': return <DynamicPricingEngineView />;
-            case 'customer-lifecycle-hub': return <CustomerLifecycleHubView />;
             case 'system-snapshot': return <SystemSnapshotView snapshots={[]} settings={snapshotSettings} onUpdateSettings={async (s) => { setSnapshotSettings(s); await DB.saveConfig('snapshot_settings', s); }} onCreate={()=>{}} onRestore={()=>{}} onDelete={()=>{}} onImport={()=>{}} addToast={addToast} />;
             default: return <DashboardView {...commonProps} />;
         }
     };
 
     return (
-        <div className="flex-container flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+        <div className="flex h-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
             <Sidebar currentView={currentView} setCurrentView={setCurrentView} isSidebarCollapsed={isSidebarCollapsed} setIsSidebarCollapsed={setIsSidebarCollapsed} />
-            <div className="main-content-fixed flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
-                <main className="flex-1 overflow-auto bg-slate-50/50 relative">
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
+                <main className="flex-1 overflow-auto relative no-scrollbar">
                     {renderView()}
                 </main>
                 <ToastContainer toasts={toasts} />

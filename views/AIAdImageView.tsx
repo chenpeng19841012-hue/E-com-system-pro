@@ -1,18 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Download } from 'lucide-react';
+import { Image as ImageIcon, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, Download, Maximize2, Layers } from 'lucide-react';
 import { ProductSKU } from '../lib/types';
+import { GoogleGenAI } from "@google/genai";
 
-interface AIAdImageViewProps {
-    skus: ProductSKU[];
-}
-
-export const AIAdImageView = ({ skus }: AIAdImageViewProps) => {
+export const AIAdImageView = ({ skus }: { skus: ProductSKU[] }) => {
     const [selectedSkuId, setSelectedSkuId] = useState<string>('');
     const [prompt, setPrompt] = useState('');
     const [aspectRatio, setAspectRatio] = useState('1:1');
-    const [style, setStyle] = useState('产品实拍');
-    
-    const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+    const [imgUrl, setImgUrl] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -20,180 +16,144 @@ export const AIAdImageView = ({ skus }: AIAdImageViewProps) => {
         if (selectedSkuId) {
             const sku = skus.find(s => s.id === selectedSkuId);
             if (sku) {
-                setPrompt(`一张${sku.brand}品牌${sku.name}的广告图, `);
+                setPrompt(`一张${sku.brand}${sku.name}的高端电商展示图，极简主义背景，柔和自然光，${sku.configuration}细节展示。`);
             }
-        } else {
-            setPrompt('');
         }
     }, [selectedSkuId, skus]);
 
     const handleGenerate = async () => {
-        if (!prompt) {
-            setError('核心创意不能为空。');
-            return;
-        }
+        if (!prompt) return;
         setIsLoading(true);
         setError('');
-        setGeneratedImageUrl(null);
+        setImgUrl(null);
 
         try {
-            const fullPrompt = `${prompt} 风格为${style}。`;
-
-            const requestBody = {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
-                contents: { parts: [{ text: fullPrompt }] },
+                contents: { parts: [{ text: prompt }] },
                 config: {
                     imageConfig: {
-                        aspectRatio: aspectRatio,
-                    },
-                },
-            };
-
-            const apiResponse = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
+                        aspectRatio: aspectRatio as any,
+                    }
+                }
             });
 
-            if (!apiResponse.ok) {
-                const errorData = await apiResponse.json();
-                throw new Error(errorData.error || 'API request failed');
-            }
-
-            const responseData = await apiResponse.json();
-
-            let foundImage = false;
-            for (const part of responseData.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData) {
-                    const base64String = part.inlineData.data;
-                    const imageUrl = `data:${part.inlineData.mimeType};base64,${base64String}`;
-                    setGeneratedImageUrl(imageUrl);
-                    foundImage = true;
-                    break; 
+                    setImgUrl(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+                    return;
                 }
             }
-
-            if (!foundImage) {
-                throw new Error("AI未能成功生成图片，请调整创意或稍后再试。");
-            }
-
+            throw new Error("模型未返回有效图像数据");
         } catch (err: any) {
-            console.error(err);
-            setError(`图片生成失败: ${err.message || '请检查API Key或网络连接'}`);
+            setError(`视觉引擎启动失败: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
     };
-    
-    const handleDownload = () => {
-        if (!generatedImageUrl) return;
-        const link = document.createElement('a');
-        link.href = generatedImageUrl;
-        const sku = skus.find(s => s.id === selectedSkuId);
-        const fileName = sku ? `${sku.code}_ad_image.png` : 'ai_generated_image.png';
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
 
     return (
         <div className="p-8 max-w-[1600px] mx-auto animate-fadeIn">
-            <div className="mb-8">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 广告图</h1>
-                <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">GEMINI-POWERED AD IMAGE GENERATOR</p>
+            <div className="mb-10 flex justify-between items-end">
+                <div>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 视觉创意舱</h1>
+                    <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">Next-Gen Ad Visualizer</p>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Input Panel */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 space-y-6">
-                     <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">1. 关联商品 (可选)</label>
-                        <div className="relative">
-                           <select 
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                {/* Controls */}
+                <div className="lg:col-span-1 space-y-8">
+                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm space-y-6">
+                        <div className="flex items-center gap-2 text-[#70AD47] font-black text-sm uppercase">
+                            <Layers size={18} /> 创意参数
+                        </div>
+                        
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">关联资产</label>
+                            <select 
                                 value={selectedSkuId} 
                                 onChange={e => setSelectedSkuId(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:border-[#70AD47] appearance-none"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47]"
                             >
-                                <option value="">无特定商品</option>
-                                {skus.map(sku => <option key={sku.id} value={sku.id}>{sku.name} ({sku.code})</option>)}
+                                <option value="">自由创作模式</option>
+                                {skus.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
-                            <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">2. 核心创意 *</label>
-                        <textarea
-                            value={prompt}
-                            onChange={e => setPrompt(e.target.value)}
-                            placeholder="例如：一台银色笔记本电脑，放置在极简风格的白色桌面上，旁边有一杯咖啡和一株小绿植，窗外是模糊的城市景色，光线明亮柔和。"
-                            className="w-full h-32 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#70AD47] resize-y"
-                        ></textarea>
-                    </div>
 
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">3. 选择图片比例</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {[{label: '1:1 (主图)', value: '1:1'}, {label: '16:9 (横幅)', value: '16:9'}, {label: '9:16 (竖版)', value: '9:16'}].map(item => (
-                                <button key={item.value} onClick={() => setAspectRatio(item.value)} className={`px-4 py-2 text-xs font-bold rounded-lg border-2 transition-all ${aspectRatio === item.value ? 'bg-[#70AD47] border-[#70AD47] text-white' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-[#70AD47]'}`}>{item.label}</button>
-                            ))}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">尺寸比例</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {['1:1', '3:4', '16:9'].map(r => (
+                                    <button 
+                                        key={r} 
+                                        onClick={() => setAspectRatio(r)}
+                                        className={`py-2 text-[10px] font-black rounded-lg border-2 transition-all ${aspectRatio === r ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-2">4. 选择图片风格</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {['产品实拍', '科技感', '生活方式'].map(item => (
-                                <button key={item} onClick={() => setStyle(item)} className={`px-4 py-2 text-xs font-bold rounded-lg border-2 transition-all ${style === item ? 'bg-[#70AD47] border-[#70AD47] text-white' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-[#70AD47]'}`}>{item}</button>
-                            ))}
-                        </div>
-                    </div>
 
-                    <div className="pt-6 border-t border-slate-100">
-                         <button 
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">画面描述 (PROMPT)</label>
+                            <textarea
+                                value={prompt}
+                                onChange={e => setPrompt(e.target.value)}
+                                className="w-full h-40 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] resize-none"
+                                placeholder="描述你想要的画面，例如：产品浮动在水面上，周围有气泡..."
+                            />
+                        </div>
+
+                        <button 
                             onClick={handleGenerate} 
                             disabled={isLoading}
-                            className="w-full py-4 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed">
-                            {isLoading ? <><LoaderCircle size={16} className="animate-spin" /> 正在创作...</> : <><Sparkles size={16} className="fill-white"/> 生成创意图片</>}
+                            className="w-full py-4 rounded-2xl bg-[#70AD47] text-white font-black text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                            {isLoading ? <LoaderCircle size={18} className="animate-spin mr-2" /> : <Sparkles size={18} className="mr-2" />}
+                            生成创意大片
                         </button>
                     </div>
                 </div>
 
-                {/* Output Panel */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <Bot size={18} className="text-[#70AD47]" />
-                            AI 生成结果
-                        </h3>
-                         {generatedImageUrl && (
-                            <div className="flex gap-2">
-                                 <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors">
-                                    <Download size={14} /> 下载图片
-                                </button>
-                                 <button onClick={handleGenerate} disabled={isLoading} className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200">
-                                    重新生成
-                                </button>
-                            </div>
-                         )}
-                    </div>
-                    
-                    <div className="flex-1 bg-slate-50/70 rounded-lg p-4 flex items-center justify-center">
+                {/* Canvas */}
+                <div className="lg:col-span-2">
+                    <div className="bg-slate-100 rounded-[40px] border-4 border-white shadow-inner flex flex-col items-center justify-center min-h-[600px] relative overflow-hidden group">
                         {isLoading ? (
-                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                <LoaderCircle size={32} className="animate-spin mb-4" />
-                                <p className="font-bold">AI 正在挥洒创意，请稍候...</p>
+                            <div className="text-center">
+                                <div className="w-20 h-20 border-4 border-[#70AD47]/20 border-t-[#70AD47] rounded-full animate-spin mx-auto mb-6"></div>
+                                <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Rendering Reality...</p>
                             </div>
-                        ) : error ? (
-                            <div className="flex flex-col items-center justify-center h-full text-rose-500 bg-rose-50 rounded-lg p-4">
-                                <AlertCircle size={32} className="mb-4" />
-                                <p className="font-bold text-sm text-center">{error}</p>
-                            </div>
-                        ) : generatedImageUrl ? (
-                            <img src={generatedImageUrl} alt="Generated ad image" className="max-w-full max-h-full object-contain rounded-md shadow-lg" />
+                        ) : imgUrl ? (
+                            <>
+                                <img src={imgUrl} className="w-full h-full object-contain" alt="Generated" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                                    <button 
+                                        onClick={() => {
+                                            const link = document.createElement('a');
+                                            link.href = imgUrl;
+                                            link.download = 'yunzhou_ad_visual.png';
+                                            link.click();
+                                        }}
+                                        className="bg-white text-slate-900 px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 hover:scale-105 transition-transform"
+                                    >
+                                        <Download size={16} /> 保存至本地
+                                    </button>
+                                </div>
+                            </>
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                                <ImageIcon size={48} className="mb-4 opacity-50" />
-                                <p className="font-bold text-center">请在左侧描述您的创意，<br/>开启视觉创作之旅</p>
+                            <div className="text-center px-10">
+                                <ImageIcon size={80} className="mx-auto text-slate-300 mb-6 opacity-50" />
+                                <h3 className="text-slate-400 font-black text-xl mb-2">等待视觉灵感</h3>
+                                <p className="text-slate-400 text-xs font-bold max-w-sm mx-auto">配置左侧参数并点击生成按钮，云舟 AI 将为您创作高精细度的电商广告视觉图。</p>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="absolute bottom-8 left-8 right-8 p-4 bg-rose-500 text-white rounded-2xl text-xs font-black flex items-center gap-3 animate-slideIn">
+                                <AlertCircle size={18} /> {error}
                             </div>
                         )}
                     </div>

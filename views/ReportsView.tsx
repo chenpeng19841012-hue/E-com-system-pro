@@ -243,7 +243,7 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
             
             const mainTitle = `${currentStart} 至 ${currentEnd} 运营报表`;
 
-            // Filter context
+            // 处理限定清单
             const skuCodesFromLists = new Set<string>();
             selectedListIds.forEach(id => {
                 const list = skuLists.find(l => l.id === id);
@@ -258,7 +258,8 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
                 const shopSkuCodesFromAssets = new Set(skus.filter(s => s.shopId === shop.id).map(s => s.code));
                 
                 const calculateForPeriod = (start: string, end: string) => {
-                    // 获取该店铺在此时间段物理表中出现的所有 SKU（用于补充未录入资产库的 SKU）
+                    // 1. 反向穿透：从物理表(fact_shangzhi)中找出该店铺的所有SKU编码
+                    // 解决“上传日志补齐了店铺名但资产管理未录入”导致的搜索不出结果问题
                     const physicalShopSkuCodes = new Set<string>();
                     factTables.shangzhi.forEach((r: any) => {
                         if (r.shop_name === shop.name) {
@@ -267,30 +268,32 @@ export const ReportsView = ({ factTables, skus, shops, skuLists, onAddNewSkuList
                         }
                     });
 
-                    // 最终该店铺参与计算的 SKU 全集
+                    // 合并资产库SKU与物理表SKU，作为该店铺的最终SKU全集
                     const combinedShopSkuCodes = new Set([...shopSkuCodesFromAssets, ...physicalShopSkuCodes]);
 
                     const szData = factTables.shangzhi.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        // 归属判断：资产库匹配 OR 物理名称匹配
+                        // 判断SKU是否归属该店 (双轨制：编码在全集内 OR 记录直接标有店名)
                         const isShop = combinedShopSkuCodes.has(code || '') || r.shop_name === shop.name;
-                        // 清单限制（如果有）
+                        // 判断是否在选定的清单内
                         const isListMatch = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        
                         return r.date >= start && r.date <= end && isShop && isListMatch;
                     });
 
                     const jztData = factTables.jingzhuntong.filter((r: any) => {
                         const code = getSkuIdentifier(r);
-                        // 广告表同样使用穿透后的 SKU 全集进行匹配
+                        // 广告表同步使用穿透后的 SKU 全集
                         const isShop = combinedShopSkuCodes.has(code || '') || r.shop_name === shop.name;
                         const isListMatch = skuCodesFromLists.size === 0 || skuCodesFromLists.has(code || '');
+                        
                         return r.date >= start && r.date <= end && isShop && isListMatch;
                     });
 
                     const agg = {
                         pv: szData.reduce((s: any, r: any) => s + (Number(r.pv) || 0), 0),
                         uv: szData.reduce((s: any, r: any) => s + (Number(r.uv) || 0), 0),
-                        // 核心优化：成交人数口径对齐（自营 paid_users vs POP paid_customers）
+                        // 解决自营与POP口径差异：成交人数(paid_users) + 成交客户数(paid_customers)
                         buyers: szData.reduce((s: any, r: any) => s + (Number(r.paid_users) || Number(r.paid_customers) || 0), 0),
                         orders: szData.reduce((s: any, r: any) => s + (Number(r.paid_orders) || 0), 0),
                         ca: szData.reduce((s: any, r: any) => s + (Number(r.paid_items) || 0), 0),

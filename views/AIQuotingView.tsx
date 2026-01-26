@@ -1,11 +1,7 @@
-import React, { useState, useMemo, useRef } from 'react';
-import * as XLSX from 'xlsx';
-import { Settings, Calculator, Wand2, RefreshCw, Clipboard, Plus, Trash2, UploadCloud, Download, Search, Edit2, X, AlertCircle } from 'lucide-react';
-import { QuotingData } from '../lib/types';
-import { parseExcelFile } from '../lib/excel';
 
-const QUOTE_CATEGORIES = ["主机", "内存", "硬盘1", "硬盘2", "显卡", "电源", "选件"];
-const ADMIN_CATEGORIES = ["主机", "内存", "硬盘", "显卡", "电源", "选件"];
+import React, { useState, useMemo } from 'react';
+import { Calculator, Wand2, RefreshCw, Clipboard, Plus, Trash2, Search, Settings2, ShieldCheck, Zap, Info, Save, FileSpreadsheet, Edit3, Layers, CheckCircle2, RotateCcw, Download } from 'lucide-react';
+import { QuotingData, QuotingDiscount } from '../lib/types';
 
 interface AIQuotingViewProps {
     quotingData: QuotingData;
@@ -13,375 +9,370 @@ interface AIQuotingViewProps {
     addToast: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
+// 界面显示的配置行
+const CONFIG_ROWS = ["主机", "内存", "硬盘 1", "硬盘 2", "显卡", "电源", "选件"];
+
+// 对应数据库中的类目映射
+const CATEGORY_MAP: Record<string, string> = {
+    "主机": "主机",
+    "内存": "内存",
+    "硬盘 1": "硬盘",
+    "硬盘 2": "硬盘",
+    "显卡": "显卡",
+    "电源": "电源",
+    "选件": "选件"
+};
+
 export const AIQuotingView = ({ quotingData, onUpdate, addToast }: AIQuotingViewProps) => {
-    const [isAdminView, setIsAdminView] = useState(false);
-
-    // Quote state
+    const [isAdmin, setIsAdmin] = useState(false);
     const [selectedItems, setSelectedItems] = useState<Record<string, { model: string, qty: number }>>({});
-    const [matchInput, setMatchInput] = useState('');
-    const [finalConfig, setFinalConfig] = useState('');
-    const [selectedDiscount, setSelectedDiscount] = useState('1.0');
-    const [reduction, setReduction] = useState(0);
-    const [finalPrice, setFinalPrice] = useState(0);
-
-    // Admin state
-    const [adminMargin, setAdminMargin] = useState(quotingData.settings.margin);
-    const [adminDiscounts, setAdminDiscounts] = useState(quotingData.discounts);
-    const [newItem, setNewItem] = useState({ category: ADMIN_CATEGORIES[0], model: '', price: '' });
-    const [editingItem, setEditingItem] = useState<{ category: string, model: string, price: number } | null>(null);
-    const [adminSearch, setAdminSearch] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const menu = useMemo(() => {
-        const newMenu: Record<string, string[]> = {};
-        for (const cat of QUOTE_CATEGORIES) {
-            const matchCat = cat.startsWith("硬盘") ? "硬盘" : cat;
-            const models = quotingData.prices[matchCat] || {};
-            newMenu[cat] = Object.keys(models).sort();
-        }
-        return newMenu;
-    }, [quotingData.prices]);
-
-    const handleItemChange = (category: string, key: 'model' | 'qty', value: string | number) => {
-        setSelectedItems(prev => ({
-            ...prev,
-            [category]: {
-                ...prev[category],
-                [key]: value
-            }
-        }));
-    };
+    const [nlpInput, setNlpInput] = useState('');
+    const [isMatching, setIsMatching] = useState(false);
     
-    const handleResetQuote = () => {
+    // Result States
+    const [results, setResults] = useState<{cost: number, final: number, configList: {cat: string, model: string, qty: number, price: number}[]} | null>(null);
+
+    // --- Admin Side States ---
+    const [newPart, setNewPart] = useState({ category: '主机', model: '', price: '' });
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const handleReset = () => {
         setSelectedItems({});
-        setMatchInput('');
-        setFinalConfig('');
-        setSelectedDiscount('1.0');
-        setReduction(0);
-        setFinalPrice(0);
+        setNlpInput('');
+        setResults(null);
+        addToast('success', '已重置', '当前配置方案已清空。');
     };
 
-    const handleCalculate = () => {
-        let totalCost = 0;
-        const configDetails: string[] = [];
-
-        for (const cat of QUOTE_CATEGORIES) {
-            const item = selectedItems[cat];
-            if (item && item.model && item.qty > 0) {
-                const matchCat = cat.startsWith("硬盘") ? "硬盘" : cat;
-                const cost = quotingData.prices[matchCat]?.[item.model] || 0;
-                totalCost += cost * item.qty;
-                configDetails.push(`${item.model} * ${item.qty}`);
-            }
-        }
+    const handleNlpMatch = () => {
+        if (!nlpInput) return;
+        setIsMatching(true);
         
-        const rawPrice = (totalCost * quotingData.settings.margin * parseFloat(selectedDiscount)) - reduction;
-        const intPrice = Math.floor(rawPrice);
-        const baseHundreds = Math.floor(intPrice / 100) * 100;
-        const remainder = intPrice % 100;
-        const finalCalcPrice = remainder < 50 ? baseHundreds + 50 : baseHundreds + 99;
-        
-        setFinalPrice(finalCalcPrice);
-        setFinalConfig(configDetails.join(' / '));
-    };
-
-    const handleMatchConfig = () => {
-        const newSelectedItems: Record<string, { model: string, qty: number }> = {};
-        let tempMatchInput = matchInput.toLowerCase();
-
-        for (const cat of QUOTE_CATEGORIES) {
-            const models = menu[cat];
-            for (const model of models) {
-                const modelLower = model.toLowerCase();
-                if (tempMatchInput.includes(modelLower)) {
-                    let qty = 1;
-                    const qtyRegex = new RegExp(`${modelLower}\\s*[*xX]\\s*(\\d+)`);
-                    const match = tempMatchInput.match(qtyRegex);
-                    if (match) {
-                        qty = parseInt(match[1], 10);
-                    }
-                    
-                    if (cat.startsWith('硬盘') && !newSelectedItems['硬盘1']) {
-                         newSelectedItems['硬盘1'] = { model, qty };
-                    } else if (cat.startsWith('硬盘') && !newSelectedItems['硬盘2']) {
-                        newSelectedItems['硬盘2'] = { model, qty };
-                    } else if (!newSelectedItems[cat]) {
-                        newSelectedItems[cat] = { model, qty };
-                    }
-                    tempMatchInput = tempMatchInput.replace(modelLower, '');
-                }
-            }
-        }
-        setSelectedItems(newSelectedItems);
-        addToast('success', '匹配完成', '已根据输入文本自动选择配件。');
-    };
-
-    const handleSaveChanges = () => {
-        const newQuotingData = {
-            ...quotingData,
-            settings: { margin: adminMargin },
-            discounts: adminDiscounts.filter(d => d.min_qty > 0)
-        };
-        onUpdate(newQuotingData);
-        addToast('success', '保存成功', '核心参数已更新。');
-    };
-
-    const handleAddItem = () => {
-        if (!newItem.model.trim() || !newItem.price) {
-            addToast('error', '添加失败', '型号和价格不能为空。');
-            return;
-        }
-        const prices = { ...quotingData.prices };
-        if (!prices[newItem.category]) prices[newItem.category] = {};
-        if (prices[newItem.category][newItem.model.trim()]) {
-             addToast('error', '添加失败', `型号 ${newItem.model} 已存在。`);
-             return;
-        }
-        prices[newItem.category][newItem.model.trim()] = parseFloat(newItem.price);
-        onUpdate({ ...quotingData, prices });
-        setNewItem({ category: ADMIN_CATEGORIES[0], model: '', price: '' });
-        addToast('success', '添加成功', `已添加新型号 ${newItem.model.trim()}。`);
-    };
-
-    const handleUpdateItem = () => {
-        if (!editingItem) return;
-        const prices = { ...quotingData.prices };
-        prices[editingItem.category][editingItem.model] = editingItem.price;
-        onUpdate({ ...quotingData, prices });
-        setEditingItem(null);
-        addToast('success', '更新成功', '价格已更新。');
-    };
-    
-    const handleDeleteItem = (category: string, model: string) => {
-        if (window.confirm(`确定要删除型号 [${model}] 吗？`)) {
-            const prices = { ...quotingData.prices };
-            if (prices[category]?.[model]) {
-                delete prices[category][model];
-                onUpdate({ ...quotingData, prices });
-                addToast('success', '删除成功', `型号 ${model} 已被删除。`);
-            }
-        }
-    };
-    
-    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            try {
-                const bstr = evt.target?.result;
-                const { data } = parseExcelFile(bstr);
-
-                let success = 0, replace = 0, fail = 0;
-                const prices = { ...quotingData.prices };
-
-                data.forEach(row => {
-                    try {
-                        const cat = String(Object.values(row)[0]).trim();
-                        const model = String(Object.values(row)[1]).trim();
-                        const price = parseFloat(String(Object.values(row)[2]));
-                        
-                        if (ADMIN_CATEGORIES.includes(cat) && model && !isNaN(price)) {
-                            if (!prices[cat]) prices[cat] = {};
-                            if (prices[cat][model]) replace++; else success++;
-                            prices[cat][model] = price;
+        setTimeout(() => {
+            const newSelection: any = {};
+            const inputLower = nlpInput.toLowerCase();
+            
+            // 简单匹配逻辑
+            Object.entries(quotingData.prices).forEach(([cat, models]) => {
+                Object.keys(models).forEach(model => {
+                    if (inputLower.includes(model.toLowerCase())) {
+                        // 如果是硬盘，优先填入硬盘1，如果1有了填入2
+                        if (cat === '硬盘') {
+                            if (!newSelection['硬盘 1']) newSelection['硬盘 1'] = { model, qty: 1 };
+                            else if (!newSelection['硬盘 2']) newSelection['硬盘 2'] = { model, qty: 1 };
                         } else {
-                            fail++;
+                            newSelection[cat] = { model, qty: 1 };
                         }
-                    } catch {
-                        fail++;
                     }
                 });
-                onUpdate({ ...quotingData, prices });
-                addToast('success', '导入完成', `成功: ${success}, 替换: ${replace}, 失败: ${fail}`);
-
-            } catch (err) {
-                addToast('error', '导入失败', '文件解析失败。');
-            }
-        };
-        reader.readAsBinaryString(file);
-        e.target.value = '';
+            });
+            
+            setSelectedItems(newSelection);
+            setIsMatching(false);
+            addToast('success', 'AI 识别完成', '已根据输入自动匹配最佳硬件组合。');
+        }, 800);
     };
 
-    const filteredAdminItems = useMemo(() => {
-        if (!adminSearch) {
-            return Object.entries(quotingData.prices).flatMap(([cat, models]) => 
-                Object.entries(models).map(([model, price]) => ({ category: cat, model, price }))
-            );
-        }
-        const searchLower = adminSearch.toLowerCase();
-        return Object.entries(quotingData.prices).flatMap(([cat, models]) => 
-            Object.entries(models)
-                .filter(([model, price]) => model.toLowerCase().includes(searchLower) || cat.toLowerCase().includes(searchLower))
-                .map(([model, price]) => ({ category: cat, model, price }))
-        );
-    }, [adminSearch, quotingData.prices]);
+    const calculate = () => {
+        let totalCost = 0;
+        const configList: any[] = [];
 
-    const renderQuotingView = () => (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 space-y-4">
-            {QUOTE_CATEGORIES.map(cat => (
-                <div key={cat} className="grid grid-cols-12 gap-4 items-center">
-                    <label className="col-span-2 text-sm font-bold text-slate-600">{cat}</label>
-                    <div className="col-span-8 relative">
-                        <select
-                            value={selectedItems[cat]?.model || ''}
-                            onChange={(e) => handleItemChange(cat, 'model', e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47] appearance-none"
-                        >
-                            <option value="">-- 请选择 --</option>
-                            {menu[cat]?.map(model => <option key={model} value={model}>{model}</option>)}
-                        </select>
+        for (const [rowName, item] of Object.entries(selectedItems) as [string, { model: string, qty: number }][]) {
+            if (!item.model || item.qty <= 0) continue;
+            
+            const dbCat = CATEGORY_MAP[rowName];
+            const unitPrice = quotingData.prices[dbCat]?.[item.model] || 0;
+            const lineCost = unitPrice * item.qty;
+            
+            totalCost += lineCost;
+            configList.push({
+                cat: rowName,
+                model: item.model,
+                qty: item.qty,
+                price: unitPrice
+            });
+        }
+
+        if (totalCost === 0) {
+            addToast('error', '计算失败', '请至少选择一件配件。');
+            return;
+        }
+
+        const margin = quotingData.settings.margin || 1.15;
+        let rawFinal = totalCost * margin;
+        
+        // 应用阶梯折扣
+        const totalQty = (Object.values(selectedItems) as { qty: number }[]).reduce((sum, item) => sum + item.qty, 0);
+        const activeDiscount = quotingData.discounts
+            .filter(d => totalQty >= d.min_qty)
+            .sort((a, b) => b.min_qty - a.min_qty)[0];
+        
+        if (activeDiscount) {
+            rawFinal *= activeDiscount.rate;
+        }
+
+        /**
+         * 核心进位算法：
+         * 价格后2位数 小于50 按后两位50 生成报价
+         * 大于等于50 按后两位99 生成报价
+         */
+        const intPrice = Math.floor(rawFinal);
+        const base = Math.floor(intPrice / 100) * 100;
+        const lastTwoDigits = intPrice % 100;
+        
+        let final: number;
+        if (lastTwoDigits < 50) {
+            final = base + 50;
+        } else {
+            final = base + 99;
+        }
+
+        setResults({ cost: totalCost, final, configList });
+    };
+
+    // --- Admin Handlers ---
+    const updateSettings = (updates: any) => {
+        onUpdate({ ...quotingData, settings: { ...quotingData.settings, ...updates } });
+        addToast('success', '设置已更新', '全局计算参数已生效。');
+    };
+
+    const handleAddPart = () => {
+        if (!newPart.model || !newPart.price) return;
+        const updatedPrices = { ...quotingData.prices };
+        if (!updatedPrices[newPart.category]) updatedPrices[newPart.category] = {};
+        updatedPrices[newPart.category][newPart.model] = parseFloat(newPart.price);
+        onUpdate({ ...quotingData, prices: updatedPrices });
+        setNewPart({ ...newPart, model: '', price: '' });
+        addToast('success', '录入成功', '型号已同步至库。');
+    };
+
+    if (isAdmin) {
+        return (
+            <div className="p-8 max-w-[1200px] mx-auto animate-fadeIn space-y-8 pb-20">
+                <div className="flex justify-between items-end">
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">报价库管理后台</h1>
+                        <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">Master Pricing Data Governance</p>
                     </div>
-                    <div className="col-span-2">
-                        <input
-                            type="number"
-                            min="0"
-                            value={selectedItems[cat]?.qty || 0}
-                            onChange={(e) => handleItemChange(cat, 'qty', parseInt(e.target.value) || 0)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-center text-slate-700 outline-none focus:border-[#70AD47]"
-                        />
-                    </div>
+                    <button onClick={() => setIsAdmin(false)} className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-800 text-white font-black text-[10px] hover:bg-slate-700 transition-all shadow-sm">
+                        <Calculator size={14} /> 返回报价界面
+                    </button>
                 </div>
-            ))}
-            <div className="grid grid-cols-12 gap-4 items-center pt-4 border-t border-slate-100">
-                <label className="col-span-2 text-sm font-bold text-slate-600">产品匹配</label>
-                <div className="col-span-8">
-                     <input 
-                        type="text"
-                        value={matchInput}
-                        onChange={e => setMatchInput(e.target.value)}
-                        placeholder="在此处粘贴询价配置如: TSK-C3 I5-14500/8G DDR *2/512G SSD+2T HDD"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]"
-                    />
-                </div>
-                <div className="col-span-2">
-                    <button onClick={handleMatchConfig} className="w-full py-2.5 rounded-lg bg-amber-400 text-white font-bold text-sm hover:bg-amber-500 transition-all">匹配配置</button>
-                </div>
-            </div>
-            <div className="pt-4 space-y-4">
-                <textarea readOnly value={finalConfig} placeholder="最终配置" className="w-full h-24 bg-slate-100 border border-slate-200 rounded-lg p-3 text-sm text-slate-600 font-mono"></textarea>
-                <div className="grid grid-cols-2 gap-4">
-                    <select value={selectedDiscount} onChange={e => setSelectedDiscount(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]">
-                        <option value="1.0">无折扣 (1.0)</option>
-                        {quotingData.discounts.map((d, i) => <option key={i} value={d.rate}>{`满${d.min_qty}件享${d.rate}折`}</option>)}
-                    </select>
-                    <input type="number" value={reduction} onChange={e => setReduction(parseFloat(e.target.value) || 0)} placeholder="立减" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <button onClick={handleResetQuote} className="w-full py-3 rounded-lg bg-rose-500 text-white font-bold text-sm hover:bg-rose-600 transition-all">重置</button>
-                    <button onClick={handleCalculate} className="w-full py-3 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all">生成报价单</button>
-                </div>
-                <div className="text-center text-5xl font-black text-slate-800 py-4">¥ {finalPrice.toLocaleString('en-US')}</div>
-            </div>
-        </div>
-    );
-    
-    const renderAdminView = () => (
-        <>
-            {/* Core Params */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 space-y-4">
-                 <h3 className="font-bold text-slate-700 mb-2">1. 核心计算参数与折扣</h3>
-                 <div className="flex items-center gap-4">
-                    <label className="text-sm font-bold text-slate-600 shrink-0">预留加价倍率:</label>
-                    <input type="number" step="0.01" value={adminMargin} onChange={e => setAdminMargin(parseFloat(e.target.value))} className="w-48 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-[#70AD47]" />
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-600">N件N折阶梯设置:</label>
-                    {adminDiscounts.map((d, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                           <span>满</span>
-                           <input type="number" value={d.min_qty} onChange={e => { const newD = [...adminDiscounts]; newD[i].min_qty = parseInt(e.target.value); setAdminDiscounts(newD); }} className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm text-slate-700"/>
-                           <span>件, 享</span>
-                           <input type="number" step="0.01" value={d.rate} onChange={e => { const newD = [...adminDiscounts]; newD[i].rate = parseFloat(e.target.value); setAdminDiscounts(newD); }} className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm text-slate-700"/>
-                           <span>折</span>
-                           <button onClick={() => setAdminDiscounts(adminDiscounts.filter((_, idx) => idx !== i))} className="text-rose-500 p-1"><Trash2 size={14}/></button>
+
+                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm space-y-6">
+                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                        <div className="w-1.5 h-4 bg-[#70AD47] rounded-full"></div>
+                        1. 核心计算参数与折扣
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="space-y-4">
+                            <label className="block text-xs font-bold text-slate-400">预留加价倍率 (Margin)</label>
+                            <input type="number" step="0.01" value={quotingData.settings.margin} onChange={e => updateSettings({ margin: parseFloat(e.target.value) || 1 })} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-black text-slate-700 w-32 focus:border-[#70AD47] outline-none" />
                         </div>
-                    ))}
-                    <button onClick={() => setAdminDiscounts([...adminDiscounts, { min_qty: 0, rate: 1.0 }])} className="text-sm text-[#70AD47] font-bold flex items-center gap-1"><Plus size={14}/> 添加阶梯</button>
-                 </div>
-                 <button onClick={handleSaveChanges} className="px-6 py-2.5 rounded-lg bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 transition-all">保存倍率与阶梯折扣</button>
-            </div>
-             {/* Add Item */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 space-y-4">
-                 <h3 className="font-bold text-slate-700 mb-2">2. 快速录入配件</h3>
-                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                     <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]">
-                        {ADMIN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                     </select>
-                     <input value={newItem.model} onChange={e => setNewItem({...newItem, model: e.target.value})} placeholder="型号名称" className="md:col-span-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]"/>
-                     <input type="number" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} placeholder="成本单价" className="md:col-span-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-[#70AD47]"/>
-                     <button onClick={handleAddItem} className="py-2.5 rounded-lg bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 transition-all">确认添加</button>
-                 </div>
-            </div>
-             {/* Import */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
-                <h3 className="font-bold text-slate-700 mb-2">3. 导入配件 (Excel)</h3>
-                <div className="flex gap-4">
-                    <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".xlsx, .xls" className="hidden"/>
-                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">选择文件</button>
-                    <button onClick={() => {}} className="px-6 py-2.5 rounded-lg bg-[#70AD47] text-white font-bold text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all">执行批量导入</button>
-                </div>
-            </div>
-            {/* Data Maintenance */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
-                <h3 className="font-bold text-slate-700 mb-4">4. 现有数据维护</h3>
-                <input value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="输入型号或分类搜索..." className="w-full mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#70AD47]" />
-                <div className="max-h-96 overflow-y-auto">
-                    <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-white">
-                            <tr className="text-left font-bold text-slate-500">
-                                <th className="p-2 border-b">分类</th>
-                                <th className="p-2 border-b">型号</th>
-                                <th className="p-2 border-b">单价</th>
-                                <th className="p-2 border-b text-center">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredAdminItems.map(({category, model, price}) => (
-                                <tr key={`${category}-${model}`} className="hover:bg-slate-50">
-                                    <td className="p-2 border-b">{category}</td>
-                                    <td className="p-2 border-b">{model}</td>
-                                    <td className="p-2 border-b">
-                                        {editingItem?.model === model ? (
-                                            <input type="number" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: parseFloat(e.target.value)})} className="w-24 bg-white border border-slate-300 rounded px-2 py-1"/>
-                                        ) : `¥ ${price.toFixed(2)}`}
-                                    </td>
-                                    <td className="p-2 border-b text-center">
-                                        {editingItem?.model === model ? (
-                                             <>
-                                                <button onClick={handleUpdateItem} className="text-green-500 font-bold text-xs mr-2">保存</button>
-                                                <button onClick={() => setEditingItem(null)} className="text-slate-500 font-bold text-xs">取消</button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <button onClick={() => setEditingItem({category, model, price})} className="text-blue-500 font-bold text-xs mr-2">修改</button>
-                                                <button onClick={() => handleDeleteItem(category, model)} className="text-rose-500 font-bold text-xs">删除</button>
-                                            </>
-                                        )}
-                                    </td>
-                                </tr>
+                        <div className="space-y-4">
+                            <label className="block text-xs font-bold text-slate-400">N件N折阶梯设置</label>
+                            {quotingData.discounts.map((d, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-500">满 {d.min_qty} 件</span>
+                                    <span className="text-xs font-bold text-[#70AD47]">{d.rate} 折</span>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+                    <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
+                        <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>
+                        2. 快速录入配件
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <select value={newPart.category} onChange={e => setNewPart({...newPart, category: e.target.value})} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none">
+                            {Object.keys(CATEGORY_MAP).filter(k => !k.includes('2')).map(c => <option key={c} value={CATEGORY_MAP[c]}>{CATEGORY_MAP[c]}</option>)}
+                        </select>
+                        <input placeholder="型号名称" value={newPart.model} onChange={e => setNewPart({...newPart, model: e.target.value})} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none" />
+                        <input placeholder="成本单价" type="number" value={newPart.price} onChange={e => setNewPart({...newPart, price: e.target.value})} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none" />
+                        <button onClick={handleAddPart} className="bg-[#4179F2] text-white rounded-xl font-black text-xs hover:bg-blue-600 transition-all">确认添加</button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+                        <h3 className="text-sm font-black text-slate-800">3. 现有数据维护</h3>
+                        <input placeholder="搜索型号..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none w-48" />
+                    </div>
+                    <div className="p-4 max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-xs">
+                            <tbody className="divide-y divide-slate-50">
+                                {Object.entries(quotingData.prices).flatMap(([cat, models]) => 
+                                    Object.entries(models)
+                                        .filter(([model]) => !searchQuery || model.toLowerCase().includes(searchQuery.toLowerCase()))
+                                        .map(([model, price]) => (
+                                        <tr key={`${cat}-${model}`} className="hover:bg-slate-50 transition-colors">
+                                            <td className="py-3 px-4 font-black text-slate-500">{cat}</td>
+                                            <td className="py-3 px-4 font-bold text-slate-800">{model}</td>
+                                            <td className="py-3 px-4 font-mono font-bold text-slate-600">¥{price.toLocaleString()}</td>
+                                            <td className="py-3 px-4 text-right">
+                                                <button className="text-rose-500 font-bold hover:underline">删除</button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </>
-    );
+        );
+    }
 
     return (
-        <div className="p-8 max-w-[1200px] mx-auto animate-fadeIn space-y-8">
-             <div className="flex items-center justify-between">
+        <div className="p-8 max-w-[1300px] mx-auto animate-fadeIn">
+            <div className="mb-10 flex justify-between items-end">
                 <div>
-                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 产品报价</h1>
-                    <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">PRODUCT QUOTING SYSTEM</p>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">AI 智能报价系统</h1>
+                    <p className="text-slate-500 mt-2 font-bold text-xs tracking-widest uppercase">Professional Precision Pricing</p>
                 </div>
-                <button onClick={() => setIsAdminView(!isAdminView)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-colors">
-                    {isAdminView ? <Calculator size={14}/> : <Settings size={14} />}
-                    {isAdminView ? '返回报价首页' : '进入管理后台'}
+                <button onClick={() => setIsAdmin(true)} className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 font-black text-[10px] hover:bg-slate-50 transition-all shadow-sm">
+                    <Settings2 size={14} /> 管理报价库
                 </button>
             </div>
-            {isAdminView ? renderAdminView() : renderQuotingView()}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <div className="lg:col-span-7 space-y-6">
+                    <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
+                        <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
+                            <Zap size={18} className="text-amber-500 fill-amber-500" />
+                            智能配置录入
+                        </h3>
+                        <textarea 
+                            value={nlpInput}
+                            onChange={e => setNlpInput(e.target.value)}
+                            placeholder="在此处粘贴客户的配置单文本，云舟 AI 将自动识别对应硬件..."
+                            className="w-full h-24 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] resize-none mb-4"
+                        />
+                        <button onClick={handleNlpMatch} disabled={isMatching} className="w-full py-3.5 rounded-xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+                            {isMatching ? <RefreshCw size={14} className="animate-spin" /> : <Wand2 size={14} />} 智能识别并匹配配件
+                        </button>
+
+                        <div className="mt-10 space-y-2">
+                            <div className="grid grid-cols-12 gap-4 text-[10px] font-black text-slate-400 uppercase px-4 mb-2">
+                                <div className="col-span-3">配件类型</div>
+                                <div className="col-span-7">选定型号</div>
+                                <div className="col-span-2 text-center">数量</div>
+                            </div>
+                            {CONFIG_ROWS.map(rowName => {
+                                const dbCat = CATEGORY_MAP[rowName];
+                                return (
+                                    <div key={rowName} className="grid grid-cols-12 gap-4 items-center bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                                        <div className="col-span-3 font-black text-xs text-slate-500 pl-2">{rowName}</div>
+                                        <div className="col-span-7">
+                                            <select 
+                                                value={selectedItems[rowName]?.model || ''}
+                                                onChange={e => setSelectedItems({...selectedItems, [rowName]: { model: e.target.value, qty: 1 }})}
+                                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47]"
+                                            >
+                                                <option value="">-- 请选择 --</option>
+                                                {Object.keys(quotingData.prices[dbCat] || {}).map(m => <option key={m} value={m}>{m}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <input 
+                                                type="number"
+                                                value={selectedItems[rowName]?.qty || 0}
+                                                onChange={e => setSelectedItems({...selectedItems, [rowName]: { ...selectedItems[rowName], qty: parseInt(e.target.value) || 0 }})}
+                                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-center text-slate-700 outline-none focus:border-[#70AD47]"
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="mt-8 flex gap-3">
+                             <button onClick={handleReset} className="px-8 py-4 rounded-2xl bg-white border border-slate-200 text-slate-500 font-black text-sm hover:bg-slate-50 flex items-center justify-center gap-2 transition-all active:scale-95">
+                                <RotateCcw size={18} /> 重置配置
+                            </button>
+                            <button onClick={calculate} className="flex-1 py-4 rounded-2xl bg-[#70AD47] text-white font-black text-sm hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all active:scale-95">
+                                <Calculator size={18} /> 立即生成报价
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="lg:col-span-5">
+                    <div className="bg-white rounded-[40px] p-10 h-full text-slate-800 shadow-xl border border-slate-100 relative overflow-hidden flex flex-col">
+                        <div className="absolute -top-24 -right-24 w-64 h-64 bg-[#70AD47]/5 rounded-full blur-3xl"></div>
+                        
+                        <div className="relative z-10 flex items-center gap-2 mb-8">
+                            <div className="w-1.5 h-6 bg-[#70AD47] rounded-full"></div>
+                            <h3 className="text-xl font-black tracking-tight">最终报价详情</h3>
+                        </div>
+                        
+                        <div className="relative z-10 flex-1 flex flex-col">
+                            {results ? (
+                                <div className="space-y-8 animate-fadeIn flex flex-col h-full">
+                                    <div>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">建议零售价 (精细化进位)</p>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-6xl font-black text-[#70AD47] tabular-nums">¥{results.final.toLocaleString()}</span>
+                                            <span className="text-slate-400 text-xs font-bold">含税/包邮</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 flex-1 overflow-y-auto no-scrollbar">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase mb-4 flex items-center gap-2">
+                                            <Layers size={12} /> 选定硬件清单
+                                        </h4>
+                                        <div className="space-y-3">
+                                            {results.configList.map((item, idx) => (
+                                                <div key={idx} className="flex justify-between items-start gap-4 border-b border-slate-200 pb-2 last:border-0">
+                                                    <div className="min-w-0">
+                                                        <p className="text-[9px] font-black text-[#70AD47] uppercase">{item.cat}</p>
+                                                        <p className="text-xs font-bold text-slate-700 truncate">{item.model}</p>
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <p className="text-xs font-mono font-black text-slate-800">x{item.qty}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold">¥{item.price.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-6 space-y-4">
+                                        <div className="flex justify-between text-xs font-bold">
+                                            <span className="text-slate-400">核算总成本:</span>
+                                            <span className="font-mono text-slate-600">¥{results.cost.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs font-bold border-b border-slate-100 pb-4">
+                                            <span className="text-slate-400">毛利预估:</span>
+                                            <span className="text-[#70AD47] font-black">¥{(results.final - results.cost).toLocaleString()} ({(((results.final - results.cost)/results.final)*100).toFixed(1)}%)</span>
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <button onClick={() => {
+                                                const text = results.configList.map(i => `${i.cat}: ${i.model} x${i.qty}`).join('\n') + `\n总报价: ¥${results.final}`;
+                                                navigator.clipboard.writeText(text);
+                                                addToast('success', '已复制', '配置清单已存入剪贴板。');
+                                            }} className="flex-1 py-3.5 rounded-xl bg-slate-100 text-slate-600 font-black text-xs hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                                                <Clipboard size={14} /> 复制清单
+                                            </button>
+                                            <button className="px-8 py-3.5 rounded-xl bg-[#70AD47] text-white font-black text-xs hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 flex items-center justify-center gap-2 transition-all">
+                                                <Download size={14} /> 导出报价单
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex-1 flex flex-col items-center justify-center text-slate-300 text-center">
+                                    <Calculator size={80} className="mb-6 opacity-10" />
+                                    <p className="text-sm font-black uppercase tracking-[0.2em]">Awaiting Selection</p>
+                                    <p className="text-xs mt-3 font-bold opacity-40">请在左侧选择配件或识别配置文本</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
