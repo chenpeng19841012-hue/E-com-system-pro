@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { TrendingUp, BarChart, ShoppingBag, Activity, CreditCard, Target, ArrowUp, ArrowDown, Zap, Sparkles, Bot as BotIcon, ChevronRight, Calendar, Filter, AlertTriangle, ShieldAlert, PackageSearch, Rocket, Coins, Flame, Headset, CalendarX, DatabaseZap, Star } from 'lucide-react';
+import { TrendingUp, BarChart, ShoppingBag, Activity, CreditCard, Target, ArrowUp, ArrowDown, Zap, Sparkles, Bot as BotIcon, ChevronRight, Calendar, Filter, AlertTriangle, ShieldAlert, PackageSearch, Rocket, Coins, Flame, Headset, CalendarX, DatabaseZap, Star, TrendingDown, MousePointerClick, Info, X } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
@@ -28,17 +28,53 @@ interface DailyRecord {
 
 interface Diagnosis {
     id: string;
-    type: 'asset' | 'stock_severe' | 'stock_warning' | 'explosive' | 'ad_star' | 'ad_waste' | 'cs_alert' | 'data_gap' | 'high_potential';
+    type: 'asset' | 'stock_severe' | 'stock_warning' | 'explosive' | 'ad_star' | 'ad_waste' | 'cs_alert' | 'data_gap' | 'high_potential' | 'roi_drop' | 'cpc_spike' | 'low_efficiency';
     title: string;
     desc: string;
     details: Record<string, string | number>;
     severity: 'critical' | 'warning' | 'info' | 'success';
 }
 
+// 诊断全量报告弹窗
+const FullReportModal = ({ isOpen, onClose, diagnoses }: { isOpen: boolean; onClose: () => void; diagnoses: Diagnosis[] }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
+            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden border border-slate-200">
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                            <DatabaseZap className="text-brand" /> 全链路战略诊断报告
+                        </h2>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">Full System Audit & AI Decision Strategy</p>
+                    </div>
+                    <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all shadow-sm"><X size={24} /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-8 space-y-6 no-scrollbar">
+                    {diagnoses.length === 0 ? (
+                        <div className="py-20 text-center flex flex-col items-center">
+                            <ShieldAlert size={64} className="text-slate-100 mb-4" />
+                            <p className="text-slate-400 font-black">系统运行极其稳健，暂无风险项。</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {diagnoses.map(d => <DiagnosisCard key={d.id} diagnosis={d} isFullMode />)}
+                        </div>
+                    )}
+                </div>
+                <div className="p-8 border-t border-slate-100 text-center bg-slate-50/30">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">以上报告由 云舟 AI 神经元模型根据实时物理库数据分析生成</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], shops: Shop[], addToast: any }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
+    const [isFullReportOpen, setIsFullReportOpen] = useState(false);
     const [customRange, setCustomRange] = useState({
         start: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
@@ -71,9 +107,8 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
         return new Set(skus.filter(s => s.isStatisticsEnabled).map(s => s.code));
     }, [skus]);
 
-    // 判定是否属于自营统计范畴的关键逻辑
     const isSelfOperated = (mode: string | undefined): boolean => {
-        if (!mode) return true; // 缺省默认为自营
+        if (!mode) return true;
         return ['自营', '入仓', 'LBP', 'SOPL'].includes(mode);
     };
 
@@ -189,13 +224,28 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                     }
                 });
 
+                // --- 2. 增强决策引擎 (Enhanced Neural Decision Engine) ---
                 const newDiagnoses: Diagnosis[] = [];
+                const skuGmvMap = new Map<string, number>();
+                currSz.forEach(r => { const c = getSkuIdentifier(r); if(c) skuGmvMap.set(c, (skuGmvMap.get(c) || 0) + (Number(r.paid_amount) || 0)); });
+                const skuPrevGmvMap = new Map<string, number>();
+                prevSz.forEach(r => { const c = getSkuIdentifier(r); if(c) skuPrevGmvMap.set(c, (skuPrevGmvMap.get(c) || 0) + (Number(r.paid_amount) || 0)); });
+                
+                const skuCostMap = new Map<string, number>();
+                currJzt.forEach(r => { const c = getSkuIdentifier(r); if(c) skuCostMap.set(c, (skuCostMap.get(c) || 0) + (Number(r.cost) || 0)); });
+                const skuPrevCostMap = new Map<string, number>();
+                prevJzt.forEach(r => { const c = getSkuIdentifier(r); if(c) skuPrevCostMap.set(c, (skuPrevCostMap.get(c) || 0) + (Number(r.cost) || 0)); });
+
+                const skuClicksMap = new Map<string, number>();
+                currJzt.forEach(r => { const c = getSkuIdentifier(r); if(c) skuClicksMap.set(c, (skuClicksMap.get(c) || 0) + (Number(r.clicks) || 0)); });
+
+                // A. 物理数据与资产校验
                 const knownSkuCodes = new Set(skus.map(s => s.code));
                 const activeCodes = new Set(currSz.map(r => getSkuIdentifier(r)).filter(Boolean));
                 activeCodes.forEach(code => {
                     if (code && !knownSkuCodes.has(code)) {
                         const row = currSz.find(r => getSkuIdentifier(r) === code);
-                        newDiagnoses.push({ id: `asset-${code}`, type: 'asset', severity: 'critical', title: '资产映射缺失', desc: `物理层发现活跃 SKU [${code}]，但资产库未登记。`, details: { '店铺': row.shop_name, '名称': row.product_name, '操作': '前往资产名录录入' } });
+                        newDiagnoses.push({ id: `asset-${code}`, type: 'asset', severity: 'critical', title: '资产映射缺失', desc: `物理层发现活跃 SKU [${code}]，但资产库未登记。`, details: { '店铺': row.shop_name, '名称': row.product_name, '建议': '前往资产名录录入' } });
                     }
                 });
 
@@ -214,20 +264,51 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 if (missingSz.length > 0) newDiagnoses.push({ id: 'gap-sz', type: 'data_gap', severity: 'warning', title: '商智记录断层', desc: `本月探测到 ${missingSz.length} 个自然日数据缺失。`, details: { '缺失节点': missingSz.slice(-3).join(', ') + (missingSz.length > 3 ? '...' : '') } });
                 if (missingJzt.length > 0) newDiagnoses.push({ id: 'gap-jzt', type: 'data_gap', severity: 'warning', title: '广告记录断层', desc: `本月缺失 ${missingJzt.length} 天消耗明细。`, details: { '缺失节点': missingJzt.slice(-3).join(', ') + (missingJzt.length > 3 ? '...' : '') } });
 
-                skuGmvMapForEach: {
-                    const skuGmvMap = new Map<string, number>();
-                    currSz.forEach(r => { const c = getSkuIdentifier(r); if(c) skuGmvMap.set(c, (skuGmvMap.get(c) || 0) + (Number(r.paid_amount) || 0)); });
-                    const skuPrevGmvMap = new Map<string, number>();
-                    prevSz.forEach(r => { const c = getSkuIdentifier(r); if(c) skuPrevGmvMap.set(c, (skuPrevGmvMap.get(c) || 0) + (Number(r.paid_amount) || 0)); });
-                    skuGmvMap.forEach((gmv, code) => {
-                        const prevGmv = skuPrevGmvMap.get(code) || 0;
-                        const growth = prevGmv > 0 ? (gmv - prevGmv) / prevGmv : 0;
-                        const row = currSz.find(r => getSkuIdentifier(r) === code);
-                        const cvr = Number(row?.paid_conversion_rate) || 0;
-                        if (growth > 0.4 && cvr > 0.08 && gmv > 8000) newDiagnoses.push({ id: `exp-${code}`, type: 'explosive', severity: 'success', title: '核心爆款爆发', desc: `SKU [${code}] 处于极速上升期。`, details: { '环比增长': `${(growth*100).toFixed(0)}%`, '转化率': `${(cvr*100).toFixed(1)}%` } });
-                        else if (cvr > 0.12 && gmv < 3000 && gmv > 500) newDiagnoses.push({ id: `pot-${code}`, type: 'high_potential', severity: 'info', title: '高转化潜力识别', desc: `小规模高转化 SKU 表现优异。`, details: { '转化率': `${(cvr*100).toFixed(1)}%`, 'GMV': `¥${gmv.toLocaleString()}` } });
-                    });
-                }
+                // B. ROI 异常与消耗效率
+                skuGmvMap.forEach((gmv, code) => {
+                    const cost = skuCostMap.get(code) || 0;
+                    const roi = cost > 0 ? gmv / cost : 0;
+                    const prevGmv = skuPrevGmvMap.get(code) || 0;
+                    const prevCost = skuPrevCostMap.get(code) || 0;
+                    const prevRoi = prevCost > 0 ? prevGmv / prevCost : 0;
+
+                    // ROI 跳水检测
+                    if (prevRoi > 2 && roi < prevRoi * 0.7 && cost > 1000) {
+                        newDiagnoses.push({ id: `roi-drop-${code}`, type: 'roi_drop', severity: 'critical', title: 'ROI 异常跳水', desc: `SKU [${code}] 投产比环比下降超过 30%。`, details: { '当前ROI': roi.toFixed(2), '上期ROI': prevRoi.toFixed(2), '消耗': `¥${cost}` } });
+                    }
+
+                    // CPC 激增检测
+                    const clicks = skuClicksMap.get(code) || 0;
+                    const cpc = clicks > 0 ? cost / clicks : 0;
+                    const prevClicks = (prevJzt.filter(r => getSkuIdentifier(r) === code).reduce((s, r) => s + (Number(r.clicks) || 0), 0));
+                    const prevCpc = prevClicks > 0 ? prevCost / prevClicks : 0;
+                    if (prevCpc > 0 && cpc > prevCpc * 1.5 && clicks > 100) {
+                        newDiagnoses.push({ id: `cpc-spike-${code}`, type: 'cpc_spike', severity: 'warning', title: 'CPC 异常激增', desc: `SKU [${code}] 点击成本飙升，出价竞争力异常。`, details: { '当前CPC': `¥${cpc.toFixed(2)}`, '上期CPC': `¥${prevCpc.toFixed(2)}`, '增长': `${((cpc-prevCpc)/prevCpc*100).toFixed(0)}%` } });
+                    }
+
+                    // 流量利用率检测 (高 UV 低 CVR)
+                    const row = currSz.find(r => getSkuIdentifier(r) === code);
+                    const uv = Number(row?.uv) || 0;
+                    const cvr = Number(row?.paid_conversion_rate) || 0;
+                    if (uv > 1000 && cvr < 0.015) {
+                        newDiagnoses.push({ id: `low-eff-${code}`, type: 'low_efficiency', severity: 'warning', title: '流量利用率极低', desc: `SKU [${code}] 访客规模巨大但转化能力严重脱节。`, details: { '访客(UV)': uv, '转化率': `${(cvr*100).toFixed(2)}%`, '诊断': '排版/价格/评价问题' } });
+                    }
+
+                    // 爆款识别
+                    if (roi > 8 && cost < 1000 && gmv > 5000) {
+                         newDiagnoses.push({ id: `exp-${code}`, type: 'explosive', severity: 'success', title: '爆款爆发预警', desc: `SKU [${code}] 处于高 ROI 爆发点，建议立即提预算。`, details: { '当前ROI': roi.toFixed(1), 'GMV': `¥${gmv.toLocaleString()}` } });
+                    }
+                });
+
+                // C. 库存熔断
+                skus.filter(s => s.mode === '入仓').forEach(s => {
+                    const sales15d = (currSz.filter(r => getSkuIdentifier(r) === s.code).reduce((sum, r) => sum + (Number(r.paid_items) || 0), 0));
+                    const s7 = sales15d * 0.46;
+                    const stock = s.warehouseStock || 0;
+                    if (sales15d > 0 && stock < s7) {
+                        newDiagnoses.push({ id: `stock-sev-${s.code}`, type: 'stock_severe', severity: 'critical', title: '库存熔断预警', desc: `入仓 SKU [${s.code}] 库存告急，预计 3 日内断货。`, details: { '库存': stock, '7日销量预估': Math.round(s7) } });
+                    }
+                });
 
                 setDiagnoses(newDiagnoses.sort((a,b) => {
                     const order = { critical: 0, warning: 1, info: 2, success: 3 };
@@ -242,6 +323,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
     return (
         <div className="p-6 md:p-10 w-full animate-fadeIn space-y-10">
+            <FullReportModal isOpen={isFullReportOpen} onClose={() => setIsFullReportOpen(false)} diagnoses={diagnoses} />
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-8">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -306,33 +388,65 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
                 <div className="xl:col-span-4 bg-navy rounded-[48px] p-10 text-white shadow-2xl flex flex-col relative overflow-hidden group/room">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand/5 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/3"></div>
-                    <div className="flex items-center gap-4 mb-10 relative z-10">
+                    <div className="flex items-center gap-4 mb-8 relative z-10">
                         <div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-[0_12px_30px_rgba(112,173,71,0.4)] border border-white/10 group-hover/room:scale-110 transition-transform duration-500">
                             <BotIcon size={28} className="text-white" />
                         </div>
                         <div>
                             <h3 className="text-xl font-black tracking-tight flex items-center gap-2">AI 战略诊断室 <Sparkles size={16} className="text-brand animate-pulse" /></h3>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Neural Decision Hub</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Decision Augmentation Hub</p>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto no-scrollbar space-y-5 relative z-10 pr-2">
+                    
+                    {/* Fixed Height Container with scrolling wheel for sidebar cards */}
+                    <div className="flex-1 relative z-10 overflow-hidden mb-8 h-[360px]">
                         {diagnoses.length === 0 ? (
-                            <div className="bg-white/5 rounded-[32px] p-12 border border-white/5 text-center flex flex-col items-center justify-center min-h-[300px]">
+                            <div className="h-full flex flex-col items-center justify-center bg-white/5 rounded-[32px] border border-white/5 p-8 text-center">
                                 <DatabaseZap size={48} className="text-slate-700 mb-6 opacity-40" />
-                                <p className="text-xs font-bold text-slate-400 italic">当前物理系统运行平稳</p>
+                                <p className="text-xs font-bold text-slate-400 italic">系统运行平稳，暂无风险</p>
                             </div>
-                        ) : diagnoses.map((d) => <DiagnosisCard key={d.id} diagnosis={d} />)}
+                        ) : (
+                            <div className={`space-y-4 ${diagnoses.length > 2 ? 'animate-verticalScroll' : ''}`}>
+                                {diagnoses.map((d) => (
+                                    <div key={d.id} className="h-[170px] shrink-0">
+                                        <DiagnosisCard diagnosis={d} />
+                                    </div>
+                                ))}
+                                {/* Seamless scroll trick: repeat items if more than 2 */}
+                                {diagnoses.length > 2 && diagnoses.map((d) => (
+                                    <div key={`${d.id}-repeat`} className="h-[170px] shrink-0">
+                                        <DiagnosisCard diagnosis={d} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                    <button className="w-full mt-10 py-5 bg-brand text-white rounded-[24px] font-black text-sm hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-brand/20 group/btn active:scale-95">
-                        查看完整诊断报表 <ChevronRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
+
+                    <button 
+                        onClick={() => setIsFullReportOpen(true)}
+                        className="w-full relative z-10 py-5 bg-brand text-white rounded-[24px] font-black text-sm hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-brand/20 group/btn active:scale-95">
+                        查看全链路完整决策报告 <ChevronRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
                     </button>
                 </div>
             </div>
+
+            <style>{`
+                @keyframes verticalScroll {
+                    0% { transform: translateY(0); }
+                    100% { transform: translateY(calc(-186px * ${diagnoses.length})); }
+                }
+                .animate-verticalScroll {
+                    animation: verticalScroll ${diagnoses.length * 4}s linear infinite;
+                }
+                .animate-verticalScroll:hover {
+                    animation-play-state: paused;
+                }
+            `}</style>
         </div>
     );
 };
 
-const DiagnosisCard: React.FC<{ diagnosis: Diagnosis }> = ({ diagnosis }) => {
+const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = ({ diagnosis, isFullMode = false }) => {
     const configMap = {
         asset: { icon: <PackageSearch size={20}/>, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20" },
         stock_severe: { icon: <ShieldAlert size={20}/>, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20" },
@@ -342,22 +456,25 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis }> = ({ diagnosis }) => {
         ad_waste: { icon: <Coins size={20}/>, color: "text-rose-400", bg: "bg-rose-400/10", border: "border-rose-400/20" },
         cs_alert: { icon: <Headset size={20}/>, color: "text-indigo-400", bg: "bg-indigo-400/10", border: "border-indigo-400/20" },
         data_gap: { icon: <CalendarX size={20}/>, color: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
-        high_potential: { icon: <Star size={20}/>, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" }
+        high_potential: { icon: <Star size={20}/>, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
+        roi_drop: { icon: <TrendingDown size={20}/>, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20" },
+        cpc_spike: { icon: <MousePointerClick size={20}/>, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
+        low_efficiency: { icon: <Info size={20}/>, color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/20" }
     };
     const cfg = configMap[diagnosis.type] || configMap.asset;
     return (
-        <div className={`p-6 rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn`}>
+        <div className={`rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn ${isFullMode ? 'p-6 h-full' : 'p-5 h-[170px]'}`}>
             <div className="flex gap-4 mb-4">
-                <div className={`${cfg.color} shrink-0 mt-0.5 group-hover/dcard:rotate-12 transition-transform`}>{cfg.icon}</div>
-                <div>
+                <div className={`${cfg.color} shrink-0 mt-0.5 group-hover/dcard:rotate-12 transition-transform duration-500`}>{cfg.icon}</div>
+                <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <p className="text-sm font-black uppercase tracking-tight">{diagnosis.title}</p>
-                        {diagnosis.severity === 'critical' && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Critical</span>}
+                        <p className="text-sm font-black uppercase tracking-tight truncate">{diagnosis.title}</p>
+                        {diagnosis.severity === 'critical' && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase shrink-0">Critical</span>}
                     </div>
-                    <p className="text-[11px] text-slate-300 font-bold mt-1 opacity-80">{diagnosis.desc}</p>
+                    <p className={`text-[11px] text-slate-300 font-bold mt-1 opacity-80 leading-relaxed ${isFullMode ? '' : 'line-clamp-2'}`}>{diagnosis.desc}</p>
                 </div>
             </div>
-            <div className="bg-navy/50 rounded-2xl p-4 border border-white/5 space-y-2">
+            <div className="bg-navy/50 rounded-2xl p-4 border border-white/5 space-y-1.5">
                 {Object.entries(diagnosis.details).map(([key, val]) => (
                     <div key={key} className="flex justify-between items-center text-[10px]"><span className="text-slate-500 font-black uppercase tracking-widest">{key}</span><span className="text-slate-200 font-black tabular-nums">{val}</span></div>
                 ))}
@@ -370,38 +487,16 @@ const TrendVisual: React.FC<{ data: DailyRecord[]; isFloat?: boolean }> = ({ dat
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const width = 800; const height = 300; const padding = { top: 30, right: 30, bottom: 50, left: 30 };
-    
     const maxVal = Math.max(...data.map(d => d.total), 0.1) * 1.05;
     const getX = (i: number) => padding.left + (i / (data.length - 1)) * (width - padding.left - padding.right);
     const getY = (v: number) => height - padding.bottom - (v / maxVal) * (height - padding.top - padding.bottom);
-    
-    const selfPath = useMemo(() => { 
-        if (data.length < 2) return ""; 
-        let p = `M ${getX(0)},${getY(data[0].self)}`; 
-        data.forEach((d, i) => { if(i>0) p += ` L ${getX(i)},${getY(d.self)}`; }); 
-        p += ` L ${getX(data.length-1)},${height - padding.bottom} L ${getX(0)},${height - padding.bottom} Z`; 
-        return p; 
-    }, [data, maxVal]);
-
-    const popPath = useMemo(() => { 
-        if (data.length < 2) return ""; 
-        let p = `M ${getX(0)},${getY(data[0].total)}`; 
-        data.forEach((d, i) => { if(i>0) p += ` L ${getX(i)},${getY(d.total)}`; }); 
-        p += ` L ${getX(data.length-1)},${getY(data[data.length-1].self)}`; 
-        for (let i = data.length - 1; i >= 0; i--) { p += ` L ${getX(i)},${getY(data[i].self)}`; } 
-        p += " Z"; 
-        return p; 
-    }, [data, maxVal]);
-    
+    const selfPath = useMemo(() => { if (data.length < 2) return ""; let p = `M ${getX(0)},${getY(data[0].self)}`; data.forEach((d, i) => { if(i>0) p += ` L ${getX(i)},${getY(d.self)}`; }); p += ` L ${getX(data.length-1)},${height - padding.bottom} L ${getX(0)},${height - padding.bottom} Z`; return p; }, [data, maxVal]);
+    const popPath = useMemo(() => { if (data.length < 2) return ""; let p = `M ${getX(0)},${getY(data[0].total)}`; data.forEach((d, i) => { if(i>0) p += ` L ${getX(i)},${getY(d.total)}`; }); p += ` L ${getX(data.length-1)},${getY(data[data.length-1].self)}`; for (let i = data.length - 1; i >= 0; i--) { p += ` L ${getX(i)},${getY(data[i].self)}`; } p += " Z"; return p; }, [data, maxVal]);
     const formatVal = (v: number) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
-
     return (
         <div ref={containerRef} className="w-full h-full relative cursor-crosshair group/trend" onMouseMove={(e) => { const rect = containerRef.current!.getBoundingClientRect(); const x = ((e.clientX - rect.left) / rect.width) * width; const idx = Math.round(((x - padding.left) / (width - padding.left - padding.right)) * (data.length - 1)); if(idx >= 0 && idx < data.length) setHoverIndex(idx); }} onMouseLeave={() => setHoverIndex(null)}>
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
-                <defs>
-                    <linearGradient id="gSelf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#70AD47" stopOpacity="0.4"/><stop offset="100%" stopColor="#70AD47" stopOpacity="0.05"/></linearGradient>
-                    <linearGradient id="gPop" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity="0.4"/><stop offset="100%" stopColor="#3B82F6" stopOpacity="0.05"/></linearGradient>
-                </defs>
+                <defs><linearGradient id="gSelf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#70AD47" stopOpacity="0.4"/><stop offset="100%" stopColor="#70AD47" stopOpacity="0.05"/></linearGradient><linearGradient id="gPop" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity="0.4"/><stop offset="100%" stopColor="#3B82F6" stopOpacity="0.05"/></linearGradient></defs>
                 {[0, 0.5, 1].map(v => <line key={v} x1={padding.left} y1={getY(maxVal * v / 1.05)} x2={width - padding.right} y2={getY(maxVal * v / 1.05)} stroke="#f8fafc" strokeWidth="2" />)}
                 <path d={selfPath} fill="url(#gSelf)" className="transition-all duration-700"/><path d={popPath} fill="url(#gPop)" className="transition-all duration-700"/>
                 <path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.self)}`).join(' L ')}`} fill="none" stroke="#70AD47" strokeWidth="3" strokeLinecap="round"/><path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.total)}`).join(' L ')}`} fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round"/>
