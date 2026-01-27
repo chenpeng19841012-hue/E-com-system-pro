@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square } from 'lucide-react';
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
@@ -51,7 +50,7 @@ const MiniSparkline = ({ data, color }: { data: number[], color: string }) => {
     const pts = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(' L ');
     
     return (
-        <svg width="100%" height="32" viewBox={`0 0 ${width} ${height}`} className="overflow-visible opacity-60 group-hover/kpi:opacity-100 transition-opacity">
+        <svg width="100%" height="32" viewBox={`0 0 ${width} ${height}`} className="overflow-visible opacity-40 group-hover/kpi:opacity-100 transition-opacity">
             <path d={`M ${pts}`} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
@@ -139,7 +138,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible cursor-crosshair">
                 <defs>
                     {selectedMetricsData.map(key => (
-                        <linearGradient key={`g-${key}`} id={`g-${key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={METRIC_COLORS[key]} stopOpacity="0.3"/><stop offset="100%" stopColor={METRIC_COLORS[key]} stopOpacity="0"/></linearGradient>
+                        <linearGradient key={`g-${key}`} id={`g-${key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={METRIC_COLORS[key]} stopOpacity="0.2"/><stop offset="100%" stopColor={METRIC_COLORS[key]} stopOpacity="0"/></linearGradient>
                     ))}
                 </defs>
                 <line x1={padding.left} y1={height-padding.bottom} x2={width-padding.right} y2={height-padding.bottom} stroke="#f1f5f9" strokeWidth="2" />
@@ -152,7 +151,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
                         </g>
                     );
                 })}
-                {hoveredIndex !== null && <line x1={xScale(hoveredIndex)} y1={padding.top} x2={xScale(hoveredIndex)} y2={height-padding.bottom} stroke="#020617" strokeWidth="1" strokeDasharray="6 4" />}
+                {hoveredIndex !== null && <line x1={xScale(hoveredIndex)} y1={padding.top} x2={xScale(hoveredIndex)} y2={height-padding.bottom} stroke="#94a3b8" strokeWidth="1" strokeDasharray="6 4" />}
             </svg>
             {hoveredIndex !== null && (
                 <div className="absolute z-50 pointer-events-none bg-slate-900/95 backdrop-blur text-white rounded-2xl p-5 shadow-2xl animate-fadeIn" style={{ left: `${(xScale(hoveredIndex)/width)*100}%`, top: '40%', transform: `translate(${hoveredIndex > dailyData.length/2 ? '-110%' : '15%'}, -50%)` }}>
@@ -286,12 +285,12 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     </div>
                 </div>
 
-                {/* 看板区域 */}
-                <div className="bg-navy rounded-[48px] p-10 text-white shadow-2xl relative overflow-hidden group/board">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.06),transparent_70%)] pointer-events-none"></div>
+                {/* 看板区域 - 已改为白色背景 */}
+                <div className="bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border border-slate-100 relative overflow-hidden group/board">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.03),transparent_70%)] pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-12 relative z-10">
-                        <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 group-hover/board:rotate-6 transition-transform duration-500"><TrendingUp size={28} className="text-white" /></div><div><h3 className="text-xl font-black tracking-tight uppercase">核心业务透视看板</h3><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Physical Performance Insight Board</p></div></div>
-                        <div className="flex items-center gap-2 bg-white/5 p-1.5 rounded-2xl border border-white/10 shadow-inner"><button onClick={() => setComparisonType('period')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'period' ? 'bg-white text-navy shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>环比前一周期</button><button onClick={() => setComparisonType('year')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'year' ? 'bg-white text-navy shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>同比去年同期</button></div>
+                        <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 group-hover/board:rotate-6 transition-transform duration-500"><TrendingUp size={28} className="text-white" /></div><div><h3 className="text-xl font-black tracking-tight uppercase">核心业务透视看板</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Physical Performance Insight Board</p></div></div>
+                        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner"><button onClick={() => setComparisonType('period')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'period' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>环比前一周期</button><button onClick={() => setComparisonType('year')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'year' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>同比去年同期</button></div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-12 relative z-10">
@@ -301,14 +300,14 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             const isSelected = chartMetrics.has(key);
                             
                             if (!visualisationData) return (
-                                <div key={key} className="p-5 rounded-3xl bg-white/5 border border-white/5 h-44 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-500 uppercase">{label}</p><p className="text-2xl font-black text-slate-600 mt-2">-</p></div>
+                                <div key={key} className="p-5 rounded-3xl bg-slate-50 border border-slate-100 h-44 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-400 uppercase">{label}</p><p className="text-2xl font-black text-slate-300 mt-2">-</p></div>
                             );
 
                             const main = visualisationData.mainTotals[key] || 0;
                             const comp = visualisationData.compTotals[key] || 0;
                             const chg = getChange(main, comp);
                             const isG = chg >= 0; 
-                            const txtC = isG ? 'text-green-400' : 'text-rose-400';
+                            const txtC = isG ? 'text-green-600' : 'text-rose-600';
                             
                             // 提取该指标的微型趋势
                             const sparkData = visualisationData.dailyData.map((d: any) => d[key] || 0).slice(-7);
@@ -316,27 +315,27 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             return (
                                 <div key={key} 
                                     onClick={() => setChartMetrics(p => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n; })} 
-                                    className={`p-5 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-44 flex flex-col justify-between ${isSelected ? 'bg-white/10 ring-4 ring-white/5 shadow-2xl' : 'bg-white/5 border-white/5 hover:bg-white/[0.08]'}`} 
+                                    className={`p-5 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-44 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
                                     style={{ borderColor: isSelected ? color : 'transparent' }}>
                                     
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
-                                            {isSelected ? <CheckSquare size={14} style={{ color }} /> : <Square size={14} className="text-slate-500" />}
-                                            <span className="text-[9px] font-black uppercase text-slate-400 truncate">{label}</span>
+                                            {isSelected ? <CheckSquare size={14} style={{ color }} /> : <Square size={14} className="text-slate-300" />}
+                                            <span className={`text-[9px] font-black uppercase truncate ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span>
                                         </div>
-                                        <p className="text-xl font-black text-white tabular-nums tracking-tighter mt-1">{formatMetricValue(main, key).replace('¥', '')}</p>
+                                        <p className="text-xl font-black text-slate-900 tabular-nums tracking-tighter mt-1">{formatMetricValue(main, key).replace('¥', '')}</p>
                                     </div>
 
                                     <div className="my-2">
                                         <MiniSparkline data={sparkData} color={color} />
                                     </div>
 
-                                    <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                                         <span className={`${txtC} text-[10px] font-black flex items-center gap-0.5`}>
                                             {isG ? <ArrowUp size={8} strokeWidth={4} /> : <ArrowDown size={8} strokeWidth={4} />}
                                             {Math.abs(chg).toFixed(0)}%
                                         </span>
-                                        <span className="text-[8px] text-slate-600 font-bold uppercase">Trend</span>
+                                        <span className="text-[8px] text-slate-300 font-bold uppercase tracking-widest">Trend</span>
                                     </div>
                                 </div>
                             );
@@ -344,8 +343,8 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     </div>
 
                     {visualisationData && (
-                        <div className="bg-white/5 rounded-[40px] p-10 border border-white/5 relative group/chart animate-fadeIn">
-                             <div className="absolute top-6 left-10 flex items-center gap-3"><Sparkles size={16} className="text-brand animate-pulse" /><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Neural Trend Engine Processing</span></div>
+                        <div className="bg-slate-50 rounded-[40px] p-10 border border-slate-100 relative group/chart animate-fadeIn">
+                             <div className="absolute top-6 left-10 flex items-center gap-3"><Sparkles size={16} className="text-brand animate-pulse" /><span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Neural Trend Engine Processing</span></div>
                              <TrendChart dailyData={visualisationData.dailyData} chartMetrics={chartMetrics} metricsMap={allMetricsMap} />
                         </div>
                     )}
