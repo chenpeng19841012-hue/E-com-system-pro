@@ -1,9 +1,10 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DollarSign, Bot, LoaderCircle, AlertCircle, ChevronsUpDown, ChevronDown } from 'lucide-react';
 import { DB } from '../lib/db';
 import { getSkuIdentifier } from '../lib/helpers';
 import { ProductSKU, Shop } from '../lib/types';
+// Added GoogleGenAI import
+import { GoogleGenAI } from "@google/genai";
 
 interface ProfitData {
     skuCode: string;
@@ -181,15 +182,14 @@ export const AIProfitAnalyticsView = ({ skus, shops, addToast }: { skus: Product
             const dataStr = top5.concat(bottom5).map(s => `${s.skuName}: GMV=${s.revenue}, 利润率=${(s.netProfitMargin*100).toFixed(2)}%`).join('; ');
             const prompt = `你是一名资深电商CFO。以下是当前时段的SKU利润表现快照：${dataStr}。请根据这些数据：1. 诊断整体盈利健康度；2. 识别表现最差的SKU并推测原因（如广告浪费、成本过高）；3. 提供3个具体的盈利优化建议。语气简练有力，200字以内。`;
             
-            const apiResponse = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'gemini-3-flash-preview', contents: prompt })
+            // Fix: Use GoogleGenAI SDK directly instead of fetch to avoid issues with JSON serialization and follow developer guidelines
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
             });
 
-            if (!apiResponse.ok) throw new Error('AI request failed');
-            const responseData = await apiResponse.json();
-            setAiInsight(responseData.candidates?.[0]?.content?.parts?.[0]?.text || "分析报告生成失败。");
+            setAiInsight(response.text || "分析报告生成失败。");
         } catch (err) {
             setAiInsight("AI诊断失败，请检查API密钥或网络连接。");
         } finally {

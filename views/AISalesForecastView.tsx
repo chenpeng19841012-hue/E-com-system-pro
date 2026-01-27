@@ -1,9 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Bot, ChevronDown, Sparkles, LoaderCircle, AlertCircle, CalendarDays, BarChartHorizontalBig } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
+// Added GoogleGenAI import
+import { GoogleGenAI } from "@google/genai";
 
 interface Forecast {
     date: string;
@@ -73,19 +74,15 @@ export const AISalesForecastView = ({ skus }: { skus: ProductSKU[] }) => {
               "forecast": [{ "date": "YYYY-MM-DD", "predicted_sales": 数字 }]
             }`;
             
-            const apiResponse = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'gemini-3-flash-preview',
-                    contents: prompt,
-                    config: { responseMimeType: "application/json" }
-                }),
+            // Fix: Use GoogleGenAI SDK directly instead of fetch to avoid issues with JSON serialization and follow developer guidelines
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+                config: { responseMimeType: "application/json" }
             });
 
-            if (!apiResponse.ok) throw new Error('API request failed');
-            const responseData = await apiResponse.json();
-            const resultJson = JSON.parse(responseData.candidates?.[0]?.content?.parts?.[0]?.text || "{}") as ForecastResult;
+            const resultJson = JSON.parse(response.text || "{}") as ForecastResult;
             setForecastResult(resultJson);
         } catch (err: any) {
             setError(err.message || 'AI预测引擎响应异常');
