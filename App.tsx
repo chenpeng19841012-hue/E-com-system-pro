@@ -135,25 +135,49 @@ export const App = () => {
                     onUpdateSKU={async (s)=> { const n = skus.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_skus', n, 'SKU'); return true; }} 
                     onDeleteSKU={async (id)=> { const n = skus.filter(x=>x.id!==id); await handleBulkSave('dim_skus', n, 'SKU'); }} 
                     onBulkAddSKUs={async (newList)=> { 
-                        const existingCodes = new Set(skus.map(s => s.code));
-                        const n = [...skus, ...newList.filter(s => !existingCodes.has(s.code)).map(s => ({...s, id: Math.random().toString(36).substr(2, 9)}))];
-                        await handleBulkSave('dim_skus', n, 'SKU');
+                        // 实现 Upsert 逻辑：如果 code 存在则覆盖，不存在则新增
+                        const updatedSkus = [...skus];
+                        newList.forEach(newItem => {
+                            const index = updatedSkus.findIndex(s => s.code === newItem.code);
+                            if (index !== -1) {
+                                // 找到现有 SKU，保留原始 ID，合并新数据
+                                updatedSkus[index] = { ...updatedSkus[index], ...newItem };
+                            } else {
+                                // 未找到，作为新 SKU 插入并分配 ID
+                                updatedSkus.push({ ...newItem, id: Math.random().toString(36).substr(2, 9) });
+                            }
+                        });
+                        await handleBulkSave('dim_skus', updatedSkus, 'SKU');
                     }} 
                     onAddNewShop={async (s)=> { const n = [...shops, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
                     onUpdateShop={async (s)=> { const n = shops.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
                     onDeleteShop={async (id)=> { const n = shops.filter(x=>x.id!==id); await handleBulkSave('dim_shops', n, '店铺'); }} 
                     onBulkAddShops={async (newList)=> {
-                        const existingNames = new Set(shops.map(s => s.name));
-                        const n = [...shops, ...newList.filter(s => !existingNames.has(s.name)).map(s => ({...s, id: Math.random().toString(36).substr(2, 9)}))];
-                        await handleBulkSave('dim_shops', n, '店铺');
+                        const updatedShops = [...shops];
+                        newList.forEach(newItem => {
+                            const index = updatedShops.findIndex(s => s.name === newItem.name);
+                            if (index !== -1) {
+                                updatedShops[index] = { ...updatedShops[index], ...newItem };
+                            } else {
+                                updatedShops.push({ ...newItem, id: Math.random().toString(36).substr(2, 9) });
+                            }
+                        });
+                        await handleBulkSave('dim_shops', updatedShops, '店铺');
                     }}
                     onAddNewAgent={async (s)=> { const n = [...agents, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_agents', n, '客服'); return true; }} 
                     onUpdateAgent={async (s)=> { const n = agents.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_agents', n, '客服'); return true; }} 
                     onDeleteAgent={async (id)=> { const n = agents.filter(x=>x.id!==id); await handleBulkSave('dim_agents', n, '客服'); }}
                     onBulkAddAgents={async (newList)=> {
-                        const existingAccounts = new Set(agents.map(a => a.account));
-                        const n = [...agents, ...newList.filter(a => !existingAccounts.has(a.account)).map(a => ({...a, id: Math.random().toString(36).substr(2, 9)}))];
-                        await handleBulkSave('dim_agents', n, '客服');
+                        const updatedAgents = [...agents];
+                        newList.forEach(newItem => {
+                            const index = updatedAgents.findIndex(a => a.account === newItem.account);
+                            if (index !== -1) {
+                                updatedAgents[index] = { ...updatedAgents[index], ...newItem };
+                            } else {
+                                updatedAgents.push({ ...newItem, id: Math.random().toString(36).substr(2, 9) });
+                            }
+                        });
+                        await handleBulkSave('dim_agents', updatedAgents, '客服');
                     }}
                     onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} 
                     onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} 

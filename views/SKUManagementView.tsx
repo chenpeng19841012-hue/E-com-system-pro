@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle, Store, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ProductSubView, Shop, ProductSKU, CustomerServiceAgent, SKUMode, SKUStatus, SKUAdvertisingStatus, SkuList } from '../lib/types';
 import { parseExcelFile } from '../lib/excel';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -497,6 +497,11 @@ export const SKUManagementView = ({
     const [selectedStatus, setSelectedStatus] = useState('all');
     const [selectedAdStatus, setSelectedAdStatus] = useState('all');
     const [selectedMode, setSelectedMode] = useState('all');
+    const [selectedModel, setSelectedModel] = useState('all');
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const ROWS_PER_PAGE = 50;
 
     const skuCodeToNameMap = useMemo(() => new Map(skus.map(s => [s.code, s.name])), [skus]);
 
@@ -509,6 +514,11 @@ export const SKUManagementView = ({
         const categories = new Set(skus.map((sku: ProductSKU) => sku.category).filter(Boolean));
         return Array.from(categories).sort();
     }, [skus]);
+    
+    const uniqueModels = useMemo(() => {
+        const models = new Set(skus.map((sku: ProductSKU) => sku.model).filter(Boolean));
+        return Array.from(models).sort();
+    }, [skus]);
 
     const filteredSkus = useMemo(() => {
         return skus.filter((sku: ProductSKU) => {
@@ -518,9 +528,10 @@ export const SKUManagementView = ({
             const statusMatch = selectedStatus === 'all' || sku.status === selectedStatus;
             const adMatch = selectedAdStatus === 'all' || sku.advertisingStatus === selectedAdStatus;
             const modeMatch = selectedMode === 'all' || sku.mode === selectedMode;
-            return brandMatch && categoryMatch && shopMatch && statusMatch && adMatch && modeMatch;
+            const modelMatch = selectedModel === 'all' || sku.model === selectedModel;
+            return brandMatch && categoryMatch && shopMatch && statusMatch && adMatch && modeMatch && modelMatch;
         });
-    }, [skus, selectedBrand, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode]);
+    }, [skus, selectedBrand, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel]);
 
     const sortedAndFilteredSkus = useMemo(() => {
         const statusOrder: { [key in SKUStatus]: number } = {
@@ -537,6 +548,17 @@ export const SKUManagementView = ({
         });
     }, [filteredSkus]);
     
+    const totalPages = Math.ceil(sortedAndFilteredSkus.length / ROWS_PER_PAGE);
+    const paginatedSkus = useMemo(() => {
+        const start = (currentPage - 1) * ROWS_PER_PAGE;
+        return sortedAndFilteredSkus.slice(start, start + ROWS_PER_PAGE);
+    }, [sortedAndFilteredSkus, currentPage]);
+
+    // Reset page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [selectedBrand, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel]);
+
     const handleDeleteClick = (item: any, type: 'sku' | 'shop' | 'agent' | 'list') => {
         setDeleteTarget({ id: item.id, name: item.name, type });
     };
@@ -595,7 +617,6 @@ export const SKUManagementView = ({
                 let successCount = 0;
 
                 if (type === 'sku') {
-                    // 创建不区分大小写和去空格的店铺名称映射
                     const shopNameToIdMap = new Map();
                     shops.forEach(s => {
                         shopNameToIdMap.set(s.name.trim().toLowerCase(), s.id);
@@ -805,60 +826,67 @@ export const SKUManagementView = ({
                 {activeTab === 'sku' && (
                     <>
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 mb-8 space-y-6">
-                            <div className="grid grid-cols-5 gap-4 mb-4">
-                               <div className="relative">
+                            {/* Consolidated Filters - Standardized Order: Shop -> Category -> Brand -> Model -> Status -> Ad -> Mode */}
+                            <div className="grid grid-cols-1 md:grid-cols-7 gap-3 mb-4">
+                                <div className="relative">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">所属店铺</label>
+                                    <select value={selectedShop} onChange={e => setSelectedShop(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                        <option value="all">全部店铺</option>
+                                        {shops.map((s: Shop) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                </div>
+                                <div className="relative">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">类目</label>
+                                    <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                        <option value="all">全部类目</option>
+                                        {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                </div>
+                                <div className="relative">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">品牌</label>
-                                    <select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                    <select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
                                         <option value="all">全部品牌</option>
                                         {uniqueBrands.map(brand => <option key={brand} value={brand}>{brand}</option>)}
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
                                 </div>
                                 <div className="relative">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">品类</label>
-                                    <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
-                                        <option value="all">全部品类</option>
-                                        {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">型号</label>
+                                    <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                        <option value="all">全部型号</option>
+                                        {uniqueModels.map(m => <option key={m} value={m}>{m}</option>)}
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
                                 </div>
                                  <div className="relative">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">状态</label>
-                                    <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                    <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
                                         <option value="all">全部状态</option>
                                         <option value="在售">在售</option>
                                         <option value="待售">待售</option>
                                         <option value="下架">下架</option>
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
                                 </div>
                                  <div className="relative">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">广告</label>
-                                    <select value={selectedAdStatus} onChange={e => setSelectedAdStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                    <select value={selectedAdStatus} onChange={e => setSelectedAdStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
                                         <option value="all">全部广告</option>
                                         <option value="在投">在投</option>
                                         <option value="未投">未投</option>
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
                                 </div>
                                 <div className="relative">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">模式</label>
-                                    <select value={selectedMode} onChange={e => setSelectedMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                    <select value={selectedMode} onChange={e => setSelectedMode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
                                         <option value="all">全部模式</option>
                                         <option value="入仓">入仓</option>
                                         <option value="厂直">厂直</option>
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-5 gap-4 mb-6">
-                                <div className="col-span-1 relative">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">所属店铺</label>
-                                    <select value={selectedShop} onChange={e => setSelectedShop(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
-                                        <option value="all">全部店铺</option>
-                                        {shops.map((s: Shop) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                    <ChevronDown size={14} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
+                                    <ChevronDown size={12} className="absolute right-3 bottom-2.5 text-slate-400 pointer-events-none" />
                                 </div>
                             </div>
 
@@ -867,7 +895,11 @@ export const SKUManagementView = ({
                                  <div className="flex gap-4">
                                      <input placeholder="最多可输入100个SKU，以逗号或换行分隔" className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-[#70AD47]" />
                                      <div className="flex gap-2 shrink-0">
-                                          <button className="px-6 rounded-xl bg-slate-100 text-slate-600 font-black text-xs hover:bg-slate-200 transition-colors uppercase">重置</button>
+                                          <button onClick={() => {
+                                              setSelectedBrand('all'); setSelectedCategory('all'); setSelectedShop('all');
+                                              setSelectedStatus('all'); setSelectedAdStatus('all'); setSelectedMode('all');
+                                              setSelectedModel('all');
+                                          }} className="px-6 rounded-xl bg-slate-100 text-slate-600 font-black text-xs hover:bg-slate-200 transition-colors uppercase">重置</button>
                                           <button className="px-8 rounded-xl bg-[#70AD47] text-white font-black text-xs hover:bg-[#5da035] shadow-lg shadow-[#70AD47]/20 transition-all uppercase">检索</button>
                                      </div>
                                  </div>
@@ -890,13 +922,13 @@ export const SKUManagementView = ({
                                 <thead className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
                                     <tr>
                                         <th className="w-[16%] text-left pl-4 pb-4 border-b border-slate-100">SKU / 店铺</th>
-                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">品牌 / 类目</th>
-                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">型号 / 配置</th>
-                                        <th className="w-[8%] text-center pb-4 border-b border-slate-100">MTM</th>
-                                        <th className="w-[12%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
-                                        <th className="w-[8%] text-center pb-4 border-b border-slate-100">模式 / 点位</th>
-                                        <th className="w-[7%] text-center pb-4 border-b border-slate-100">状态</th>
-                                        <th className="w-[7%] text-center pb-4 border-b border-slate-100">广告</th>
+                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">类目 / 品牌</th>
+                                        <th className="w-[18%] text-center pb-4 border-b border-slate-100">型号 / 配置</th>
+                                        <th className="w-[6%] text-center pb-4 border-b border-slate-100">MTM</th>
+                                        <th className="w-[11%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
+                                        <th className="w-[7%] text-center pb-4 border-b border-slate-100">模式 / 点位</th>
+                                        <th className="w-[6%] text-center pb-4 border-b border-slate-100">状态</th>
+                                        <th className="w-[6%] text-center pb-4 border-b border-slate-100">广告</th>
                                         <th className="w-[10%] text-center pb-4 border-b border-slate-100">库存 (仓/直)</th>
                                         <th className="w-[8%] text-center pb-4 border-b border-slate-100">操作</th>
                                     </tr>
@@ -911,7 +943,7 @@ export const SKUManagementView = ({
                                                 </div>
                                             </td>
                                         </tr>
-                                    ) : sortedAndFilteredSkus.length === 0 ? (
+                                    ) : paginatedSkus.length === 0 ? (
                                         <tr>
                                             <td colSpan={10} className="py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
@@ -921,7 +953,7 @@ export const SKUManagementView = ({
                                             </td>
                                         </tr>
                                     ) : (
-                                        sortedAndFilteredSkus.map((sku: ProductSKU) => {
+                                        paginatedSkus.map((sku: ProductSKU) => {
                                             const totalStock = (sku.warehouseStock || 0) + (sku.factoryStock || 0);
                                             return (
                                                 <tr key={sku.id} className="text-xs text-slate-600 hover:bg-slate-50/50 transition-colors">
@@ -929,8 +961,14 @@ export const SKUManagementView = ({
                                                         <div className="text-slate-800 truncate" title={sku.code}>{sku.code}</div>
                                                         <div className="text-[10px] text-slate-400 font-bold mt-0.5 truncate" title={shops.find((s:Shop) => s.id === sku.shopId)?.name}>{shops.find((s:Shop) => s.id === sku.shopId)?.name || '未知店铺'}</div>
                                                     </td>
-                                                    <td className="py-4 border-b border-slate-50 text-center align-middle font-medium">{sku.brand || '-'} / {sku.category || '-'}</td>
-                                                    <td className="py-4 border-b border-slate-50 text-center align-middle font-medium">{sku.model || '-'} / {sku.configuration || '-'}</td>
+                                                    <td className="py-4 border-b border-slate-50 text-center align-middle font-medium truncate">
+                                                        <div className="text-slate-800">{sku.category || '-'}</div>
+                                                        <div className="text-[10px] text-slate-400">{sku.brand || '-'}</div>
+                                                    </td>
+                                                    <td className="py-4 border-b border-slate-50 text-center align-middle font-medium">
+                                                        <div className="truncate" title={sku.model}>{sku.model || '-'}</div>
+                                                        <div className="text-[10px] text-slate-400 truncate" title={sku.configuration}>{sku.configuration || '-'}</div>
+                                                    </td>
                                                     <td className="py-4 border-b border-slate-50 text-center align-middle font-mono">{sku.mtm || '-'}</td>
                                                     <td className="py-4 border-b border-slate-50 font-mono text-[11px] text-right pr-2 leading-tight align-middle">
                                                         <div className="text-orange-600 font-bold"><span className="text-orange-400 mr-1 opacity-50">C:</span>{sku.costPrice ? `¥${sku.costPrice.toFixed(2)}` : '-'}</div>
@@ -969,6 +1007,49 @@ export const SKUManagementView = ({
                                 </tbody>
                             </table>
                             </div>
+
+                            {/* Pagination Controls */}
+                            {sortedAndFilteredSkus.length > ROWS_PER_PAGE && (
+                                <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        展示 {(currentPage - 1) * ROWS_PER_PAGE + 1} - {Math.min(currentPage * ROWS_PER_PAGE, sortedAndFilteredSkus.length)} / 共 {sortedAndFilteredSkus.length} 条资产
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                                // Simple sliding window for page numbers
+                                                let pageNum = i + 1;
+                                                if (totalPages > 5 && currentPage > 3) {
+                                                    pageNum = Math.min(currentPage - 2 + i, totalPages - 4 + i);
+                                                }
+                                                return (
+                                                    <button 
+                                                        key={pageNum}
+                                                        onClick={() => setCurrentPage(pageNum)}
+                                                        className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-brand text-white shadow-lg shadow-brand/20' : 'text-slate-400 hover:bg-slate-50'}`}
+                                                    >
+                                                        {pageNum}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <button 
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
