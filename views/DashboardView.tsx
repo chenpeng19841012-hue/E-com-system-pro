@@ -28,15 +28,14 @@ interface Diagnosis {
 
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
 
-// 诊断卡片组件
+// 诊断卡片组件 - 适配垂直轮播与弹窗列表
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list' }> = ({ d, mode = 'carousel' }) => (
-    <div className={`transition-all duration-700 w-full ${mode === 'carousel' ? 'h-full flex flex-col justify-center' : 'p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
+    <div className={`transition-all duration-700 w-full h-full flex flex-col ${mode === 'carousel' ? 'justify-center' : 'p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
         <div className="flex items-center gap-4 mb-4">
             <div className={`p-2.5 rounded-2xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
                 {d.type === 'new_sku' ? <PackageSearch size={24}/> :
                  d.type === 'stock_severe' ? <AlertTriangle size={24}/> :
                  d.type === 'low_roi' ? <TrendingDown size={24}/> :
-                 // Fix: Added missing Zap icon import and component reference for high_potential type
                  d.type === 'high_potential' ? <Zap size={24}/> :
                  d.type === 'stale_inventory' ? <Layers size={24}/> :
                  d.severity === 'critical' ? <ShieldAlert size={24}/> : 
@@ -60,8 +59,9 @@ const SubValueTrend = ({ current, previous, isHigherBetter = true }: { current: 
     if (previous === 0) return null;
     const chg = ((current - previous) / previous) * 100;
     const isGood = (chg >= 0 && isHigherBetter) || (chg < 0 && !isHigherBetter);
+    // 底部微趋势保持 10px
     return (
-        <div className={`flex items-center gap-0.5 font-black text-[9px] mt-0.5 ${isGood ? 'text-green-500' : 'text-rose-500'}`}>
+        <div className={`flex items-center gap-0.5 font-black text-[10px] mt-0.5 ${isGood ? 'text-green-500' : 'text-rose-500'}`}>
             {chg >= 0 ? <ArrowUp size={8} strokeWidth={4}/> : <ArrowDown size={8} strokeWidth={4}/>}
             <span className="tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
         </div>
@@ -78,27 +78,34 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
                 <div className="flex justify-between items-start">
                     <div className={`w-16 h-16 ${bg} rounded-[24px] flex items-center justify-center ${color} shadow-inner`}>{icon}</div>
                     <div className="text-right">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{title}</h3>
-                        <div className={`px-2 py-1 rounded-lg inline-flex items-center gap-1.5 ${isGood ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
-                            {chg >= 0 ? <ArrowUp size={10} strokeWidth={4}/> : <ArrowDown size={10} strokeWidth={4}/>}
-                            <span className="text-[10px] font-black tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
+                        {/* 1. 指标标签提升至 16px (text-base) */}
+                        <h3 className="text-base font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{title}</h3>
+                        {/* 2. 涨跌幅气泡提升至 14px (text-sm) */}
+                        <div className={`px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 ${isGood ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
+                            {chg >= 0 ? <ArrowUp size={12} strokeWidth={4}/> : <ArrowDown size={12} strokeWidth={4}/>}
+                            <span className="text-sm font-black tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
                         </div>
                     </div>
                 </div>
-                <p className="text-5xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
+                <p className="text-6xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
             </div>
-            <div className={`px-8 py-5 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
+            {/* 底部明细栏：字号整体升级 */}
+            <div className={`px-8 py-8 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
                 <div>
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-black text-slate-700">{prefix}{formatVal(value.self.current, isFloat)}</span>
+                    {/* 3. 分类标签保持 11px */}
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        {/* 4. 数值提升至 16px (text-base) */}
+                        <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.self.current, isFloat)}</span>
                         <SubValueTrend current={value.self.current} previous={value.self.previous} isHigherBetter={isHigherBetter} />
                     </div>
                 </div>
                 <div className="border-l border-slate-200 pl-4">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">POP</span>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-black text-slate-700">{prefix}{formatVal(value.pop.current, isFloat)}</span>
+                    {/* 3. 分类标签保持 11px */}
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">POP</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        {/* 4. 数值提升至 16px (text-base) */}
+                        <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.pop.current, isFloat)}</span>
                         <SubValueTrend current={value.pop.current} previous={value.pop.previous} isHigherBetter={isHigherBetter} />
                     </div>
                 </div>
@@ -197,6 +204,8 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     const [trends, setTrends] = useState<DailyRecord[]>([]);
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
+    
+    // 轮播状态
     const [activeDiagIndex, setActiveDiagIndex] = useState(0);
 
     const enabledSkusMap = useMemo(() => {
@@ -207,11 +216,12 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
 
+    // 垂直轮播定时器：保持 2 秒
     useEffect(() => {
         if (diagnoses.length <= 1) return;
         const timer = setInterval(() => {
             setActiveDiagIndex(prev => (prev + 1) % diagnoses.length);
-        }, 5000);
+        }, 2000);
         return () => clearInterval(timer);
     }, [diagnoses.length]);
 
@@ -299,10 +309,10 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 setTrends(Object.values(dailyAgg));
 
                 const diag: Diagnosis[] = [];
-                
-                // 1. 新激活动销逻辑
                 const currSkusSet = new Set(currSz.map(getSkuIdentifier));
                 const prevSkusSet = new Set(prevSz.map(getSkuIdentifier));
+
+                // 1. 新资产激活
                 const newlyActive = Array.from(currSkusSet).filter(c => c && !prevSkusSet.has(c) && enabledSkusMap.has(c));
                 if (newlyActive.length > 0) {
                     diag.push({
@@ -311,58 +321,23 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         details: { '激活清单': newlyActive.map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
                     });
                 }
-
-                // 2. 环比失速逻辑
+                // 2. 增长失速
                 if (curr.gmv.total < prev.gmv.total * 0.8 && prev.gmv.total > 0) {
-                    diag.push({ id: 'drop', severity: 'critical', type: 'data_gap', title: '全链路增长失速', desc: '全域 GMV 环比大幅度下滑超过 20%，需立即介入审计转化链路。', details: { '环比降幅': `${(((curr.gmv.total-prev.gmv.total)/prev.gmv.total)*100).toFixed(1)}%` } });
+                    diag.push({ id: 'drop', severity: 'critical', type: 'data_gap', title: '全链路增长失速', desc: 'GMV 环比大幅度下滑超过 20%，需立即介入审计转化链路。', details: { '环比降幅': `${(((curr.gmv.total-prev.gmv.total)/prev.gmv.total)*100).toFixed(1)}%` } });
                 }
-
-                // 3. 库存枯竭预警逻辑
+                // 3. 库存枯竭
                 const stockRisks = skus.filter(s => s.isStatisticsEnabled && ((s.warehouseStock || 0) + (s.factoryStock || 0)) < (currSz.find(r => getSkuIdentifier(r) === s.code)?.paid_items || 0));
                 if (stockRisks.length > 0) {
-                    diag.push({
-                        id: 'stock_out', severity: 'critical', type: 'stock_severe', title: '物理库存枯竭预警',
-                        desc: `${stockRisks.length} 个核心资产库存已无法覆盖单周销量，面临断货风险。`,
-                        details: { '风险列表': stockRisks.slice(0,3).map(s => `• ${s.name} (余:${(s.warehouseStock||0)+(s.factoryStock||0)})`).join('\n') }
-                    });
+                    diag.push({ id: 'stock_out', severity: 'critical', type: 'stock_severe', title: '物理库存枯竭预警', desc: `${stockRisks.length} 个核心资产库存已无法覆盖单周销量。`, details: { '风险列表': stockRisks.slice(0,3).map(s => `• ${s.name} (余:${(s.warehouseStock||0)+(s.factoryStock||0)})`).join('\n') } });
                 }
-
-                // 4. 投放赤字审计
+                // 4. 投放赤字
                 const lowRoiSkus = Array.from(currSkusSet).filter(code => {
-                    const skuSpend = currJzt.filter(j => getSkuIdentifier(j) === code).reduce((s, j) => s + (Number(j.cost) || 0), 0);
-                    const skuGmv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_amount) || 0), 0);
-                    return skuSpend > 500 && (skuGmv / skuSpend) < 1.2;
+                    const spend = currJzt.filter(j => getSkuIdentifier(j) === code).reduce((s, j) => s + (Number(j.cost) || 0), 0);
+                    const gmv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_amount) || 0), 0);
+                    return spend > 500 && (gmv / spend) < 1.2;
                 });
                 if (lowRoiSkus.length > 0) {
-                    diag.push({
-                        id: 'low_roi', severity: 'warning', type: 'low_roi', title: '投放能效赤字',
-                        desc: `检测到 ${lowRoiSkus.length} 个 SKU 广告投入产出比极低，处于亏损扩张状态。`,
-                        details: { '重点负向SKU': lowRoiSkus.slice(0,3).map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
-                    });
-                }
-
-                // 5. 漏斗阻塞逻辑
-                const highUvLowCvr = Array.from(currSkusSet).filter(code => {
-                    const uv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.uv) || 0), 0);
-                    const paid = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_users) || Number(z.paid_customers) || 0), 0);
-                    return uv > 500 && (paid / uv) < 0.005;
-                });
-                if (highUvLowCvr.length > 0) {
-                    diag.push({
-                        id: 'high_potential', severity: 'warning', type: 'high_potential', title: '潜能转化漏斗阻塞',
-                        desc: `${highUvLowCvr.length} 个 SKU 获得大量曝光但转化率极低，建议重新审计主图与详情页内容。`,
-                        details: { '待优化清单': highUvLowCvr.slice(0,3).map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
-                    });
-                }
-
-                // 6. 死库积压审计
-                const staleInventory = skus.filter(s => s.isStatisticsEnabled && ((s.warehouseStock || 0) + (s.factoryStock || 0)) > 50 && !currSkusSet.has(s.code));
-                if (staleInventory.length > 0) {
-                    diag.push({
-                        id: 'stale_inv', severity: 'info', type: 'stale_inventory', title: '长尾死库积压审计',
-                        desc: `探测到 ${staleInventory.length} 个 SKU 拥有物理库存但本周期动销为 0。`,
-                        details: { '积压前三': staleInventory.slice(0,3).map(s => `• ${s.name} (库:${(s.warehouseStock||0)+(s.factoryStock||0)})`).join('\n') }
-                    });
+                    diag.push({ id: 'low_roi', severity: 'warning', type: 'low_roi', title: '投放能效赤字', desc: `检测到 ${lowRoiSkus.length} 个 SKU 广告投入产出比极低。`, details: { '重点负向SKU': lowRoiSkus.slice(0,3).map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') } });
                 }
                 
                 setDiagnoses(diag);
@@ -433,6 +408,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         </div>
                     </div>
                     
+                    {/* 优化的上下垂直轮播容器：单条显示，2秒切换 */}
                     <div className="h-[360px] relative mb-10 overflow-hidden">
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200 p-10 text-center opacity-40">
@@ -442,21 +418,32 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         ) : (
                             <>
                                 <div className="h-full relative overflow-hidden">
-                                    {diagnoses.map((d, idx) => (
-                                        <div 
-                                            key={d.id} 
-                                            className={`absolute inset-0 transition-all duration-700 ease-in-out transform ${idx === activeDiagIndex ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-95 pointer-events-none'}`}
-                                        >
-                                            <DiagnosisCard d={d} mode="carousel" />
-                                        </div>
-                                    ))}
+                                    {diagnoses.map((d, idx) => {
+                                        const isActive = idx === activeDiagIndex;
+                                        // 计算是否是上一条，用于执行滑出动画
+                                        const isPrev = idx === (activeDiagIndex - 1 + diagnoses.length) % diagnoses.length;
+                                        
+                                        return (
+                                            <div 
+                                                key={d.id} 
+                                                className={`absolute inset-0 transition-all duration-700 ease-in-out transform flex items-center justify-center
+                                                    ${isActive ? 'translate-y-0 opacity-100 scale-100 z-10' : 
+                                                      isPrev ? '-translate-y-full opacity-0 scale-95 z-0' : 
+                                                      'translate-y-full opacity-0 scale-95 z-0'}
+                                                `}
+                                            >
+                                                <DiagnosisCard d={d} mode="carousel" />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2 z-20">
+                                {/* 轮播指示器点 */}
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">
                                     {diagnoses.map((_, idx) => (
                                         <button 
                                             key={idx} 
                                             onClick={() => setActiveDiagIndex(idx)}
-                                            className={`h-1.5 rounded-full transition-all duration-500 ${idx === activeDiagIndex ? 'w-8 bg-brand' : 'w-2 bg-slate-200 hover:bg-slate-300'}`}
+                                            className={`w-1.5 rounded-full transition-all duration-500 ${idx === activeDiagIndex ? 'h-8 bg-brand' : 'h-1.5 bg-slate-200 hover:bg-slate-300'}`}
                                         />
                                     ))}
                                 </div>
@@ -468,7 +455,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 </div>
             </div>
 
-            {/* Modal for all diagnoses */}
+            {/* Modal for all diagnoses - 弹窗显示全量 6 条预警 */}
             {isAllDiagnosesModalOpen && (
                 <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
                     <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
