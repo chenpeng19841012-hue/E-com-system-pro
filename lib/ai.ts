@@ -3,9 +3,16 @@
  */
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini API client
-// Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// 安全获取 API KEY
+const getApiKey = () => {
+    try {
+        return process.env.API_KEY || "";
+    } catch (e) {
+        return "";
+    }
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const AI_CONFIG = {
     model: 'gemini-3-flash-preview', 
@@ -14,11 +21,12 @@ export const AI_CONFIG = {
 
 /**
  * 通用文本生成接口
- * @param prompt 提示词
- * @param isJson 是否强制返回 JSON
  */
 export async function callQwen(prompt: string, isJson: boolean = false) {
-    // Using generateContent for text answers
+    if (!getApiKey()) {
+        throw new Error("物理链路异常：未检测到有效的 API 访问凭证。");
+    }
+    
     const response = await ai.models.generateContent({
         model: AI_CONFIG.model,
         contents: prompt,
@@ -30,25 +38,21 @@ export async function callQwen(prompt: string, isJson: boolean = false) {
         }
     });
 
-    // The simplest and most direct way to get the generated text content is by accessing the .text property
     return response.text;
 }
 
 /**
  * 图像生成调度引擎
- * @param prompt 创意描述词
- * @param config 图像配置参数
  */
 export async function generateWanxImage(prompt: string, config?: { aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" }) {
-    // Generate images using gemini-2.5-flash-image by default
+    if (!getApiKey()) {
+        throw new Error("物理链路异常：未检测到有效的 API 访问凭证。");
+    }
+
     const response = await ai.models.generateContent({
         model: AI_CONFIG.imageModel,
         contents: {
-            parts: [
-                {
-                    text: prompt,
-                },
-            ],
+            parts: [{ text: prompt }],
         },
         config: {
             imageConfig: {
@@ -57,13 +61,10 @@ export async function generateWanxImage(prompt: string, config?: { aspectRatio?:
         }
     });
 
-    // The output response may contain both image and text parts; iterate through all parts to find the image part.
     for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
             const base64EncodeString: string = part.inlineData.data;
             return `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-        } else if (part.text) {
-            console.log(part.text);
         }
     }
     
