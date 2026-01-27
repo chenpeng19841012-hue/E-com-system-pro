@@ -1,11 +1,42 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown } from 'lucide-react';
+import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { ProductSubView, Shop, ProductSKU, CustomerServiceAgent, SKUMode, SKUStatus, SKUAdvertisingStatus, SkuList } from '../lib/types';
 import { parseExcelFile } from '../lib/excel';
 import { ConfirmModal } from '../components/ConfirmModal';
 
+// 导入进度弹窗
+const ImportProgressModal = ({ isOpen, progress, status, errorReport }: { isOpen: boolean, progress: number, status: string, errorReport?: string[] }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md p-10 animate-fadeIn">
+                <div className="flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-brand/10 rounded-2xl flex items-center justify-center text-brand mb-6">
+                        {progress < 100 ? <LoaderCircle size={32} className="animate-spin" /> : <CheckCircle2 size={32} />}
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800 mb-2">{progress < 100 ? '正在同步维度数据' : '导入任务完成'}</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-8">{status}</p>
+                    
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-4">
+                        <div className="bg-brand h-full transition-all duration-300 shadow-[0_0_8px_rgba(112,173,71,0.4)]" style={{ width: `${progress}%` }}></div>
+                    </div>
+                    <span className="text-[10px] font-black text-slate-500 uppercase">进度: {progress}%</span>
+
+                    {errorReport && errorReport.length > 0 && (
+                        <div className="mt-8 w-full text-left">
+                            <p className="text-[10px] font-black text-rose-500 uppercase mb-2 flex items-center gap-1"><AlertCircle size={10}/> 异常报告 ({errorReport.length})</p>
+                            <div className="bg-rose-50 rounded-xl p-3 max-h-32 overflow-y-auto no-scrollbar">
+                                {errorReport.map((err, i) => <p key={i} className="text-[10px] text-rose-700 font-medium mb-1">• {err}</p>)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // ADD/EDIT MODALS
 const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, title, confirmText }: any) => {
@@ -433,6 +464,9 @@ export const SKUManagementView = ({
 }: SKUManagementViewProps) => {
     const [activeTab, setActiveTab] = useState<ProductSubView>('sku');
     
+    // 进度条状态
+    const [importModal, setImportModal] = useState({ isOpen: false, progress: 0, status: '', errors: [] as string[] });
+
     // SKU states
     const [isAddSKUModalOpen, setIsAddSKUModalOpen] = useState(false);
     const [editingSku, setEditingSku] = useState<ProductSKU | null>(null);
@@ -541,23 +575,41 @@ export const SKUManagementView = ({
         const file = e.target.files?.[0];
         if (!file) return;
 
+        setImportModal({ isOpen: true, progress: 10, status: '解析 Excel 文件内容...', errors: [] });
+
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
             try {
                 const bstr = evt.target?.result;
                 const { data } = parseExcelFile(bstr);
 
                 if (data.length === 0) {
                     addToast('error', '导入失败', '文件中没有有效数据行。');
+                    setImportModal(p => ({...p, isOpen: false}));
                     return;
                 }
 
+                setImportModal(p => ({...p, progress: 30, status: `解析完成，正在处理 ${data.length} 条记录...`}));
+
+                const errorList: string[] = [];
+                let successCount = 0;
+
                 if (type === 'sku') {
-                    const shopNameToIdMap = new Map(shops.map((s: Shop) => [s.name, s.id]));
-                    const newSKUs = data.map((row: any): Omit<ProductSKU, 'id'> | null => {
-                         const shopName = row['店铺名称 (shopName)'] || row['店铺名称'];
-                         const shopId = shopNameToIdMap.get(shopName);
-                         if (!shopId) return null;
+                    // 创建不区分大小写和去空格的店铺名称映射
+                    const shopNameToIdMap = new Map();
+                    shops.forEach(s => {
+                        shopNameToIdMap.set(s.name.trim().toLowerCase(), s.id);
+                    });
+
+                    const processedList = data.map((row: any, index: number) => {
+                         const shopNameRaw = row['店铺名称 (shopName)'] || row['店铺名称'] || '';
+                         const shopNameClean = String(shopNameRaw).trim().toLowerCase();
+                         const shopId = shopNameToIdMap.get(shopNameClean);
+                         
+                         if (!shopId) {
+                            errorList.push(`行 ${index + 2}: 未找到匹配店铺 [${shopNameRaw}]`);
+                            return null;
+                         }
                          
                          const costPriceRaw = row['成本价 (costPrice)'] || row['成本价'];
                          const sellingPriceRaw = row['前台价 (sellingPrice)'] || row['前台价'];
@@ -566,55 +618,75 @@ export const SKUManagementView = ({
                          const warehouseStockRaw = row['入仓库存 (warehouseStock)'] || row['入仓库存'];
                          const factoryStockRaw = row['厂直库存 (factoryStock)'] || row['厂直库存'];
 
+                         successCount++;
                          return { 
-                             code: String(row['SKU编码 (code)'] || ''), 
-                             name: String(row['商品名称 (name)'] || ''), 
+                             code: String(row['SKU编码 (code)'] || row['SKU编码'] || ''), 
+                             name: String(row['商品名称 (name)'] || row['商品名称'] || ''), 
                              shopId, 
-                             brand: String(row['品牌 (brand)'] || ''), 
-                             category: String(row['类目 (category)'] || ''), 
-                             model: String(row['型号 (model)'] || ''),
+                             brand: String(row['品牌 (brand)'] || row['品牌'] || ''), 
+                             category: String(row['类目 (category)'] || row['类目'] || ''), 
+                             model: String(row['型号 (model)'] || row['型号'] || ''),
                              mtm: String(row['MTM (mtm)'] || row['MTM'] || ''),
-                             configuration: String(row['配置 (configuration)'] || ''), 
+                             configuration: String(row['配置 (configuration)'] || row['配置'] || ''), 
                              costPrice: costPriceRaw ? parseFloat(costPriceRaw) : undefined,
                              sellingPrice: sellingPriceRaw ? parseFloat(sellingPriceRaw) : undefined,
                              promoPrice: promoPriceRaw ? parseFloat(promoPriceRaw) : undefined,
                              jdCommission: jdCommissionRaw ? parseFloat(jdCommissionRaw) : undefined,
                              warehouseStock: warehouseStockRaw ? parseInt(warehouseStockRaw, 10) : undefined,
                              factoryStock: factoryStockRaw ? parseInt(factoryStockRaw, 10) : undefined,
-                             mode: (row['模式 (mode)'] as SKUMode), 
-                             status: (row['状态 (status)'] as SKUStatus), 
-                             advertisingStatus: (row['广告 (advertisingStatus)'] as SKUAdvertisingStatus)
+                             mode: (row['模式 (mode)'] || row['模式'] || '入仓') as SKUMode, 
+                             status: (row['状态 (status)'] || row['状态'] || '在售') as SKUStatus, 
+                             advertisingStatus: (row['广告 (advertisingStatus)'] || row['广告'] || '未投') as SKUAdvertisingStatus
                         };
-                    }).filter(sku => sku && sku.code && sku.name);
-                    onBulkAddSKUs(newSKUs as Omit<ProductSKU, 'id'>[]);
+                    }).filter(Boolean);
+
+                    setImportModal(p => ({...p, progress: 70, status: '正在写入本地数据库...', errors: errorList}));
+                    await onBulkAddSKUs(processedList as any);
+
                 } else if (type === 'shop') {
-                     const newShops = data.map((row: any): Omit<Shop, 'id'> | null => {
+                     const processedList = data.map((row: any, index: number) => {
                         const name = row['店铺名称 (name)'] || row['店铺名称'];
                         const platformId = row['店铺ID (platformId)'] || row['店铺ID'];
-                        const mode = row['经营模式 (mode)'] || row['经营模式'];
-                        if (!name || !['自营', 'POP'].includes(mode)) return null;
-                        return { name, platformId, mode };
-                     }).filter(shop => shop);
-                     onBulkAddShops(newShops as Omit<Shop, 'id'>[]);
+                        const mode = row['经营模式 (mode)'] || row['经营模式'] || '自营';
+                        if (!name) {
+                            errorList.push(`行 ${index + 2}: 店铺名称缺失`);
+                            return null;
+                        }
+                        successCount++;
+                        return { name: String(name).trim(), platformId: String(platformId || '').trim(), mode: String(mode).trim() };
+                     }).filter(Boolean);
+                     setImportModal(p => ({...p, progress: 70, status: '正在写入本地数据库...', errors: errorList}));
+                     await onBulkAddShops(processedList as any);
+
                 } else if (type === 'agent') {
-                    const shopNameToIdMap = new Map(shops.map(s => [s.name, s.id]));
-                    const newAgents = data.map((row: any): Omit<CustomerServiceAgent, 'id'> | null => {
+                    const shopNameToIdMap = new Map();
+                    shops.forEach(s => shopNameToIdMap.set(s.name.trim().toLowerCase(), s.id));
+
+                    const processedList = data.map((row: any, index: number) => {
                         const name = row['姓名 (name)'] || row['姓名'];
                         const account = row['客服账号 (account)'] || row['客服账号'];
                         const shopNamesStr = row['关联店铺 (shopNames)'] || row['关联店铺'] || '';
                         
-                        if (!name || !account) return null;
+                        if (!name || !account) {
+                            errorList.push(`行 ${index + 2}: 姓名或账号缺失`);
+                            return null;
+                        }
 
-                        const shopIds = shopNamesStr.split(',').map((name:string) => name.trim()).map((name:string) => shopNameToIdMap.get(name)).filter(Boolean);
-                        
-                        return { name, account, shopIds };
-                    }).filter(agent => agent);
-                    onBulkAddAgents(newAgents as Omit<CustomerServiceAgent, 'id'>[]);
+                        const shopIds = String(shopNamesStr).split(/[;,\n]/).map(name => name.trim().toLowerCase()).map(name => shopNameToIdMap.get(name)).filter(Boolean);
+                        successCount++;
+                        return { name: String(name).trim(), account: String(account).trim(), shopIds };
+                    }).filter(Boolean);
+                    setImportModal(p => ({...p, progress: 70, status: '正在写入本地数据库...', errors: errorList}));
+                    await onBulkAddAgents(processedList as any);
                 }
 
-            } catch (err) {
+                setImportModal(p => ({...p, progress: 100, status: `同步成功！共导入 ${successCount} 条记录。`}));
+                setTimeout(() => setImportModal(p => ({...p, isOpen: false})), 2000);
+
+            } catch (err: any) {
                 console.error(err);
-                addToast('error', '导入失败', '文件解析或数据处理时发生错误。');
+                addToast('error', '同步异常', err.message || '文件解析流程崩溃，请检查 Excel 格式。');
+                setImportModal(p => ({...p, isOpen: false}));
             }
         };
         reader.readAsBinaryString(file);
@@ -652,7 +724,7 @@ export const SKUManagementView = ({
         XLSX.utils.book_append_sheet(wb, ws, "导出数据");
         XLSX.writeFile(wb, filename);
         
-        addToast('success', '导出成功', `已成功导出数据。`);
+        addToast('success', '导出成功', `已成功导出 ${dataToExport.length} 条数据。`);
     };
 
     const getViewTitle = () => {
@@ -677,6 +749,8 @@ export const SKUManagementView = ({
 
     return (
         <>
+            <ImportProgressModal isOpen={importModal.isOpen} progress={importModal.progress} status={importModal.status} errorReport={importModal.errors} />
+
             <ConfirmModal
                 isOpen={!!deleteTarget}
                 title={`确认删除 ${deleteTarget?.type === 'sku' ? 'SKU' : deleteTarget?.type === 'shop' ? '店铺' : deleteTarget?.type === 'agent' ? '客服' : '清单'}`}
@@ -760,7 +834,7 @@ export const SKUManagementView = ({
                                 </div>
                                  <div className="relative">
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">广告</label>
-                                    <select value={selectedAdStatus} onChange={e => setSelectedAdStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
+                                    <select value={selectedAdStatus} onChange={e => setSelectedAdStatus(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:border-[#70AD47] appearance-none shadow-sm">
                                         <option value="all">全部广告</option>
                                         <option value="在投">在投</option>
                                         <option value="未投">未投</option>

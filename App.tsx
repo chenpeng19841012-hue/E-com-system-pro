@@ -24,7 +24,6 @@ import { AICompetitorMonitoringView } from './views/AICompetitorMonitoringView';
 import { View, TableType, ToastProps, Shop, ProductSKU, CustomerServiceAgent, UploadHistory, QuotingData, SkuList, SnapshotSettings } from './lib/types';
 import { DB } from './lib/db';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from './lib/schemas';
-import { createClient } from '@supabase/supabase-js';
 
 const INITIAL_QUOTING_DATA: QuotingData = {
     "prices": {
@@ -101,6 +100,17 @@ export const App = () => {
         }
     };
 
+    // 批量保存维度数据的通用逻辑
+    const handleBulkSave = async (key: string, data: any[], type: string) => {
+        try {
+            await DB.saveConfig(key, data);
+            await loadMetadata();
+            addToast('success', '同步成功', `已批量更新 ${data.length} 条${type}数据。`);
+        } catch (e) {
+            addToast('error', '物理写入失败', `无法保存${type}数据到本地库。`);
+        }
+    };
+
     const renderView = () => {
         if (isAppLoading) return (
             <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black bg-white">
@@ -117,14 +127,44 @@ export const App = () => {
             case 'data-center': return <DataCenterView onUpload={async ()=>{}} onBatchUpdate={async ()=>{}} history={uploadHistory} factTables={factTables} shops={shops} schemas={schemas} addToast={addToast} />;
             case 'cloud-sync': return <CloudSyncView addToast={addToast} />;
             case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={onDeleteRows} onRefreshData={loadMetadata} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
-            {/* Fixed: Typos in SKUManagementView props where onUpdateShop was passed for onUpdateAgent */}
-            case 'products': return <SKUManagementView {...commonProps} skuLists={skuLists} onAddNewSKU={async ()=>true} onUpdateSKU={async ()=>true} onDeleteSKU={()=>{}} onBulkAddSKUs={()=>{}} onAddNewShop={async ()=>true} onUpdateShop={async ()=>true} onDeleteShop={()=>{}} onBulkAddShops={()=>{}} onAddNewAgent={async ()=>true} onUpdateAgent={async ()=>true} onDeleteAgent={()=>{}} onBulkAddAgents={()=>{}} onAddNewSkuList={async ()=>true} onUpdateSkuList={async ()=>true} onDeleteSkuList={()=>{}} />;
+            case 'products': return (
+                <SKUManagementView 
+                    {...commonProps} 
+                    skuLists={skuLists} 
+                    onAddNewSKU={async (s)=> { const n = [...skus, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_skus', n, 'SKU'); return true; }} 
+                    onUpdateSKU={async (s)=> { const n = skus.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_skus', n, 'SKU'); return true; }} 
+                    onDeleteSKU={async (id)=> { const n = skus.filter(x=>x.id!==id); await handleBulkSave('dim_skus', n, 'SKU'); }} 
+                    onBulkAddSKUs={async (newList)=> { 
+                        const existingCodes = new Set(skus.map(s => s.code));
+                        const n = [...skus, ...newList.filter(s => !existingCodes.has(s.code)).map(s => ({...s, id: Math.random().toString(36).substr(2, 9)}))];
+                        await handleBulkSave('dim_skus', n, 'SKU');
+                    }} 
+                    onAddNewShop={async (s)=> { const n = [...shops, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
+                    onUpdateShop={async (s)=> { const n = shops.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
+                    onDeleteShop={async (id)=> { const n = shops.filter(x=>x.id!==id); await handleBulkSave('dim_shops', n, '店铺'); }} 
+                    onBulkAddShops={async (newList)=> {
+                        const existingNames = new Set(shops.map(s => s.name));
+                        const n = [...shops, ...newList.filter(s => !existingNames.has(s.name)).map(s => ({...s, id: Math.random().toString(36).substr(2, 9)}))];
+                        await handleBulkSave('dim_shops', n, '店铺');
+                    }}
+                    onAddNewAgent={async (s)=> { const n = [...agents, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_agents', n, '客服'); return true; }} 
+                    onUpdateAgent={async (s)=> { const n = agents.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_agents', n, '客服'); return true; }} 
+                    onDeleteAgent={async (id)=> { const n = agents.filter(x=>x.id!==id); await handleBulkSave('dim_agents', n, '客服'); }}
+                    onBulkAddAgents={async (newList)=> {
+                        const existingAccounts = new Set(agents.map(a => a.account));
+                        const n = [...agents, ...newList.filter(a => !existingAccounts.has(a.account)).map(a => ({...a, id: Math.random().toString(36).substr(2, 9)}))];
+                        await handleBulkSave('dim_agents', n, '客服');
+                    }}
+                    onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} 
+                    onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} 
+                    onDeleteSkuList={(id:any) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }}
+                />
+            );
             case 'ai-profit-analytics': return <AIProfitAnalyticsView {...commonProps} />;
             case 'ai-smart-replenishment': return <AISmartReplenishmentView shangzhiData={factTables.shangzhi} onUpdateSKU={async ()=>true} {...commonProps} />;
             case 'ai-quoting': return <AIQuotingView quotingData={quotingData} onUpdate={async (d:any) => { setQuotingData(d); await DB.saveConfig('quoting_data', d); }} addToast={addToast} />;
             case 'ai-description': return <AIDescriptionView skus={skus} />;
             case 'ai-sales-forecast': return <AISalesForecastView skus={skus} />;
-            {/* Fixed: Passing addToast to AIAssistantView to resolve error */}
             case 'ai-cs-assistant': return <AIAssistantView skus={skus} shops={shops} addToast={addToast} />;
             case 'ai-ad-image': return <AIAdImageView skus={skus} />;
             case 'system-snapshot': return <SystemSnapshotView snapshots={[]} settings={snapshotSettings} onUpdateSettings={async (s:any) => { setSnapshotSettings(s); await DB.saveConfig('snapshot_settings', s); }} onCreate={()=>{}} onRestore={()=>{}} onDelete={()=>{}} onImport={()=>{}} addToast={addToast} />;
@@ -134,15 +174,7 @@ export const App = () => {
 
     return (
         <div className="flex flex-row h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
-            {/* 左侧导航栏 - shrink-0 确保不被挤压 */}
-            <Sidebar 
-                currentView={currentView} 
-                setCurrentView={setCurrentView} 
-                isSidebarCollapsed={isSidebarCollapsed} 
-                setIsSidebarCollapsed={setIsSidebarCollapsed} 
-            />
-            
-            {/* 主内容区域 - flex-1 占据剩余空间 */}
+            <Sidebar currentView={currentView} setCurrentView={setCurrentView} isSidebarCollapsed={isSidebarCollapsed} setIsSidebarCollapsed={setIsSidebarCollapsed} />
             <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative border-l border-slate-200">
                 <main className="flex-1 overflow-y-auto no-scrollbar relative">
                     {renderView()}
