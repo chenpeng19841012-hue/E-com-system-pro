@@ -3,7 +3,7 @@ import {
     TrendingUp, ShoppingBag, Activity, CreditCard, Target, 
     ArrowUp, ArrowDown, Sparkles, Bot as BotIcon, ChevronRight, 
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
-    Star, CalendarX, X, MousePointer2, SearchCode
+    Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -27,20 +27,21 @@ interface Diagnosis {
 
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
 
-// 诊断卡片组件 - 优化了内容换行显示逻辑
-// Fix: Added React.FC type to fix "Property 'key' does not exist" errors when rendering DiagnosisCard in a list
-const DiagnosisCard: React.FC<{ d: Diagnosis, isCompact?: boolean }> = ({ d, isCompact = false }) => (
-    <div className={`p-8 rounded-[32px] border shrink-0 w-full transition-all duration-500 hover:shadow-xl ${isCompact ? 'snap-start h-full flex flex-col justify-center' : ''} ${d.severity === 'critical' ? 'bg-rose-50/50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+// 诊断卡片组件 - 适配轮播与全量列表两种模式
+const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list' }> = ({ d, mode = 'carousel' }) => (
+    <div className={`transition-all duration-700 w-full ${mode === 'carousel' ? 'h-full flex flex-col justify-center' : 'p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
         <div className="flex items-center gap-4 mb-4">
-            {d.type === 'new_sku' ? <PackageSearch className="text-cyan-500" size={24}/> :
-             d.type === 'asset' ? <SearchCode className="text-amber-500" size={24}/> :
-             d.type === 'data_integrity' ? <CalendarX className="text-rose-500" size={24}/> :
-             d.severity === 'critical' ? <ShieldAlert className="text-rose-500" size={24}/> : 
-             <Flame className="text-brand" size={24}/>}
+            <div className={`p-2.5 rounded-2xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : 'bg-brand/10 text-brand'}`}>
+                {d.type === 'new_sku' ? <PackageSearch size={24}/> :
+                 d.type === 'asset' ? <SearchCode size={24}/> :
+                 d.type === 'data_integrity' ? <CalendarX size={24}/> :
+                 d.severity === 'critical' ? <ShieldAlert size={24}/> : 
+                 <Flame size={24}/>}
+            </div>
             <h4 className={`text-lg font-black uppercase tracking-tight ${d.severity === 'critical' ? 'text-rose-600' : 'text-slate-800'}`}>{d.title}</h4>
         </div>
         <p className="text-xs font-bold text-slate-500 leading-relaxed mb-6">{d.desc}</p>
-        <div className="bg-white/70 rounded-2xl p-5 border border-white/40 space-y-3 shadow-inner overflow-y-auto no-scrollbar max-h-[160px]">
+        <div className="bg-white/70 rounded-2xl p-5 border border-white/40 space-y-3 shadow-inner max-h-[180px] overflow-y-auto no-scrollbar">
             {Object.entries(d.details).map(([k,v]) => (
                 <div key={k} className="flex flex-col gap-1 text-[10px] font-black uppercase">
                     <span className="text-slate-400 tracking-widest border-b border-slate-100 pb-1">{k}</span>
@@ -166,10 +167,6 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
                             <span className="text-[10px] font-bold text-slate-300 uppercase flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP资产</span>
                             <span className="text-xs font-black tabular-nums">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].pop, metricKey==='roi')}</span>
                         </div>
-                        <div className="pt-2 mt-2 border-t border-white/5 flex justify-between gap-12 items-center">
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">全域合计</span>
-                            <span className="text-xs font-black tabular-nums text-brand">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].total, metricKey==='roi')}</span>
-                        </div>
                     </div>
                 </div>
             )}
@@ -196,6 +193,9 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     const [trends, setTrends] = useState<DailyRecord[]>([]);
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
+    
+    // 轮播状态
+    const [activeDiagIndex, setActiveDiagIndex] = useState(0);
 
     const enabledSkusMap = useMemo(() => {
         const map = new Map<string, ProductSKU>();
@@ -204,6 +204,15 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     }, [skus]);
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
+
+    // 自动轮播定时器
+    useEffect(() => {
+        if (diagnoses.length <= 1) return;
+        const timer = setInterval(() => {
+            setActiveDiagIndex(prev => (prev + 1) % diagnoses.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [diagnoses.length]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -271,7 +280,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                             const cost = Number(currJzt.find(j => j.date === r.date && getSkuIdentifier(j) === code)?.cost) || 0;
                             val = cost > 0 ? items / cost : 0;
                         }
-
                         if (['自营', '入仓'].includes(mode)) dailyAgg[r.date].self += val; else dailyAgg[r.date].pop += val;
                         dailyAgg[r.date].total += val;
                     }
@@ -297,8 +305,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 if (newlyActive.length > 0) {
                     diag.push({
                         id: 'new_active', severity: 'success', type: 'new_sku', title: '新资产动销激活',
-                        desc: `探测到 ${newlyActive.length} 个 SKU 在本对比周期内首次产生物理交易流水。`,
-                        // 优化排版：SKU 一行一条信息，采用换行符分隔
+                        desc: `探测到 ${newlyActive.length} 个 SKU 在本周期内首次产生物理交易流水。`,
                         details: { '激活清单': newlyActive.map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
                     });
                 }
@@ -307,6 +314,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 }
                 
                 setDiagnoses(diag);
+                setActiveDiagIndex(0);
             } finally { setIsLoading(false); }
         };
         fetchData();
@@ -372,35 +380,64 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                             <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest leading-none">Neural Decision Intelligence</p>
                         </div>
                     </div>
-                    {/* 优化后的诊断室窗口：锁定高度，启用 Snap 滚动，实现一次只看一条 */}
-                    <div className="h-[340px] space-y-6 overflow-y-auto no-scrollbar mb-10 snap-y snap-mandatory scroll-smooth">
+                    
+                    {/* 轮播容器 */}
+                    <div className="h-[360px] relative mb-10 overflow-hidden">
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200 p-10 text-center opacity-40">
                                 <DatabaseZap size={48} className="text-slate-300 mb-6" />
                                 <p className="text-sm font-black text-slate-400 uppercase tracking-widest">物理链路平稳，系统暂无风险</p>
                             </div>
-                        ) : diagnoses.map(d => <DiagnosisCard key={d.id} d={d} isCompact={true} />)}
+                        ) : (
+                            <>
+                                <div className="h-full relative overflow-hidden">
+                                    {diagnoses.map((d, idx) => (
+                                        <div 
+                                            key={d.id} 
+                                            className={`absolute inset-0 transition-all duration-700 ease-in-out transform ${idx === activeDiagIndex ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-95 pointer-events-none'}`}
+                                        >
+                                            <DiagnosisCard d={d} mode="carousel" />
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* 轮播指示器 */}
+                                <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2 z-20">
+                                    {diagnoses.map((_, idx) => (
+                                        <button 
+                                            key={idx} 
+                                            onClick={() => setActiveDiagIndex(idx)}
+                                            className={`h-1.5 rounded-full transition-all duration-500 ${idx === activeDiagIndex ? 'w-8 bg-brand' : 'w-2 bg-slate-200 hover:bg-slate-300'}`}
+                                        />
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
+                    
                     <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="w-full relative z-10 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-2xl active:scale-95 uppercase tracking-[0.2em] mt-auto">查看全量审计矩阵 <ChevronRight size={18} /></button>
                 </div>
             </div>
 
-            {/* Modal for all diagnoses */}
+            {/* Modal for all diagnoses - 弹窗全屏显示全部预警 */}
             {isAllDiagnosesModalOpen && (
                 <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
-                    <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-2xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
+                    <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                         <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6 shrink-0 relative z-10">
                             <div>
                                 <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3"><BotIcon className="text-brand" size={24} /> 全量战略预警矩阵</h3>
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Full Neural Strategic Audit</p>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Full Neural Strategic Audit Matrix</p>
                             </div>
                             <button onClick={() => setIsAllDiagnosesModalOpen(false)} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all shadow-sm"><X size={24} /></button>
                         </div>
                         <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 relative z-10 pb-6 pr-2">
                             {diagnoses.length === 0 ? (
                                 <div className="py-20 text-center text-slate-300 italic font-black uppercase tracking-widest opacity-20">No data anomalies found.</div>
-                            ) : diagnoses.map(d => <DiagnosisCard key={d.id} d={d} />)}
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {diagnoses.map(d => <DiagnosisCard key={d.id} d={d} mode="list" />)}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
