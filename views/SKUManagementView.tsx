@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle, Store, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle, Store, ChevronLeft, ChevronRight, Search, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ProductSubView, Shop, ProductSKU, CustomerServiceAgent, SKUMode, SKUStatus, SKUAdvertisingStatus, SkuList } from '../lib/types';
 import { parseExcelFile } from '../lib/excel';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -57,6 +57,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
     const [jdCommission, setJdCommission] = useState('');
     const [warehouseStock, setWarehouseStock] = useState('');
     const [factoryStock, setFactoryStock] = useState('');
+    const [isStatisticsEnabled, setIsStatisticsEnabled] = useState(false);
     const [error, setError] = useState('');
 
     React.useEffect(() => {
@@ -79,6 +80,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
             setJdCommission(initialData.jdCommission?.toString() || '');
             setWarehouseStock(initialData.warehouseStock?.toString() || '');
             setFactoryStock(initialData.factoryStock?.toString() || '');
+            setIsStatisticsEnabled(initialData.isStatisticsEnabled || false);
             setError('');
         }
     }, [isOpen, skuToEdit, shops]);
@@ -108,6 +110,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
             jdCommission: jdCommission ? parseFloat(jdCommission) : undefined,
             warehouseStock: warehouseStock ? parseInt(warehouseStock, 10) : undefined,
             factoryStock: factoryStock ? parseInt(factoryStock, 10) : undefined,
+            isStatisticsEnabled,
         };
         
         if (await onConfirm(payload)) {
@@ -193,7 +196,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
                             <input type="number" value={factoryStock} onChange={e => setFactoryStock(e.target.value)} placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]" />
                         </div>
                     </div>
-                     <div className="grid grid-cols-3 gap-4">
+                     <div className="grid grid-cols-4 gap-4 items-end">
                         <div>
                             <label className="block text-sm font-bold text-slate-600 mb-2">模式 *</label>
                              <select value={mode} onChange={e => setMode(e.target.value as SKUMode)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-[#70AD47]">
@@ -215,6 +218,15 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
                                 <option value="未投">未投</option>
                                 <option value="在投">在投</option>
                             </select>
+                        </div>
+                        <div className="flex items-center gap-3 pb-2.5 ml-2">
+                            <button 
+                                onClick={() => setIsStatisticsEnabled(!isStatisticsEnabled)}
+                                className={`flex items-center gap-2 transition-colors ${isStatisticsEnabled ? 'text-brand' : 'text-slate-300'}`}
+                            >
+                                {isStatisticsEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                                <span className="text-sm font-bold text-slate-600">参与统计</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -610,7 +622,7 @@ export const SKUManagementView = ({
         let headers: string[] = [];
         let filename = '';
         if (type === 'sku') {
-            headers = ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', 'MTM (mtm)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)'];
+            headers = ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', 'MTM (mtm)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)', '统计 (isStatisticsEnabled)'];
             filename = 'SKU_template.xlsx';
         } else if (type === 'shop') {
             headers = ['店铺名称 (name)', '店铺ID (platformId)', '经营模式 (mode)'];
@@ -672,6 +684,7 @@ export const SKUManagementView = ({
                          const jdCommissionRaw = row['京东点位% (jdCommission)'] || row['京东点位%'];
                          const warehouseStockRaw = row['入仓库存 (warehouseStock)'] || row['入仓库存'];
                          const factoryStockRaw = row['厂直库存 (factoryStock)'] || row['厂直库存'];
+                         const isStatisticsEnabledRaw = row['统计 (isStatisticsEnabled)'] || row['统计'];
 
                          successCount++;
                          return { 
@@ -691,7 +704,8 @@ export const SKUManagementView = ({
                              factoryStock: factoryStockRaw ? parseInt(factoryStockRaw, 10) : undefined,
                              mode: (row['模式 (mode)'] || row['模式'] || '入仓') as SKUMode, 
                              status: (row['状态 (status)'] || row['状态'] || '在售') as SKUStatus, 
-                             advertisingStatus: (row['广告 (advertisingStatus)'] || row['广告'] || '未投') as SKUAdvertisingStatus
+                             advertisingStatus: (row['广告 (advertisingStatus)'] || row['广告'] || '未投') as SKUAdvertisingStatus,
+                             isStatisticsEnabled: isStatisticsEnabledRaw === '是' || isStatisticsEnabledRaw === 'true' || isStatisticsEnabledRaw === true
                         };
                     }).filter(Boolean);
 
@@ -758,8 +772,8 @@ export const SKUManagementView = ({
         if (type === 'sku') {
             if (sortedAndFilteredSkus.length === 0) { addToast('error', '导出失败', '没有可导出的数据。'); return; }
             const shopIdToNameMap = new Map(shops.map(s => [s.id, s.name]));
-            headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', 'MTM', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告'];
-            dataToExport = sortedAndFilteredSkus.map(sku => [sku.code, sku.name, shopIdToNameMap.get(sku.shopId) || '未知店铺', sku.brand || '', sku.category || '', sku.model || '', sku.mtm || '', sku.configuration || '', sku.costPrice ?? '', sku.sellingPrice ?? '', sku.promoPrice ?? '', sku.jdCommission ?? '', sku.warehouseStock ?? '', sku.factoryStock ?? '', sku.mode || '', sku.status || '', sku.advertisingStatus || '']);
+            headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', 'MTM', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告', '统计'];
+            dataToExport = sortedAndFilteredSkus.map(sku => [sku.code, sku.name, shopIdToNameMap.get(sku.shopId) || '未知店铺', sku.brand || '', sku.category || '', sku.model || '', sku.mtm || '', sku.configuration || '', sku.costPrice ?? '', sku.sellingPrice ?? '', sku.promoPrice ?? '', sku.jdCommission ?? '', sku.warehouseStock ?? '', sku.factoryStock ?? '', sku.mode || '', sku.status || '', sku.advertisingStatus || '', sku.isStatisticsEnabled ? '是' : '否']);
             filename = `SKU_export_${formattedDate}.xlsx`;
         } else if (type === 'shop') {
              if (shops.length === 0) { addToast('error', '导出失败', '没有可导出的数据。'); return; }
@@ -800,6 +814,12 @@ export const SKUManagementView = ({
             case 'list': return 'SKU List Management & Segments';
             default: return 'Asset Management Hub';
         }
+    };
+
+    const handleToggleStatistics = (sku: ProductSKU) => {
+        const updatedSku = { ...sku, isStatisticsEnabled: !sku.isStatisticsEnabled };
+        onUpdateSKU(updatedSku);
+        addToast('success', '状态已更新', `SKU [${sku.code}] 的统计参与状态已更改。`);
     };
 
     return (
@@ -969,25 +989,26 @@ export const SKUManagementView = ({
                             </div>
                             
                             <div className="overflow-x-auto no-scrollbar">
-                            <table className="w-full text-sm table-fixed min-w-[1000px]">
+                            <table className="w-full text-sm table-fixed min-w-[1200px]">
                                 <thead className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
                                     <tr>
                                         <th className="w-[16%] text-left pl-4 pb-4 border-b border-slate-100">SKU / 店铺</th>
-                                        <th className="w-[12%] text-center pb-4 border-b border-slate-100">类目 / 品牌</th>
+                                        <th className="w-[11%] text-center pb-4 border-b border-slate-100">类目 / 品牌</th>
                                         <th className="w-[18%] text-center pb-4 border-b border-slate-100">型号 / 配置</th>
-                                        <th className="w-[6%] text-center pb-4 border-b border-slate-100">MTM</th>
-                                        <th className="w-[11%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
+                                        <th className="w-[5%] text-center pb-4 border-b border-slate-100">MTM</th>
+                                        <th className="w-[10%] text-right pr-2 pb-4 border-b border-slate-100">价格 (C/S/P)</th>
                                         <th className="w-[7%] text-center pb-4 border-b border-slate-100">模式 / 点位</th>
                                         <th className="w-[6%] text-center pb-4 border-b border-slate-100">状态</th>
                                         <th className="w-[6%] text-center pb-4 border-b border-slate-100">广告</th>
-                                        <th className="w-[10%] text-center pb-4 border-b border-slate-100">库存 (仓/直)</th>
-                                        <th className="w-[8%] text-center pb-4 border-b border-slate-100">操作</th>
+                                        <th className="w-[8%] text-center pb-4 border-b border-slate-100">库存 (仓/直)</th>
+                                        <th className="w-[6%] text-center pb-4 border-b border-slate-100">统计</th>
+                                        <th className="w-[7%] text-center pb-4 border-b border-slate-100">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {skus.length === 0 ? (
                                         <tr>
-                                            <td colSpan={10} className="py-20 text-center">
+                                            <td colSpan={11} className="py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
                                                     <Package size={48} className="mb-4 opacity-20" />
                                                     <p className="text-xs font-bold uppercase tracking-widest">暂无SKU数据</p>
@@ -996,7 +1017,7 @@ export const SKUManagementView = ({
                                         </tr>
                                     ) : paginatedSkus.length === 0 ? (
                                         <tr>
-                                            <td colSpan={10} className="py-20 text-center">
+                                            <td colSpan={11} className="py-20 text-center">
                                                 <div className="flex flex-col items-center justify-center text-slate-300">
                                                     <Package size={48} className="mb-4 opacity-20" />
                                                     <p className="text-xs font-bold uppercase tracking-widest">暂无匹配的SKU资产</p>
@@ -1044,6 +1065,15 @@ export const SKUManagementView = ({
                                                         <div className="text-slate-500 font-bold"><span className="opacity-40">仓:</span> {sku.warehouseStock ?? '-'}</div>
                                                         <div className="text-slate-500 font-bold"><span className="opacity-40">直:</span> {sku.factoryStock ?? '-'}</div>
                                                         <div className="font-black text-brand border-t border-slate-100 mt-1 pt-1"><span className="opacity-40">合:</span> {totalStock}</div>
+                                                    </td>
+                                                    <td className="py-4 border-b border-slate-50 text-center align-middle">
+                                                        <button 
+                                                            onClick={() => handleToggleStatistics(sku)}
+                                                            className={`transition-all duration-300 p-1.5 rounded-lg ${sku.isStatisticsEnabled ? 'bg-brand/10 text-brand' : 'bg-slate-100 text-slate-300 hover:text-slate-400'}`}
+                                                            title={sku.isStatisticsEnabled ? '已启用统计' : '已禁用统计'}
+                                                        >
+                                                            {sku.isStatisticsEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                                                        </button>
                                                     </td>
                                                     <td className="py-4 border-b border-slate-50 text-center align-middle">
                                                         <div className="flex justify-center items-center gap-1">

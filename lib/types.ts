@@ -50,6 +50,7 @@ export interface ProductSKU {
   jdCommission?: number;
   warehouseStock?: number;
   factoryStock?: number;
+  isStatisticsEnabled?: boolean; // 新增：是否参与统计
 }
 
 export interface CustomerServiceAgent {
