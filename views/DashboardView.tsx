@@ -350,8 +350,8 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                             </div>
                         </div>
                         <div className="flex gap-8">
-                            <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-brand shadow-sm"></div><span className="text-[10px] font-black text-slate-500 uppercase font-sans">自营体系</span></div>
-                            <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[10px] font-black text-slate-500 uppercase font-sans">POP 体系</span></div>
+                            <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-brand shadow-sm"></div><span className="text-[10px] font-black text-slate-500 uppercase font-sans">自营店铺</span></div>
+                            <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[10px] font-black text-slate-500 uppercase font-sans">POP 店铺</span></div>
                         </div>
                     </div>
                     <div className="flex-1 relative">
@@ -532,8 +532,8 @@ const TrendVisual: React.FC<{ data: DailyRecord[]; isFloat?: boolean }> = ({ dat
                 <div className="absolute z-50 pointer-events-none bg-slate-900/95 backdrop-blur text-white rounded-2xl p-5 shadow-2xl animate-fadeIn font-sans" style={{ left: `${(getX(hoverIndex)/width)*100}%`, top: '40%', transform: `translate(${hoverIndex > data.length/2 ? '-110%' : '15%'}, -50%)` }}>
                     <p className="text-[10px] font-black text-slate-500 mb-3 border-b border-white/10 pb-2 uppercase tracking-widest">{data[hoverIndex].date}</p>
                     <div className="space-y-2">
-                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].self)}</span></div>
-                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP 体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].pop)}</span></div>
+                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营店铺</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].self)}</span></div>
+                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP 店铺</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].pop)}</span></div>
                         <div className="pt-2 border-t border-white/10 flex justify-between gap-10 items-center"><span className="text-[10px] font-black text-brand uppercase tracking-widest">当日合计</span><span className="text-sm font-black text-brand tabular-nums">{formatVal(data[hoverIndex].total)}</span></div>
                     </div>
                 </div>
