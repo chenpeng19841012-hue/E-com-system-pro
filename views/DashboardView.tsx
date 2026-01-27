@@ -31,6 +31,7 @@ interface Diagnosis {
     type: 'asset' | 'stock_severe' | 'stock_warning' | 'explosive' | 'ad_star' | 'ad_waste' | 'cs_alert' | 'data_gap' | 'high_potential' | 'roi_drop' | 'cpc_spike' | 'low_efficiency';
     title: string;
     desc: string;
+    skuInfo?: string; // 新增：富文本SKU信息
     details: Record<string, string | number>;
     severity: 'critical' | 'warning' | 'info' | 'success';
 }
@@ -93,16 +94,14 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
 
-    // 关键逻辑对齐：仅获取[统计：是]的有效SKU映射
+    // 映射表
     const enabledSkusMap = useMemo(() => {
         const map = new Map<string, ProductSKU>();
-        skus.forEach(s => {
-            if (s.isStatisticsEnabled) map.set(s.code, s);
-        });
+        skus.forEach(s => { if (s.isStatisticsEnabled) map.set(s.code, s); });
         return map;
     }, [skus]);
 
-    // 店铺ID -> 经营模式 映射表
+    const shopIdToName = useMemo(() => new Map(shops.map(s => [s.id, s.name])), [shops]);
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
 
     const isSelfOperated = (mode: string | undefined): boolean => {
@@ -227,35 +226,38 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                     }
                 });
 
-                // AI 诊断逻辑
+                // AI 诊断逻辑升维
                 const newDiagnoses: Diagnosis[] = [];
                 const skuGmvMap = new Map<string, number>();
                 currSz.forEach(r => { const c = getSkuIdentifier(r); if(c) skuGmvMap.set(c, (skuGmvMap.get(c) || 0) + (Number(r.paid_amount) || 0)); });
                 const skuCostMap = new Map<string, number>();
                 currJzt.forEach(r => { const c = getSkuIdentifier(r); if(c) skuCostMap.set(c, (skuCostMap.get(c) || 0) + (Number(r.cost) || 0)); });
 
+                const getRichSkuStr = (code: string) => {
+                    const sku = skus.find(s => s.code === code);
+                    if (!sku) return `SKU [${code}]`;
+                    const shopName = shopIdToName.get(sku.shopId) || '未知店';
+                    return `SKU [${code}] · ${shopName} · ${sku.model || '未注型号'} · ${sku.configuration || '标准配置'}`;
+                };
+
                 const knownSkuCodes = new Set(skus.map(s => s.code));
                 const activeCodes = new Set(currSz.map(r => getSkuIdentifier(r)).filter(Boolean));
                 activeCodes.forEach(code => {
                     if (code && !knownSkuCodes.has(code)) {
-                        newDiagnoses.push({ id: `asset-${code}`, type: 'asset', severity: 'critical', title: '资产映射缺失', desc: `物理层发现活跃 SKU [${code}]，但资产库未登记。`, details: { '建议': '前往资产名录补录' } });
+                        newDiagnoses.push({ id: `asset-${code}`, type: 'asset', severity: 'critical', title: '资产映射缺失', desc: `发现活跃 SKU 但资产库未登记。`, skuInfo: `SKU [${code}]`, details: { '建议': '前往资产名录补录' } });
                     }
                 });
 
                 const szDates = new Set(monthSz.map(r => r.date));
-                const jztDates = new Set(monthJzt.map(r => r.date));
                 const missingSz: string[] = [];
-                const missingJzt: string[] = [];
                 let checkDate = new Date(firstDayOfMonth);
                 const limitDate = new Date(yesterdayStr);
                 while(checkDate <= limitDate) {
                     const dStr = checkDate.toISOString().split('T')[0];
                     if (!szDates.has(dStr)) missingSz.push(dStr);
-                    if (!jztDates.has(dStr)) missingJzt.push(dStr);
                     checkDate.setDate(checkDate.getDate() + 1);
                 }
-                if (missingSz.length > 0) newDiagnoses.push({ id: 'gap-sz', type: 'data_gap', severity: 'warning', title: '商智记录断层', desc: `本月探测到 ${missingSz.length} 个自然日销售数据缺失。`, details: { '缺失节点': missingSz.slice(-3).join(', ') } });
-                if (missingJzt.length > 0) newDiagnoses.push({ id: 'gap-jzt', type: 'data_gap', severity: 'warning', title: '广告记录断层', desc: `本月缺失 ${missingJzt.length} 天广告消耗明细。`, details: { '建议': '补录 Excel 物理表' } });
+                if (missingSz.length > 0) newDiagnoses.push({ id: 'gap-sz', type: 'data_gap', severity: 'warning', title: '数据流断层', desc: `本月探测到 ${missingSz.length} 个自然日销售记录缺失。`, details: { '最新断点': missingSz.slice(-1)[0] } });
 
                 skuGmvMap.forEach((gmv, code) => {
                     const cost = skuCostMap.get(code) || 0;
@@ -263,9 +265,9 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                     const row = currSz.find(r => getSkuIdentifier(r) === code);
                     const cvr = Number(row?.paid_conversion_rate) || 0;
                     if (roi > 8 && gmv > 3000) {
-                         newDiagnoses.push({ id: `exp-${code}`, type: 'explosive', severity: 'success', title: '爆款爆发预警', desc: `SKU [${code}] 处于高投产红利期。`, details: { '当前ROI': roi.toFixed(1) } });
+                         newDiagnoses.push({ id: `exp-${code}`, type: 'explosive', severity: 'success', title: '爆款爆发预警', desc: `当前处于高投产红利期，建议追加预算。`, skuInfo: getRichSkuStr(code), details: { '当前ROI': roi.toFixed(1) } });
                     } else if (cvr > 0.12 && gmv > 500) {
-                         newDiagnoses.push({ id: `pot-${code}`, type: 'high_potential', severity: 'info', title: '高转化潜力识别', desc: `发现转化率极高的 SKU [${code}]，建议提报广告。`, details: { '转化率': `${(cvr*100).toFixed(1)}%` } });
+                         newDiagnoses.push({ id: `pot-${code}`, type: 'high_potential', severity: 'info', title: '高转化潜力识别', desc: `转化率表现极佳，建议开启广告放大流量。`, skuInfo: getRichSkuStr(code), details: { '转化率': `${(cvr*100).toFixed(1)}%` } });
                     }
                 });
 
@@ -278,7 +280,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
             finally { setTimeout(() => setIsLoading(false), 300); }
         };
         fetchData();
-    }, [rangeType, customRange, enabledSkusMap, shopIdToMode, skus, shops]);
+    }, [rangeType, customRange, enabledSkusMap, shopIdToMode, shops, skus]);
 
     return (
         <div className="p-8 md:p-10 w-full animate-fadeIn space-y-10">
@@ -290,13 +292,13 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
                         <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">物理层数据穿透中</span>
                         {enabledSkusMap.size > 0 && (
-                            <span className="bg-brand/10 text-brand px-2.5 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm">
-                                <Filter size={10} /> 已锁定 {enabledSkusMap.size} 个有效 SKU
+                            <span className="bg-brand/10 text-brand px-2.5 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm font-sans">
+                                <Filter size={10} /> 已锁定 {enabledSkusMap.size} 个统计 SKU
                             </span>
                         )}
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">战略指挥控制台</h1>
-                    <p className="text-slate-500 font-medium text-xs mt-1 opacity-60">Performance Intelligence Dashboard & AI Decision Hub</p>
+                    <p className="text-slate-500 font-medium text-xs mt-1 opacity-60 font-sans">Performance Intelligence Dashboard & AI Decision Hub</p>
                 </div>
                 
                 <div className="flex flex-col md:flex-row items-center gap-4">
@@ -331,7 +333,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                             </div>
                             <div>
                                 <h3 className="text-xl font-black text-slate-800 tracking-tight">{activeMetric.toUpperCase()} 增长曲线流</h3>
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Physical Performance Temporal Stream</p>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5 font-sans">Physical Performance Temporal Stream</p>
                             </div>
                         </div>
                         <div className="flex gap-8">
@@ -343,14 +345,14 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         {isLoading ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
                                 <Activity className="animate-pulse mb-3" size={32} />
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Processing...</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] font-sans">Processing...</p>
                             </div>
                         ) : allTrends[activeMetric].length > 0 ? (
                             <TrendVisual data={allTrends[activeMetric]} isFloat={activeMetric === 'roi'} />
                         ) : (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 opacity-30">
                                 <BarChart size={64} className="mb-4" strokeWidth={1} />
-                                <p className="text-xs font-bold uppercase tracking-widest">暂无活跃数据流</p>
+                                <p className="text-xs font-bold uppercase tracking-widest font-sans">暂无活跃数据流</p>
                             </div>
                         )}
                     </div>
@@ -364,7 +366,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         </div>
                         <div>
                             <h3 className="text-xl font-black tracking-tight flex items-center gap-2 font-sans">AI 战略诊断室 <Sparkles size={16} className="text-brand animate-pulse" /></h3>
-                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Neural Decision Hub</p>
+                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest font-sans">Neural Decision Hub</p>
                         </div>
                     </div>
                     
@@ -372,17 +374,17 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-white/5 rounded-[32px] border border-white/5 p-8 text-center opacity-40">
                                 <DatabaseZap size={48} className="text-slate-500 mb-6" />
-                                <p className="text-xs font-bold text-slate-400">物理层链路平稳，暂无风险</p>
+                                <p className="text-xs font-bold text-slate-400 font-sans">物理层链路平稳，暂无风险</p>
                             </div>
                         ) : (
                             <div className={`space-y-4 ${diagnoses.length > 2 ? 'animate-diagScroll' : ''}`}>
                                 {diagnoses.map((d) => (
-                                    <div key={d.id} className="h-[130px] shrink-0">
+                                    <div key={d.id} className="h-[140px] shrink-0">
                                         <DiagnosisCard diagnosis={d} />
                                     </div>
                                 ))}
                                 {diagnoses.length > 2 && diagnoses.slice(0, 2).map((d) => (
-                                    <div key={`${d.id}-repeat`} className="h-[130px] shrink-0">
+                                    <div key={`${d.id}-repeat`} className="h-[140px] shrink-0">
                                         <DiagnosisCard diagnosis={d} />
                                     </div>
                                 ))}
@@ -392,7 +394,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
                     <button 
                         onClick={() => setIsFullReportOpen(true)}
-                        className="w-full relative z-10 py-5 bg-brand text-white rounded-[24px] font-black text-sm hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-brand/20 group/btn active:scale-95">
+                        className="w-full relative z-10 py-5 bg-brand text-white rounded-[24px] font-black text-sm hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-brand/20 group/btn active:scale-95 font-sans">
                         查看完整诊断报告 <ChevronRight size={16} className="group-hover/btn:translate-x-1 transition-transform" />
                     </button>
                 </div>
@@ -401,10 +403,10 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
             <style>{`
                 @keyframes diagScroll {
                     0% { transform: translateY(0); }
-                    100% { transform: translateY(calc(-146px * ${diagnoses.length})); }
+                    100% { transform: translateY(calc(-156px * ${diagnoses.length})); }
                 }
                 .animate-diagScroll {
-                    animation: diagScroll ${Math.max(6, diagnoses.length * 3)}s linear infinite;
+                    animation: diagScroll ${Math.max(8, diagnoses.length * 4)}s linear infinite;
                 }
                 .animate-diagScroll:hover {
                     animation-play-state: paused;
@@ -421,9 +423,7 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = 
         stock_warning: { icon: <AlertTriangle size={20}/>, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20" },
         explosive: { icon: <Flame size={20}/>, color: "text-brand", bg: "bg-brand/10", border: "border-brand/20" },
         data_gap: { icon: <CalendarX size={20}/>, color: "text-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
-        high_potential: { icon: <Star size={20}/>, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
-        roi_drop: { icon: <TrendingDown size={20}/>, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20" },
-        cpc_spike: { icon: <MousePointerClick size={20}/>, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" }
+        high_potential: { icon: <Star size={20}/>, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" }
     };
     const cfg = configMap[diagnosis.type as keyof typeof configMap] || configMap.asset;
     
@@ -437,13 +437,14 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = 
                             <p className="text-lg font-black uppercase tracking-tight truncate">{diagnosis.title}</p>
                             {diagnosis.severity === 'critical' && <span className="bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase font-sans">Critical</span>}
                         </div>
+                        <p className="text-xs text-slate-500 font-black mb-2 opacity-80">{diagnosis.skuInfo}</p>
                         <p className="text-sm text-slate-400 font-bold leading-relaxed">{diagnosis.desc}</p>
                     </div>
                 </div>
                 <div className="bg-white/40 rounded-2xl p-6 border border-white/20 space-y-3">
                     {Object.entries(diagnosis.details).map(([key, val]) => (
                         <div key={key} className="flex justify-between items-center text-xs">
-                            <span className="text-slate-500 font-black uppercase tracking-widest">{key}</span>
+                            <span className="text-slate-500 font-black uppercase tracking-widest font-sans">{key}</span>
                             <span className="text-slate-800 font-black tabular-nums">{val}</span>
                         </div>
                     ))}
@@ -453,12 +454,15 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = 
     }
 
     return (
-        <div className={`rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-5 h-[130px] flex flex-col justify-center`}>
+        <div className={`rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-5 h-[140px] flex flex-col justify-center`}>
             <div className="flex items-center gap-3 mb-2">
                 <div className={`${cfg.color} shrink-0 group-hover/dcard:scale-110 transition-transform`}>{cfg.icon}</div>
                 <p className="text-sm font-black uppercase tracking-tight text-slate-100 truncate">{diagnosis.title}</p>
             </div>
-            <p className="text-[11px] text-slate-400 font-bold leading-relaxed line-clamp-2 pl-8 opacity-80">{diagnosis.desc}</p>
+            <div className="pl-8 space-y-1">
+                <p className="text-[10px] text-slate-300 font-black truncate opacity-90">{diagnosis.skuInfo}</p>
+                <p className="text-[11px] text-slate-400 font-bold leading-relaxed line-clamp-2 opacity-70">{diagnosis.desc}</p>
+            </div>
         </div>
     );
 };
@@ -467,26 +471,55 @@ const TrendVisual: React.FC<{ data: DailyRecord[]; isFloat?: boolean }> = ({ dat
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const width = 800; const height = 300; const padding = { top: 30, right: 30, bottom: 50, left: 30 };
-    const maxVal = Math.max(...data.map(d => d.total), 0.1) * 1.05;
+    const maxVal = Math.max(...data.map(d => d.total), 0.1) * 1.1;
     const getX = (i: number) => padding.left + (i / (data.length - 1)) * (width - padding.left - padding.right);
     const getY = (v: number) => height - padding.bottom - (v / maxVal) * (height - padding.top - padding.bottom);
     const formatVal = (v: number) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
+
+    // 区域填充路径生成
+    const generateAreaPath = (points: number[]) => {
+        if (points.length === 0) return "";
+        let path = `M ${getX(0)},${height - padding.bottom}`;
+        points.forEach((v, i) => { path += ` L ${getX(i)},${getY(v)}`; });
+        path += ` L ${getX(points.length - 1)},${height - padding.bottom} Z`;
+        return path;
+    };
+
     return (
-        <div ref={containerRef} className="w-full h-full relative cursor-crosshair group/trend" onMouseMove={(e) => { const rect = containerRef.current!.getBoundingClientRect(); const x = ((e.clientX - rect.left) / rect.width) * width; const idx = Math.round(((x - padding.left) / (width - padding.left - padding.right)) * (data.length - 1)); if(idx >= 0 && idx < data.length) setHoverIndex(idx); }} onMouseLeave={() => setHoverIndex(null)}>
+        <div ref={containerRef} className="w-full h-full relative cursor-crosshair group/trend font-sans" onMouseMove={(e) => { const rect = containerRef.current!.getBoundingClientRect(); const x = ((e.clientX - rect.left) / rect.width) * width; const idx = Math.round(((x - padding.left) / (width - padding.left - padding.right)) * (data.length - 1)); if(idx >= 0 && idx < data.length) setHoverIndex(idx); }} onMouseLeave={() => setHoverIndex(null)}>
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
-                <defs><linearGradient id="gSelf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#70AD47" stopOpacity="0.4"/><stop offset="100%" stopColor="#70AD47" stopOpacity="0.05"/></linearGradient><linearGradient id="gPop" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity="0.4"/><stop offset="100%" stopColor="#3B82F6" stopOpacity="0.05"/></linearGradient></defs>
-                <path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.self)}`).join(' L ')}`} fill="none" stroke="#70AD47" strokeWidth="3" strokeLinecap="round"/><path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.total)}`).join(' L ')}`} fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round"/>
-                {hoverIndex !== null && <><line x1={getX(hoverIndex)} y1={padding.top} x2={getX(hoverIndex)} y2={height - padding.bottom} stroke="#020617" strokeDasharray="6 4" strokeWidth="1" /><circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].self)} r="5" fill="#fff" stroke="#70AD47" strokeWidth="3 shadow-lg"/><circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].total)} r="5" fill="#fff" stroke="#3B82F6" strokeWidth="3 shadow-lg"/></>}
+                <defs>
+                    <linearGradient id="gSelf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#70AD47" stopOpacity="0.4"/><stop offset="100%" stopColor="#70AD47" stopOpacity="0"/></linearGradient>
+                    <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity="0.4"/><stop offset="100%" stopColor="#3B82F6" stopOpacity="0"/></linearGradient>
+                </defs>
+                
+                {/* 区域阴影填充 */}
+                <path d={generateAreaPath(data.map(d => d.self))} fill="url(#gSelf)" className="transition-all duration-500" />
+                <path d={generateAreaPath(data.map(d => d.total))} fill="url(#gTotal)" className="transition-all duration-500" />
+
+                {/* 描边曲线 */}
+                <path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.self)}`).join(' L ')}`} fill="none" stroke="#70AD47" strokeWidth="3" strokeLinecap="round" className="transition-all duration-500" />
+                <path d={`M ${data.map((d,i) => `${getX(i)},${getY(d.total)}`).join(' L ')}`} fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" className="transition-all duration-500" />
+                
+                {hoverIndex !== null && (
+                    <>
+                        <line x1={getX(hoverIndex)} y1={padding.top} x2={getX(hoverIndex)} y2={height - padding.bottom} stroke="#020617" strokeDasharray="6 4" strokeWidth="1" />
+                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].self)} r="5" fill="#fff" stroke="#70AD47" strokeWidth="3" />
+                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].total)} r="5" fill="#fff" stroke="#3B82F6" strokeWidth="3" />
+                    </>
+                )}
+                
                 <text x={padding.left} y={height - 15} fontSize="10" fill="#94a3b8" fontWeight="900" className="uppercase tracking-widest">{data[0].date.substring(5)}</text>
                 <text x={width - padding.right} y={height - 15} textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="900" className="uppercase tracking-widest">{data[data.length-1].date.substring(5)}</text>
             </svg>
+            
             {hoverIndex !== null && (
-                <div className="absolute z-50 pointer-events-none bg-slate-900 text-white rounded-2xl p-5 shadow-2xl animate-fadeIn" style={{ left: `${(getX(hoverIndex)/width)*100}%`, top: '35%', transform: `translate(${hoverIndex > data.length/2 ? '-110%' : '15%'}, -50%)` }}>
+                <div className="absolute z-50 pointer-events-none bg-slate-900/95 backdrop-blur text-white rounded-2xl p-5 shadow-2xl animate-fadeIn font-sans" style={{ left: `${(getX(hoverIndex)/width)*100}%`, top: '40%', transform: `translate(${hoverIndex > data.length/2 ? '-110%' : '15%'}, -50%)` }}>
                     <p className="text-[10px] font-black text-slate-500 mb-3 border-b border-white/10 pb-2 uppercase tracking-widest">{data[hoverIndex].date}</p>
                     <div className="space-y-2">
-                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300 font-sans"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].self)}</span></div>
-                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300 font-sans"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP 体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].pop)}</span></div>
-                        <div className="pt-2 border-t border-white/10 flex justify-between gap-10 items-center font-sans"><span className="text-[10px] font-black text-brand uppercase">当日合计</span><span className="text-sm font-black text-brand tabular-nums">{formatVal(data[hoverIndex].total)}</span></div>
+                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].self)}</span></div>
+                        <div className="flex justify-between gap-10 items-center"><span className="flex items-center gap-2 text-[10px] font-bold text-slate-300"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP 体系</span><span className="text-xs font-black tabular-nums">{formatVal(data[hoverIndex].pop)}</span></div>
+                        <div className="pt-2 border-t border-white/10 flex justify-between gap-10 items-center"><span className="text-[10px] font-black text-brand uppercase tracking-widest">合计数值</span><span className="text-sm font-black text-brand tabular-nums">{formatVal(data[hoverIndex].total)}</span></div>
                     </div>
                 </div>
             )}
@@ -506,7 +539,6 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
         const isPositive = change >= 0;
         const isGood = (isPositive && isHigherBetter) || (!isPositive && !isHigherBetter);
         const colorClass = isGood ? 'text-green-600 bg-green-50' : 'text-rose-600 bg-rose-50';
-        
         return (
             <div className={`text-[9px] font-black px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${colorClass} font-sans`}>
                 {isPositive ? <ArrowUp size={8} strokeWidth={4} /> : <ArrowDown size={8} strokeWidth={4} />}
