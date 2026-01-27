@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, BarChart, ShoppingBag, Activity, CreditCard, Target, ArrowUp, ArrowDown, Zap, Sparkles, Bot as BotIcon, ChevronRight, Calendar } from 'lucide-react';
+import { TrendingUp, BarChart, ShoppingBag, Activity, CreditCard, Target, ArrowUp, ArrowDown, Zap, Sparkles, Bot as BotIcon, ChevronRight, Calendar, Filter } from 'lucide-react';
 import { DB } from '../lib/db';
+import { ProductSKU } from '../lib/types';
+import { getSkuIdentifier } from '../lib/helpers';
 
 type RangeType = '7d' | '30d' | 'custom';
 
-export const DashboardView = ({ addToast }: any) => {
+export const DashboardView = ({ skus, addToast }: { skus: ProductSKU[], addToast: any }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [rangeType, setRangeType] = useState<RangeType>('7d');
     const [customRange, setCustomRange] = useState({
@@ -13,6 +15,11 @@ export const DashboardView = ({ addToast }: any) => {
         end: new Date().toISOString().split('T')[0]
     });
     const [data, setData] = useState<any>({ current: { gmv: 0, ca: 0, spend: 0, roi: 0 } });
+
+    // 获取已开启统计的 SKU 编码集合
+    const enabledSkuCodes = React.useMemo(() => {
+        return new Set(skus.filter(s => s.isStatisticsEnabled).map(s => s.code));
+    }, [skus]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -35,25 +42,37 @@ export const DashboardView = ({ addToast }: any) => {
                     DB.getRange('fact_jingzhuntong', start, end)
                 ]);
 
-                const gmv = currSz.reduce((s, r) => s + (Number(r.paid_amount) || 0), 0);
-                const spend = currJzt.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+                // 核心过滤逻辑：仅保留在资产库中勾选了“统计”的 SKU 记录
+                const filteredSz = currSz.filter(row => {
+                    const code = getSkuIdentifier(row);
+                    return code && enabledSkuCodes.has(code);
+                });
+
+                const filteredJzt = currJzt.filter(row => {
+                    const code = getSkuIdentifier(row);
+                    return code && enabledSkuCodes.has(code);
+                });
+
+                const gmv = filteredSz.reduce((s, r) => s + (Number(r.paid_amount) || 0), 0);
+                const ca = filteredSz.reduce((s, r) => s + (Number(r.paid_items) || 0), 0);
+                const spend = filteredJzt.reduce((s, r) => s + (Number(r.cost) || 0), 0);
                 
                 setData({
                     current: {
                         gmv,
-                        ca: currSz.reduce((s, r) => s + (Number(r.paid_items) || 0), 0),
+                        ca,
                         spend,
                         roi: spend > 0 ? gmv / spend : 0
                     }
                 });
             } catch (e) {
-                console.error(e);
+                console.error("Dashboard calculation error:", e);
             } finally {
                 setTimeout(() => setIsLoading(false), 300);
             }
         };
         fetchData();
-    }, [rangeType, customRange]);
+    }, [rangeType, customRange, enabledSkuCodes]);
 
     return (
         <div className="p-6 md:p-10 w-full animate-fadeIn space-y-8">
@@ -62,10 +81,15 @@ export const DashboardView = ({ addToast }: any) => {
                 <div>
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
-                        <span className="text-[10px] font-black text-brand uppercase tracking-widest">物理链路实时监控中</span>
+                        <span className="text-[10px] font-black text-brand uppercase tracking-widest">精细化统计模式已激活</span>
+                        {enabledSkuCodes.size > 0 && (
+                            <span className="flex items-center gap-1 bg-brand/10 text-brand px-2 py-0.5 rounded text-[9px] font-black uppercase">
+                                <Filter size={10} /> 已锁定 {enabledSkuCodes.size} 个受控 SKU
+                            </span>
+                        )}
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">战略指挥中心</h1>
-                    <p className="text-slate-500 font-medium text-xs mt-1 italic">Intelligence Data Hub & Decision Engine</p>
+                    <p className="text-slate-500 font-medium text-xs mt-1 italic">Precision Intelligence Data Hub & Strategic Decision Engine</p>
                 </div>
                 
                 <div className="flex flex-col items-end gap-3">
@@ -108,10 +132,10 @@ export const DashboardView = ({ addToast }: any) => {
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-                <KPICard title="总销售额 (GMV)" value={`¥${Math.round(data.current.gmv).toLocaleString()}`} change={+12} icon={<ShoppingBag size={20}/>} color="text-brand" bg="bg-brand/5" isLoading={isLoading} />
-                <KPICard title="成交件数 (CA)" value={data.current.ca.toLocaleString()} change={+4} icon={<Activity size={20}/>} color="text-blue-600" bg="bg-blue-50" isLoading={isLoading} />
-                <KPICard title="投放总花费" value={`¥${Math.round(data.current.spend).toLocaleString()}`} change={-2} icon={<CreditCard size={20}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" isLoading={isLoading} />
-                <KPICard title="整体投产比 (ROI)" value={data.current.roi.toFixed(1)} change={+8} icon={<Target size={20}/>} color="text-purple-600" bg="bg-purple-50" isLoading={isLoading} />
+                <KPICard title="特定 SKU 销售额" value={`¥${Math.round(data.current.gmv).toLocaleString()}`} change={+12} icon={<ShoppingBag size={20}/>} color="text-brand" bg="bg-brand/5" isLoading={isLoading} />
+                <KPICard title="特定 SKU 成交件数" value={data.current.ca.toLocaleString()} change={+4} icon={<Activity size={20}/>} color="text-blue-600" bg="bg-blue-50" isLoading={isLoading} />
+                <KPICard title="特定 SKU 广告花费" value={`¥${Math.round(data.current.spend).toLocaleString()}`} change={-2} icon={<CreditCard size={20}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" isLoading={isLoading} />
+                <KPICard title="特定 SKU 投产比" value={data.current.roi.toFixed(1)} change={+8} icon={<Target size={20}/>} color="text-purple-600" bg="bg-purple-50" isLoading={isLoading} />
             </div>
 
             {/* Content Body */}
@@ -121,14 +145,16 @@ export const DashboardView = ({ addToast }: any) => {
                         <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
                             <BarChart size={20} />
                         </div>
-                        <h3 className="text-lg font-black text-slate-800 tracking-tight">业务趋势分析</h3>
+                        <h3 className="text-lg font-black text-slate-800 tracking-tight">精细化业务趋势</h3>
                     </div>
                     
                     <div className="h-64 bg-slate-50/50 rounded-2xl border border-slate-200/60 border-dashed flex flex-col items-center justify-center">
                         <div className="w-12 h-12 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-3">
                              <BarChart size={24} className="text-slate-200" />
                         </div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">等待事实数据穿透</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            {enabledSkuCodes.size > 0 ? "正在渲染受控 SKU 的趋势分布" : "请在资产管理中开启至少一个 SKU 的统计状态"}
+                        </p>
                     </div>
                  </div>
 
@@ -137,21 +163,22 @@ export const DashboardView = ({ addToast }: any) => {
                         <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shadow-lg shadow-brand/20">
                             <BotIcon size={20} />
                         </div>
-                        <h3 className="text-lg font-black tracking-tight">AI 诊断结果</h3>
+                        <h3 className="text-lg font-black tracking-tight">AI 专项诊断</h3>
                      </div>
 
                      <div className="flex-1 space-y-4">
                         <div className="bg-white/5 rounded-xl p-4 border border-white/10 space-y-2">
                             <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                                系统监测到当前周期 <span className="text-brand font-black underline">GMV 增长强劲</span>。建议对高转化 SKU 增加 15% 预算。
+                                系统已完成对 <span className="text-brand font-black">{enabledSkuCodes.size}</span> 个核心 SKU 的利润穿透。
+                                {data.current.roi < 2 && data.current.roi > 0 ? " 当前受控组 ROI 偏低，建议优化广告词配比。" : " 当前受控组运行健康，符合既定战略。"}
                             </p>
                         </div>
-                        <DiagnosisItem icon={<Zap size={14}/>} title="异常预警" desc="展现量异常剧减" type="warning" />
-                        <DiagnosisItem icon={<Sparkles size={14}/>} title="爆品发现" desc="CTR 超过均值 2.1 倍" type="success" />
+                        <DiagnosisItem icon={<Zap size={14}/>} title="策略同步" desc={`${enabledSkuCodes.size} 个 SKU 参与全局核算`} type="warning" />
+                        <DiagnosisItem icon={<Sparkles size={14}/>} title="重点监控" desc="已排除非核心/非统计项干扰" type="success" />
                      </div>
 
                      <button className="w-full mt-6 py-3 bg-brand text-white rounded-xl font-black text-xs hover:bg-[#5da035] transition-all flex items-center justify-center gap-2">
-                        生成详情报告 <ChevronRight size={14} />
+                        查看完整受控报告 <ChevronRight size={14} />
                      </button>
                  </div>
             </div>
