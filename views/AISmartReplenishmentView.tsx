@@ -405,23 +405,29 @@ export const AISmartReplenishmentView = ({ skus, shangzhiData, shops, onUpdateSK
                         <table className="w-full text-[11px] table-fixed min-w-[900px]">
                             <thead>
                                 <tr className="text-left text-slate-400 font-black uppercase tracking-widest border-b border-slate-100">
-                                    <th className="pb-5 px-2 w-[250px]">SKU 资产明细</th>
-                                    <th className="pb-5 px-2 text-center">当前库存 (仓/直/合)</th>
-                                    <th className="pb-5 px-2 text-center">15日销</th>
-                                    <th className="pb-5 px-2 text-center">预计补货</th>
-                                    <th className="pb-5 px-2 text-center">周转状态</th>
-                                    <th className="pb-5 px-2 text-right">操作</th>
+                                    <th className="pb-5 px-2 w-[220px]">SKU 资产明细</th>
+                                    <th className="pb-5 px-2 text-center w-[80px]">经营模式</th>
+                                    <th className="pb-5 px-2 text-center w-[160px]">当前库存 (仓/直/合)</th>
+                                    <th className="pb-5 px-2 text-center w-[80px]">15日销</th>
+                                    <th className="pb-5 px-2 text-center w-[80px]">预计补货</th>
+                                    <th className="pb-5 px-2 text-center w-[100px]">周转状态</th>
+                                    <th className="pb-5 px-2 text-right w-[60px]">操作</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {paginatedData.length === 0 ? (
-                                    <tr><td colSpan={6} className="py-40 text-center text-slate-300 font-black italic">Awaiting Inventory Audit Job</td></tr>
+                                    <tr><td colSpan={7} className="py-40 text-center text-slate-300 font-black italic">Awaiting Inventory Audit Job</td></tr>
                                 ) : (
                                     paginatedData.map(item => (
                                         <tr key={item.sku.id} className="hover:bg-slate-50/80 transition-colors group">
                                             <td className="py-5 px-2">
                                                 <div className="font-black text-slate-800 truncate text-xs" title={item.sku.name}>{item.sku.name}</div>
                                                 <div className="text-[9px] text-slate-400 font-black mt-1 uppercase tracking-tighter opacity-60">{item.sku.code} @ {shopIdToName.get(item.sku.shopId)}</div>
+                                            </td>
+                                            <td className="py-5 px-2 text-center">
+                                                <span className={`px-2 py-0.5 rounded-md font-black text-[9px] uppercase ${item.sku.mode === '入仓' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                                                    {item.sku.mode || '未定'}
+                                                </span>
                                             </td>
                                             <td className="py-5 px-2 text-center font-mono">
                                                 <span className={`${item.sku.mode === '入仓' ? 'text-brand font-black' : 'text-slate-400'}`}>{item.sku.warehouseStock || 0}</span> / 
