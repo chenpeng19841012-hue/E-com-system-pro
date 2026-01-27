@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { TrendingUp, BarChart, ShoppingBag, Activity, CreditCard, Target, ArrowUp, ArrowDown, Zap, Sparkles, Bot as BotIcon, ChevronRight, Calendar, Filter, AlertTriangle, ShieldAlert, PackageSearch, Rocket, Coins, Flame, Headset, CalendarX, DatabaseZap, Star, TrendingDown, MousePointerClick, Info, X } from 'lucide-react';
 import { DB } from '../lib/db';
@@ -234,10 +233,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
                 const knownSkuCodes = new Set(skus.map(s => s.code));
                 
-                // 物理层新增资产逻辑（增量探测）：
-                // 1. SKU 属于当前选定周期（如 1.26 导入的数据中包含）
-                // 2. 且该 SKU 在资产库中从未登记
-                // 3. 且该 SKU 在上一相邻周期（如 1.25）的物理表中也完全不存在
                 const currActiveCodes = new Set(currSz.map(r => getSkuIdentifier(r)).filter(Boolean));
                 const prevActiveCodes = new Set(prevSz.map(r => getSkuIdentifier(r)).filter(Boolean));
                 
@@ -376,7 +371,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                     </div>
                 </div>
 
-                <div className="xl:col-span-4 bg-navy rounded-[48px] p-10 text-white shadow-2xl flex flex-col relative overflow-hidden group/room h-[540px]">
+                <div className="xl:col-span-4 bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group/room h-[540px]">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand/5 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/3"></div>
                     <div className="flex items-center gap-4 mb-8 relative z-10">
                         <div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 transition-transform duration-500">
@@ -390,8 +385,8 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                     
                     <div className="flex-1 relative z-10 overflow-hidden mb-8 h-[280px]">
                         {diagnoses.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center bg-white/5 rounded-[32px] border border-white/5 p-8 text-center opacity-40">
-                                <DatabaseZap size={48} className="text-slate-500 mb-6" />
+                            <div className="h-full flex flex-col items-center justify-center bg-slate-50 rounded-[32px] border border-slate-100 p-8 text-center opacity-60">
+                                <DatabaseZap size={48} className="text-slate-300 mb-6" />
                                 <p className="text-xs font-bold text-slate-400 font-sans">物理层链路平稳，暂无风险</p>
                             </div>
                         ) : (
@@ -447,7 +442,7 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = 
     
     if (isFullMode) {
         return (
-            <div className={`rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-8 h-full`}>
+            <div className={`rounded-[32px] border transition-all hover:bg-slate-50 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-8 h-full`}>
                 <div className="flex gap-5 mb-6">
                     <div className={`${cfg.color} shrink-0 mt-0.5 group-hover/dcard:rotate-12 transition-transform duration-500`}>{cfg.icon}</div>
                     <div className="min-w-0">
@@ -472,13 +467,13 @@ const DiagnosisCard: React.FC<{ diagnosis: Diagnosis; isFullMode?: boolean }> = 
     }
 
     return (
-        <div className={`rounded-[32px] border transition-all hover:bg-white/5 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-5 h-[140px] flex flex-col justify-center`}>
+        <div className={`rounded-[32px] border transition-all hover:bg-slate-50/50 group/dcard ${cfg.bg} ${cfg.border} animate-slideIn p-5 h-[140px] flex flex-col justify-center`}>
             <div className="flex items-center gap-3 mb-2">
                 <div className={`${cfg.color} shrink-0 group-hover/dcard:scale-110 transition-transform`}>{cfg.icon}</div>
-                <p className="text-sm font-black uppercase tracking-tight text-slate-100 truncate">{diagnosis.title}</p>
+                <p className="text-sm font-black uppercase tracking-tight text-slate-800 truncate">{diagnosis.title}</p>
             </div>
             <div className="pl-8 space-y-1">
-                <p className="text-[10px] text-slate-300 font-black truncate opacity-90">{diagnosis.skuInfo}</p>
+                <p className="text-[10px] text-slate-500 font-black truncate opacity-90">{diagnosis.skuInfo}</p>
                 <p className="text-[11px] text-slate-400 font-bold leading-relaxed line-clamp-2 opacity-70">{diagnosis.desc}</p>
             </div>
         </div>

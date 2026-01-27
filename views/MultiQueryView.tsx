@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square } from 'lucide-react';
+import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
 
@@ -199,11 +199,14 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     const [comparisonType, setComparisonType] = useState<'period' | 'year'>('period');
     
     const VISUAL_METRICS = ['pv', 'uv', 'paid_items', 'paid_amount', 'paid_conversion_rate', 'cost', 'cpc', 'roi'];
-    const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['uv', 'paid_items', 'paid_amount']));
-    const ROWS_PER_PAGE = 50;
+    // 默认选择：访客数(uv)、成交金额(paid_amount)、广告花费(cost)
+    const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['uv', 'paid_amount', 'cost']));
+    
+    // 显示行数改为 20
+    const ROWS_PER_PAGE = 20;
 
     const handleQuery = () => {
-        setIsLoading(true); setQueryResult([]); setVisualisationData(null);
+        setIsLoading(true); setQueryResult([]); setVisualisationData(null); setCurrentPage(1);
         setTimeout(() => {
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             const skuCodeToInfoMap = new Map(skus.map(s => [s.code, s]));
@@ -269,6 +272,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
         return { allMetricsMap: map };
     }, [schemas]);
 
+    const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
     const resultHeaders = ['date', 'sku_shop', ...selectedMetrics];
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
@@ -299,7 +303,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     </div>
                 </div>
 
-                {/* 看板区域 - 已改为白色背景 */}
+                {/* 看板区域 */}
                 <div className="bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border border-slate-100 relative overflow-hidden group/board">
                     <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.03),transparent_70%)] pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-12 relative z-10">
@@ -323,7 +327,6 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                             const isG = chg >= 0; 
                             const txtC = isG ? 'text-green-600' : 'text-rose-600';
                             
-                            // 提取该指标的微型趋势
                             const sparkData = visualisationData.dailyData.map((d: any) => d[key] || 0).slice(-7);
 
                             return (
@@ -371,7 +374,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 shadow-xl shadow-slate-200 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出维度明细</button>
                     </div>
                     <div className="flex-1 p-8 flex flex-col">
-                        <div className="overflow-x-auto rounded-[32px] border border-slate-100 no-scrollbar shadow-inner bg-white flex-1">
+                        <div className="overflow-x-auto rounded-[32px] border border-slate-100 no-scrollbar shadow-inner bg-white flex-1 min-h-[400px]">
                             <table className="w-full text-sm table-fixed min-w-[1000px]">
                                 <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
                                     <tr className="text-slate-400 font-black text-[10px] uppercase tracking-widest text-center">
@@ -393,6 +396,34 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* 分页组件 */}
+                        {queryResult.length > 0 && (
+                            <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6 px-4">
+                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    展示 {(currentPage - 1) * ROWS_PER_PAGE + 1} - {Math.min(currentPage * ROWS_PER_PAGE, queryResult.length)} / 共 {queryResult.length} 行记录
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                    >
+                                        <ChevronLeft size={16} />
+                                    </button>
+                                    <div className="text-xs font-black text-slate-600 px-4 min-w-[100px] text-center">
+                                        第 {currentPage} / {totalPages} 页
+                                    </div>
+                                    <button 
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
