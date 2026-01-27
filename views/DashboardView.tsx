@@ -78,9 +78,9 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
                 <div className="flex justify-between items-start">
                     <div className={`w-16 h-16 ${bg} rounded-[24px] flex items-center justify-center ${color} shadow-inner`}>{icon}</div>
                     <div className="text-right">
-                        {/* 1. 指标标签提升至 16px (text-base) */}
+                        {/* 指标标签 16px (text-base) */}
                         <h3 className="text-base font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{title}</h3>
-                        {/* 2. 涨跌幅气泡提升至 14px (text-sm) */}
+                        {/* 涨跌幅气泡 14px (text-sm) */}
                         <div className={`px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 ${isGood ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
                             {chg >= 0 ? <ArrowUp size={12} strokeWidth={4}/> : <ArrowDown size={12} strokeWidth={4}/>}
                             <span className="text-sm font-black tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
@@ -89,22 +89,20 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
                 </div>
                 <p className="text-6xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
             </div>
-            {/* 底部明细栏：字号整体升级 */}
+            {/* 底部明细栏：字号升级 */}
             <div className={`px-8 py-8 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
                 <div>
-                    {/* 3. 分类标签保持 11px */}
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
                     <div className="flex items-baseline gap-2 mt-1">
-                        {/* 4. 数值提升至 16px (text-base) */}
+                        {/* 数值 16px (text-base) */}
                         <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.self.current, isFloat)}</span>
                         <SubValueTrend current={value.self.current} previous={value.self.previous} isHigherBetter={isHigherBetter} />
                     </div>
                 </div>
                 <div className="border-l border-slate-200 pl-4">
-                    {/* 3. 分类标签保持 11px */}
                     <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">POP</span>
                     <div className="flex items-baseline gap-2 mt-1">
-                        {/* 4. 数值提升至 16px (text-base) */}
+                        {/* 数值 16px (text-base) */}
                         <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.pop.current, isFloat)}</span>
                         <SubValueTrend current={value.pop.current} previous={value.pop.previous} isHigherBetter={isHigherBetter} />
                     </div>
@@ -204,8 +202,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     const [trends, setTrends] = useState<DailyRecord[]>([]);
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
-    
-    // 轮播状态
     const [activeDiagIndex, setActiveDiagIndex] = useState(0);
 
     const enabledSkusMap = useMemo(() => {
@@ -216,12 +212,12 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
 
-    // 垂直轮播定时器：保持 2 秒
+    // 垂直轮播定时器：设定为 5 秒
     useEffect(() => {
         if (diagnoses.length <= 1) return;
         const timer = setInterval(() => {
             setActiveDiagIndex(prev => (prev + 1) % diagnoses.length);
-        }, 2000);
+        }, 5000);
         return () => clearInterval(timer);
     }, [diagnoses.length]);
 
@@ -408,7 +404,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         </div>
                     </div>
                     
-                    {/* 优化的上下垂直轮播容器：单条显示，2秒切换 */}
+                    {/* 优化的上下垂直轮播容器：单条显示，5秒切换 */}
                     <div className="h-[360px] relative mb-10 overflow-hidden">
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200 p-10 text-center opacity-40">
@@ -420,7 +416,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                                 <div className="h-full relative overflow-hidden">
                                     {diagnoses.map((d, idx) => {
                                         const isActive = idx === activeDiagIndex;
-                                        // 计算是否是上一条，用于执行滑出动画
                                         const isPrev = idx === (activeDiagIndex - 1 + diagnoses.length) % diagnoses.length;
                                         
                                         return (
@@ -455,7 +450,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 </div>
             </div>
 
-            {/* Modal for all diagnoses - 弹窗显示全量 6 条预警 */}
+            {/* Modal for all diagnoses */}
             {isAllDiagnosesModalOpen && (
                 <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
                     <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
