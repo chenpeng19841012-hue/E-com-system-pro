@@ -3,7 +3,8 @@ import {
     TrendingUp, ShoppingBag, Activity, CreditCard, Target, 
     ArrowUp, ArrowDown, Sparkles, Bot as BotIcon, ChevronRight, 
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
-    Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft
+    Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
+    AlertTriangle, TrendingDown, Layers, Ban, Zap
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -18,7 +19,7 @@ interface DailyRecord { date: string; self: number; pop: number; total: number; 
 
 interface Diagnosis {
     id: string;
-    type: 'asset' | 'stock_severe' | 'explosive' | 'data_gap' | 'high_potential' | 'low_roi' | 'new_sku' | 'data_integrity';
+    type: 'asset' | 'stock_severe' | 'explosive' | 'data_gap' | 'high_potential' | 'low_roi' | 'new_sku' | 'data_integrity' | 'stale_inventory';
     title: string;
     desc: string;
     details: Record<string, string | number>;
@@ -27,18 +28,21 @@ interface Diagnosis {
 
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
 
-// 诊断卡片组件 - 适配轮播与全量列表两种模式
+// 诊断卡片组件
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list' }> = ({ d, mode = 'carousel' }) => (
     <div className={`transition-all duration-700 w-full ${mode === 'carousel' ? 'h-full flex flex-col justify-center' : 'p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
         <div className="flex items-center gap-4 mb-4">
-            <div className={`p-2.5 rounded-2xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : 'bg-brand/10 text-brand'}`}>
+            <div className={`p-2.5 rounded-2xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
                 {d.type === 'new_sku' ? <PackageSearch size={24}/> :
-                 d.type === 'asset' ? <SearchCode size={24}/> :
-                 d.type === 'data_integrity' ? <CalendarX size={24}/> :
+                 d.type === 'stock_severe' ? <AlertTriangle size={24}/> :
+                 d.type === 'low_roi' ? <TrendingDown size={24}/> :
+                 // Fix: Added missing Zap icon import and component reference for high_potential type
+                 d.type === 'high_potential' ? <Zap size={24}/> :
+                 d.type === 'stale_inventory' ? <Layers size={24}/> :
                  d.severity === 'critical' ? <ShieldAlert size={24}/> : 
                  <Flame size={24}/>}
             </div>
-            <h4 className={`text-lg font-black uppercase tracking-tight ${d.severity === 'critical' ? 'text-rose-600' : 'text-slate-800'}`}>{d.title}</h4>
+            <h4 className={`text-lg font-black uppercase tracking-tight ${d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? 'text-amber-600' : 'text-slate-800'}`}>{d.title}</h4>
         </div>
         <p className="text-xs font-bold text-slate-500 leading-relaxed mb-6">{d.desc}</p>
         <div className="bg-white/70 rounded-2xl p-5 border border-white/40 space-y-3 shadow-inner max-h-[180px] overflow-y-auto no-scrollbar">
@@ -193,8 +197,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     const [trends, setTrends] = useState<DailyRecord[]>([]);
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
-    
-    // 轮播状态
     const [activeDiagIndex, setActiveDiagIndex] = useState(0);
 
     const enabledSkusMap = useMemo(() => {
@@ -205,7 +207,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
 
-    // 自动轮播定时器
     useEffect(() => {
         if (diagnoses.length <= 1) return;
         const timer = setInterval(() => {
@@ -298,10 +299,11 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 setTrends(Object.values(dailyAgg));
 
                 const diag: Diagnosis[] = [];
-                const currSkus = new Set(currSz.map(getSkuIdentifier));
-                const prevSkus = new Set(prevSz.map(getSkuIdentifier));
-                const newlyActive = Array.from(currSkus).filter(c => c && !prevSkus.has(c) && enabledSkusMap.has(c));
                 
+                // 1. 新激活动销逻辑
+                const currSkusSet = new Set(currSz.map(getSkuIdentifier));
+                const prevSkusSet = new Set(prevSz.map(getSkuIdentifier));
+                const newlyActive = Array.from(currSkusSet).filter(c => c && !prevSkusSet.has(c) && enabledSkusMap.has(c));
                 if (newlyActive.length > 0) {
                     diag.push({
                         id: 'new_active', severity: 'success', type: 'new_sku', title: '新资产动销激活',
@@ -309,8 +311,58 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         details: { '激活清单': newlyActive.map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
                     });
                 }
+
+                // 2. 环比失速逻辑
                 if (curr.gmv.total < prev.gmv.total * 0.8 && prev.gmv.total > 0) {
-                    diag.push({ id: 'drop', severity: 'critical', type: 'data_gap', title: '全链路增长失速', desc: 'GMV 环比大幅度下滑超过 20%，需立即介入审计转化链路。', details: { '环比降幅': `${(((curr.gmv.total-prev.gmv.total)/prev.gmv.total)*100).toFixed(1)}%` } });
+                    diag.push({ id: 'drop', severity: 'critical', type: 'data_gap', title: '全链路增长失速', desc: '全域 GMV 环比大幅度下滑超过 20%，需立即介入审计转化链路。', details: { '环比降幅': `${(((curr.gmv.total-prev.gmv.total)/prev.gmv.total)*100).toFixed(1)}%` } });
+                }
+
+                // 3. 库存枯竭预警逻辑
+                const stockRisks = skus.filter(s => s.isStatisticsEnabled && ((s.warehouseStock || 0) + (s.factoryStock || 0)) < (currSz.find(r => getSkuIdentifier(r) === s.code)?.paid_items || 0));
+                if (stockRisks.length > 0) {
+                    diag.push({
+                        id: 'stock_out', severity: 'critical', type: 'stock_severe', title: '物理库存枯竭预警',
+                        desc: `${stockRisks.length} 个核心资产库存已无法覆盖单周销量，面临断货风险。`,
+                        details: { '风险列表': stockRisks.slice(0,3).map(s => `• ${s.name} (余:${(s.warehouseStock||0)+(s.factoryStock||0)})`).join('\n') }
+                    });
+                }
+
+                // 4. 投放赤字审计
+                const lowRoiSkus = Array.from(currSkusSet).filter(code => {
+                    const skuSpend = currJzt.filter(j => getSkuIdentifier(j) === code).reduce((s, j) => s + (Number(j.cost) || 0), 0);
+                    const skuGmv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_amount) || 0), 0);
+                    return skuSpend > 500 && (skuGmv / skuSpend) < 1.2;
+                });
+                if (lowRoiSkus.length > 0) {
+                    diag.push({
+                        id: 'low_roi', severity: 'warning', type: 'low_roi', title: '投放能效赤字',
+                        desc: `检测到 ${lowRoiSkus.length} 个 SKU 广告投入产出比极低，处于亏损扩张状态。`,
+                        details: { '重点负向SKU': lowRoiSkus.slice(0,3).map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
+                    });
+                }
+
+                // 5. 漏斗阻塞逻辑
+                const highUvLowCvr = Array.from(currSkusSet).filter(code => {
+                    const uv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.uv) || 0), 0);
+                    const paid = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_users) || Number(z.paid_customers) || 0), 0);
+                    return uv > 500 && (paid / uv) < 0.005;
+                });
+                if (highUvLowCvr.length > 0) {
+                    diag.push({
+                        id: 'high_potential', severity: 'warning', type: 'high_potential', title: '潜能转化漏斗阻塞',
+                        desc: `${highUvLowCvr.length} 个 SKU 获得大量曝光但转化率极低，建议重新审计主图与详情页内容。`,
+                        details: { '待优化清单': highUvLowCvr.slice(0,3).map(c => `• ${enabledSkusMap.get(c!)?.name || c}`).join('\n') }
+                    });
+                }
+
+                // 6. 死库积压审计
+                const staleInventory = skus.filter(s => s.isStatisticsEnabled && ((s.warehouseStock || 0) + (s.factoryStock || 0)) > 50 && !currSkusSet.has(s.code));
+                if (staleInventory.length > 0) {
+                    diag.push({
+                        id: 'stale_inv', severity: 'info', type: 'stale_inventory', title: '长尾死库积压审计',
+                        desc: `探测到 ${staleInventory.length} 个 SKU 拥有物理库存但本周期动销为 0。`,
+                        details: { '积压前三': staleInventory.slice(0,3).map(s => `• ${s.name} (库:${(s.warehouseStock||0)+(s.factoryStock||0)})`).join('\n') }
+                    });
                 }
                 
                 setDiagnoses(diag);
@@ -381,7 +433,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                         </div>
                     </div>
                     
-                    {/* 轮播容器 */}
                     <div className="h-[360px] relative mb-10 overflow-hidden">
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200 p-10 text-center opacity-40">
@@ -400,7 +451,6 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                                         </div>
                                     ))}
                                 </div>
-                                {/* 轮播指示器 */}
                                 <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2 z-20">
                                     {diagnoses.map((_, idx) => (
                                         <button 
@@ -418,7 +468,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 </div>
             </div>
 
-            {/* Modal for all diagnoses - 弹窗全屏显示全部预警 */}
+            {/* Modal for all diagnoses */}
             {isAllDiagnosesModalOpen && (
                 <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
                     <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
