@@ -104,6 +104,18 @@ export const App = () => {
             setIsAppLoading(false);
         };
         init();
+
+        // 核心：启动 60s 心跳同步，实现“准实时”读一致性
+        const heartbeatInterval = setInterval(async () => {
+            // 静默拉取，不阻塞 UI
+            const hasNewData = await DB.syncPull();
+            if (hasNewData) {
+                console.log("检测到云端变更，刷新视图...");
+                loadMetadata(); // 仅当有新数据时刷新 UI
+            }
+        }, 60000); 
+
+        return () => clearInterval(heartbeatInterval);
     }, [loadMetadata]);
 
     const onDeleteRows = async (tableType: TableType, ids: any[]) => {
@@ -163,7 +175,7 @@ export const App = () => {
                         return row;
                     });
 
-                    // 写入数据库 (Local + Cloud)
+                    // 写入数据库 (Local + Cloud Background Sync)
                     const tableName = `fact_${type}`;
                     await DB.bulkAdd(tableName, enrichedData);
 
@@ -183,7 +195,7 @@ export const App = () => {
 
                     // 刷新视图
                     await loadMetadata();
-                    addToast('success', '全链路同步完成', `已成功解析并上传 ${data.length} 条物理记录。`);
+                    addToast('success', '全链路同步完成', `已成功解析并上传 ${data.length} 条物理记录，云端正在后台同步。`);
                     resolve();
                 } catch (err: any) {
                     addToast('error', '上传失败', err.message);
@@ -199,8 +211,6 @@ export const App = () => {
             const shop = shops.find(s => s.id === shopId);
             if (!shop) throw new Error("目标店铺不存在");
             
-            // 这里为了简化，我们只更新商智表。实际可能需要更新所有表。
-            // 这是一个比较重的操作，需要遍历全表。IndexedDB 中我们可以用 Cursor。
             const allRows = await DB.getTableRows('fact_shangzhi');
             const updatedRows = [];
             
