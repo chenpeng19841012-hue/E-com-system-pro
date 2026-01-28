@@ -32,15 +32,19 @@ const SyncProgressModal = ({ isOpen, progress }: { isOpen: boolean, progress: nu
                         <LoaderCircle className="animate-spin text-brand" size={32} />
                     </div>
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 mb-2">数据物理同步中</h3>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Uploading to Cloud Node...</p>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">
+                    {progress === 0 ? '正在解析物理文件...' : '数据物理同步中'}
+                </h3>
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">
+                    {progress === 0 ? 'Parsing Excel Stream...' : 'Uploading to Cloud Node...'}
+                </p>
                 
                 <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-4 p-0.5 shadow-inner">
-                    <div className="bg-brand h-full rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(112,173,71,0.5)]" style={{ width: `${progress}%` }}></div>
+                    <div className="bg-brand h-full rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(112,173,71,0.5)]" style={{ width: `${Math.max(5, progress)}%` }}></div>
                 </div>
                 
                 <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                    <span>Sync Status: Active</span>
+                    <span>Sync Status: {progress === 0 ? 'Initializing' : 'Active'}</span>
                     <span>{progress}% Completed</span>
                 </div>
             </div>
@@ -220,7 +224,7 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
 
   return (
     <>
-      <SyncProgressModal isOpen={isProcessing && uploadProgress > 0} progress={uploadProgress} />
+      <SyncProgressModal isOpen={isProcessing} progress={uploadProgress} />
       
       <ConfirmModal
         isOpen={modalState.isOpen}

@@ -20,8 +20,8 @@ export const CloudSyncView = ({ addToast }: any) => {
                 url: DEFAULT_URL, 
                 key: DEFAULT_KEY, 
             });
-            setSupabaseUrl(config.url);
-            setSupabaseKey(config.key);
+            setSupabaseUrl(config.url || '');
+            setSupabaseKey(config.key || '');
             if (config.url && config.key) {
                 testConnection(config.url, config.key, true);
             }
@@ -30,10 +30,17 @@ export const CloudSyncView = ({ addToast }: any) => {
     }, []);
 
     const saveSettings = async () => {
+        // 保存前去除首尾空格
+        const trimmedUrl = supabaseUrl.trim();
+        const trimmedKey = supabaseKey.trim();
+        
+        setSupabaseUrl(trimmedUrl);
+        setSupabaseKey(trimmedKey);
+
         // 保存到 localStorage (Bootstrap config)
-        await DB.saveConfig('cloud_sync_config', { url: supabaseUrl, key: supabaseKey });
-        addToast('success', '连接已更新', '系统已连接至新数据库。');
-        testConnection(supabaseUrl, supabaseKey);
+        await DB.saveConfig('cloud_sync_config', { url: trimmedUrl, key: trimmedKey });
+        addToast('success', '配置已更新', '系统已重置数据库连接池。');
+        testConnection(trimmedUrl, trimmedKey);
     };
 
     const testConnection = async (url: string, key: string, silent = false) => {
