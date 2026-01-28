@@ -64,7 +64,6 @@ export const App = () => {
     const loadMetadata = useCallback(async () => {
         try {
             // 在云原生模式下，DB.loadConfig 直接从 Supabase 拉取
-            // 首次加载可能会因为没有 Supabase 连接配置而失败（如果是第一次打开）
             const [s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
@@ -80,31 +79,16 @@ export const App = () => {
                 DB.loadConfig('comp_groups', [])
             ]);
             
-            // 注意：Fact Tables 不再全量加载到内存，Dashboard 等视图会按需请求
-            // 但为了兼容现有视图组件，我们仍然加载一个较小范围的数据或保留为空让视图自己去 fetch
-            // 这里为了演示效果，我们暂且不预加载大表，让各个 View 自行处理（或加载少量最近数据）
-            const [f_sz, f_jzt, f_cs] = await Promise.all([
-                // 只加载最近 7 天数据用于快速展示，避免卡顿
-                // DB.getRange('fact_shangzhi', '2024-01-01', '2099-12-31'), 
-                Promise.resolve([]), // 暂时留空，让子组件处理，或者优化这里
-                Promise.resolve([]),
-                Promise.resolve([])
-            ]);
-            
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
             setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             
-            // 这里我们传递空数组给 factTables，因为现在是直连模式，数据量太大
-            // 需要在 DashboardView / ReportsView 内部改为异步拉取
-            // 临时方案：为了不改动太多视图代码，我们可以尝试拉取一点点数据
-            // 但用户反馈说 20w 数据，所以这里还是谨慎。
+            // 直连模式下不全量拉取 factTables
             setFactTables({ shangzhi: [], jingzhuntong: [], customer_service: [] }); 
             
             setCompShops(s_compShops); setCompGroups(s_compGroups);
         } catch (e) {
             console.error("Initialization failed:", e);
-            // 可能是第一次加载，无需报错
         }
     }, []);
 
@@ -115,21 +99,17 @@ export const App = () => {
             setIsAppLoading(false);
         };
         init();
-        // 移除心跳同步，因为现在是直连
     }, [loadMetadata]);
 
     const onDeleteRows = async (tableType: TableType, ids: any[]) => {
         try {
             await DB.deleteRows(`fact_${tableType}`, ids);
-            // 触发刷新
-            // 注意：这里可能需要通知子组件刷新
         } catch (e) {
             addToast('error', '物理删除失败', '操作数据库时发生错误。');
             throw e;
         }
     };
 
-    // 批量保存维度数据的通用逻辑
     const handleBulkSave = async (key: string, data: any[], type: string) => {
         try {
             await DB.saveConfig(key, data);
@@ -147,8 +127,8 @@ export const App = () => {
         return true;
     };
 
-    // 统一数据上传处理器
-    const handleUpload = async (file: File, type: TableType, shopId?: string) => {
+    // 统一数据上传处理器 - 支持进度回调
+    const handleUpload = async (file: File, type: TableType, shopId?: string, onProgress?: (p: number) => void) => {
         return new Promise<void>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -175,9 +155,8 @@ export const App = () => {
                     });
 
                     // 写入数据库 (Direct Cloud Upload)
-                    // 注意：这里是异步的，但为了让进度条准确，bulkAdd 现在是 await 的
                     const tableName = `fact_${type}`;
-                    await DB.bulkAdd(tableName, enrichedData);
+                    await DB.bulkAdd(tableName, enrichedData, onProgress);
 
                     // 记录历史
                     const newHistoryItem: UploadHistory = {
@@ -210,11 +189,7 @@ export const App = () => {
         try {
             const shop = shops.find(s => s.id === shopId);
             if (!shop) throw new Error("目标店铺不存在");
-            
-            // 注意：在云模式下，全量拉取修改再推送太慢。
-            // 建议未来改为服务器端 SQL 执行。此处暂不支持大规模批量修改，或者仅提示
             addToast('error', '操作受限', '云原生模式下暂不支持批量修改海量数据，请使用 Supabase SQL Editor 执行 UPDATE 语句。');
-            
         } catch (e: any) {
             addToast('error', '批量更新失败', e.message);
         }

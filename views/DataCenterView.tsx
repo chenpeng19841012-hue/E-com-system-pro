@@ -1,15 +1,58 @@
+
 import React, { useState } from 'react';
-import { Database, BarChart3, HardDrive, RotateCcw, UploadCloud, Download, Wrench, ChevronDown, Check, FileSpreadsheet, Headset, Archive, X, Activity, Server, Zap, Sparkles, LayoutGrid, FileText, Loader2 } from 'lucide-react';
+import { Database, BarChart3, HardDrive, RotateCcw, UploadCloud, Download, Wrench, ChevronDown, Check, FileSpreadsheet, Headset, Archive, X, Activity, Server, Zap, Sparkles, LayoutGrid, FileText, Loader2, LoaderCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TableType, UploadHistory, Shop } from '../lib/types';
 import { getTableName, detectTableType } from '../lib/helpers';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { parseExcelFile } from '../lib/excel';
 
+const SyncProgressModal = ({ isOpen, progress }: { isOpen: boolean, progress: number }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-md p-12 text-center animate-fadeIn border border-slate-200">
+                <div className="relative w-24 h-24 mx-auto mb-10">
+                    <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                    <svg className="absolute inset-0 transform -rotate-90 w-24 h-24">
+                        <circle
+                            cx="48"
+                            cy="48"
+                            r="44"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            fill="transparent"
+                            className="text-brand transition-all duration-300"
+                            strokeDasharray={276}
+                            strokeDashoffset={276 - (276 * progress) / 100}
+                            strokeLinecap="round"
+                        />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <LoaderCircle className="animate-spin text-brand" size={32} />
+                    </div>
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">数据物理同步中</h3>
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Uploading to Cloud Node...</p>
+                
+                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-4 p-0.5 shadow-inner">
+                    <div className="bg-brand h-full rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(112,173,71,0.5)]" style={{ width: `${progress}%` }}></div>
+                </div>
+                
+                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    <span>Sync Status: Active</span>
+                    <span>{progress}% Completed</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, shops, schemas, addToast }: any) => {
   const [activeImportTab, setActiveImportTab] = useState<TableType>('shangzhi');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [defaultShopId, setDefaultShopId] = useState<string>('');
   
   // 批量修正功能状态
@@ -45,12 +88,16 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
   const handleProcessClick = () => {
     if (!selectedFile) return;
     setIsProcessing(true);
+    setUploadProgress(0);
 
     const performUpload = async (tableType: TableType) => {
         try {
-            await onUpload(selectedFile, tableType, defaultShopId);
+            await onUpload(selectedFile, tableType, defaultShopId, (progress: number) => {
+                setUploadProgress(progress);
+            });
         } finally {
             setIsProcessing(false);
+            setUploadProgress(0);
             setSelectedFile(null);
             setModalState({ isOpen: false, detectedType: null, selectedType: null, onConfirm: () => {} });
         }
@@ -173,6 +220,8 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
 
   return (
     <>
+      <SyncProgressModal isOpen={isProcessing && uploadProgress > 0} progress={uploadProgress} />
+      
       <ConfirmModal
         isOpen={modalState.isOpen}
         title="智能检测提示"
@@ -273,7 +322,7 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
             <StatCard label="商智核心事实行" value={shangzhiCount} date={shangzhiLatestDate} icon={<Database size={22}/>} color="text-brand" bg="bg-brand/5" />
             <StatCard label="广告投放事实行" value={jingzhuntongCount} date={jingzhuntongLatestDate} icon={<BarChart3 size={22}/>} color="text-blue-600" bg="bg-blue-50" />
             <StatCard label="客服接待流水" value={csCount} date="N/A" icon={<Headset size={22}/>} color="text-purple-600" bg="bg-purple-50" />
-            <StatCard label="物理空间占用" value={`${sizeMB} MB`} date="Local Storage" icon={<Server size={22}/>} color="text-slate-900" bg="bg-slate-50" />
+            <StatCard label="物理空间占用" value={`${sizeMB} MB`} date="Cloud Native" icon={<Server size={22}/>} color="text-slate-900" bg="bg-slate-50" />
         </div>
 
         {/* Unified Operations Card */}

@@ -42,8 +42,8 @@ export const DB = {
     return true; 
   },
 
-  // 核心：批量上传 (直接写入 Supabase)
-  async bulkAdd(tableName: string, rows: any[]): Promise<void> {
+  // 核心：批量上传 (直接写入 Supabase) - 支持进度回调
+  async bulkAdd(tableName: string, rows: any[], onProgress?: (percent: number) => void): Promise<void> {
     const supabase = getClient();
     if (!supabase) throw new Error("未配置云端连接，无法写入数据。请先在[云端同步]页面配置。");
 
@@ -101,13 +101,18 @@ export const DB = {
                 
                 if (error) throw error;
                 success = true;
-                console.log(`[Cloud] ${tableName} 批次 ${i/BATCH_SIZE + 1} 成功.`);
             } catch (e: any) {
                 console.error(`[Cloud] 上传失败，重试中... (${retries})`, e.message);
                 retries--;
                 await sleep(1000); // 失败等待 1秒
                 if (retries === 0) throw new Error(`云端写入失败: ${e.message}`);
             }
+        }
+
+        // 汇报进度
+        if (onProgress) {
+            const percent = Math.min(100, Math.round(((i + chunk.length) / total) * 100));
+            onProgress(percent);
         }
     }
   },
