@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle } from 'lucide-react';
+import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle, RefreshCw } from 'lucide-react';
 import { DB } from '../lib/db';
 
 const DEFAULT_URL = "https://stycaaqvjbjnactxcvyh.supabase.co";
@@ -14,6 +14,7 @@ export const CloudSyncView = ({ addToast }: any) => {
     // 诊断状态
     const [diagSteps, setDiagSteps] = useState<{ step: string; status: 'pending' | 'ok' | 'fail' | 'warn'; msg: string }[]>([]);
     const [isDiagnosing, setIsDiagnosing] = useState(false);
+    const [isReloadingCache, setIsReloadingCache] = useState(false);
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -22,7 +23,7 @@ export const CloudSyncView = ({ addToast }: any) => {
                 setIsUsingEnv(true);
                 setSupabaseUrl(config.url);
                 setSupabaseKey('**********************'); 
-                runDeepDiagnosis(); // Auto run on load if env present
+                runDeepDiagnosis(); 
             } else {
                 setSupabaseUrl(config.url || '');
                 setSupabaseKey(config.key || '');
@@ -59,11 +60,42 @@ export const CloudSyncView = ({ addToast }: any) => {
         }
     };
 
-    const cleanSqlScript = `-- 云舟 (Yunzhou) 数据库全量补全脚本 v5.6.0
--- ✅ 自动检测并补全所有缺失的列 (解决 Column not found 错误)
--- ✅ 安全操作：不会删除现有数据
+    const handleForceReloadSchema = async () => {
+        setIsReloadingCache(true);
+        try {
+            const supabase = await DB.getSupabase();
+            if (!supabase) throw new Error("未连接云端");
+            
+            // 尝试调用 RPC
+            const { error } = await supabase.rpc('reload_schema_cache');
+            
+            if (error) {
+                // 如果 RPC 不存在，说明用户还没运行新脚本，回退到纯提示
+                console.error("RPC Error:", error);
+                throw new Error("请先执行右侧的 SQL 脚本以安装 'reload_schema_cache' 函数。");
+            }
+            
+            addToast('success', '缓存刷新成功', 'API Schema Cache 已强制重载，请重试上传。');
+        } catch (e: any) {
+            addToast('error', '刷新失败', e.message);
+        } finally {
+            setIsReloadingCache(false);
+        }
+    };
 
--- 1. 确保核心表存在
+    const cleanSqlScript = `-- 云舟 (Yunzhou) 数据库终极修复脚本 v5.7.0
+-- ✅ 包含所有缺失列 (add_to_cart_conversion_rate 等)
+-- ✅ 安装 RPC 函数以支持前端强制刷新缓存
+
+-- 1. [关键] 安装缓存刷新函数 (RPC)
+CREATE OR REPLACE FUNCTION reload_schema_cache()
+RETURNS void AS $$
+BEGIN
+  NOTIFY pgrst, 'reload schema';
+END;
+$$ LANGUAGE plpgsql;
+
+-- 2. 确保核心表存在
 CREATE TABLE IF NOT EXISTS fact_shangzhi (
   id BIGSERIAL PRIMARY KEY,
   date DATE NOT NULL,
@@ -79,7 +111,7 @@ CREATE TABLE IF NOT EXISTS fact_jingzhuntong (
   tracked_sku_id TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(date, tracked_sku_id) -- 注意：此处约束可能较弱，视业务而定
+  UNIQUE(date, tracked_sku_id) 
 );
 
 CREATE TABLE IF NOT EXISTS fact_customer_service (
@@ -105,7 +137,7 @@ CREATE TABLE IF NOT EXISTS app_config (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. 全量字段补丁 (Fact Shangzhi)
+-- 3. 全量字段补丁 (Fact Shangzhi - 重点修复 add_to_cart_conversion_rate)
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS product_name TEXT;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS brand TEXT;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS category_l1 TEXT;
@@ -124,7 +156,7 @@ ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS paid_orders INTEGER;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS paid_conversion_rate NUMERIC;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS paid_aov NUMERIC;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS add_to_cart_users INTEGER;
-ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS add_to_cart_conversion_rate NUMERIC; -- 修复点
+ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS add_to_cart_conversion_rate NUMERIC; -- 关键修复
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS add_to_cart_items INTEGER;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS product_id TEXT;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS item_number TEXT;
@@ -149,7 +181,7 @@ ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS refund_amount NUMERIC;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS refund_items INTEGER;
 ALTER TABLE fact_shangzhi ADD COLUMN IF NOT EXISTS refund_orders INTEGER;
 
--- 3. 全量字段补丁 (Fact Jingzhuntong)
+-- 4. 全量字段补丁 (Fact Jingzhuntong)
 ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS account_nickname TEXT;
 ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS tracked_sku_name TEXT;
 ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS cost NUMERIC;
@@ -173,7 +205,7 @@ ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS roi NUMERIC;
 ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS presale_orders INTEGER;
 ALTER TABLE fact_jingzhuntong ADD COLUMN IF NOT EXISTS presale_order_amount NUMERIC;
 
--- 4. 全量字段补丁 (Fact Customer Service)
+-- 5. 全量字段补丁 (Fact Customer Service)
 ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS inquiries INTEGER;
 ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS chats INTEGER;
 ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS no_response_count INTEGER;
@@ -199,7 +231,7 @@ ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS converted_shipped_ite
 ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS converted_order_amount NUMERIC;
 ALTER TABLE fact_customer_service ADD COLUMN IF NOT EXISTS converted_shipped_amount NUMERIC;
 
--- 5. 确保 RLS 和 权限
+-- 6. 确保 RLS 和 权限
 ALTER TABLE fact_shangzhi ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fact_jingzhuntong ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fact_customer_service ENABLE ROW LEVEL SECURITY;
@@ -218,10 +250,14 @@ CREATE POLICY "Public Access CS" ON fact_customer_service FOR ALL USING (true) W
 CREATE POLICY "Public Access Quotes" ON dim_quoting_library FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access Config" ON app_config FOR ALL USING (true) WITH CHECK (true);
 
+-- 7. 授予匿名权限 (包含函数调用权限)
 GRANT USAGE ON SCHEMA public TO anon;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
+GRANT EXECUTE ON FUNCTION reload_schema_cache TO anon;
 
+-- 8. 立即刷新缓存
+SELECT reload_schema_cache();
 NOTIFY pgrst, 'reload schema';
 `;
 
@@ -313,16 +349,32 @@ NOTIFY pgrst, 'reload schema';
 
                 <div className="lg:col-span-7 space-y-6">
                     <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm relative overflow-hidden h-full flex flex-col">
-                        <div className="flex items-center gap-3 text-slate-800 mb-6">
-                            <Terminal size={20} className="text-slate-400" />
-                            <h4 className="text-sm font-black uppercase tracking-wider">权限修复脚本 (RLS Fix)</h4>
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3 text-slate-800">
+                                <Terminal size={20} className="text-slate-400" />
+                                <h4 className="text-sm font-black uppercase tracking-wider">权限修复脚本 (RLS Fix)</h4>
+                            </div>
+                            <button 
+                                onClick={handleForceReloadSchema}
+                                disabled={isReloadingCache}
+                                className="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all flex items-center gap-2 disabled:opacity-50"
+                            >
+                                <RefreshCw size={12} className={isReloadingCache ? 'animate-spin' : ''} />
+                                {isReloadingCache ? '正在重载...' : '强制刷新架构缓存'}
+                            </button>
                         </div>
 
                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mb-6 flex gap-3">
                             <AlertTriangle size={18} className="text-amber-500 shrink-0" />
-                            <p className="text-[11px] text-amber-700 font-bold leading-relaxed">
-                                如果左侧诊断出现 <span className="font-mono bg-white px-1 rounded mx-1">写入失败</span> 或 <span className="font-mono bg-white px-1 rounded mx-1">Column not found</span> 错误，请务必执行下方脚本。它会为您补全缺失的列。
-                            </p>
+                            <div className="space-y-1">
+                                <p className="text-[11px] text-amber-700 font-bold leading-relaxed">
+                                    如果左侧诊断出现 <span className="font-mono bg-white px-1 rounded mx-1">Column not found</span> 错误：
+                                </p>
+                                <ol className="list-decimal list-inside text-[10px] text-amber-600 font-medium ml-1 space-y-1">
+                                    <li>复制下方新脚本并在 Supabase SQL Editor 执行。</li>
+                                    <li>执行成功后，点击右上角的 <b>强制刷新架构缓存</b> 按钮。</li>
+                                </ol>
+                            </div>
                         </div>
 
                         <div className="relative z-10 flex-1 flex flex-col min-h-[400px]">
