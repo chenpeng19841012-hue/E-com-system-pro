@@ -173,6 +173,7 @@ export const App = () => {
         const headerMap: Record<string, string> = {};
         const currentSchema = schemas[type];
         const typeMap: Record<string, string> = {};
+        const requiredKeys: string[] = []; // 收集必填字段
         
         if (currentSchema && Array.isArray(currentSchema)) {
             currentSchema.forEach((field: any) => {
@@ -181,10 +182,14 @@ export const App = () => {
                 typeMap[field.key] = field.type;
                 if (field.tags) field.tags.forEach((tag: string) => headerMap[tag] = field.key);
                 headerMap[field.key] = field.key;
+                
+                // 记录必填字段 (如 date, sku_code)
+                if (field.required) requiredKeys.push(field.key);
             });
         }
 
         // 2. 数据增强与映射
+        let skippedRows = 0;
         const enrichedData = data.map(row => {
             const mappedRow: any = {};
             
@@ -255,8 +260,28 @@ export const App = () => {
                     mappedRow[dbKey] = value;
                 }
             });
+
+            // 3. 必填字段校验：如果在清洗后，必填字段仍为空，则标记为无效
+            const isInvalid = requiredKeys.some(key => {
+                const val = mappedRow[key];
+                return val === null || val === undefined || val === '';
+            });
+
+            if (isInvalid) {
+                skippedRows++;
+                return null;
+            }
+
             return mappedRow;
-        });
+        }).filter((item): item is any => item !== null);
+
+        if (enrichedData.length === 0) {
+             throw new Error(`未检测到有效数据。可能是因为所有行都缺少必填字段（如：日期、SKU编码等）。请检查 Excel 表头是否匹配。`);
+        }
+        
+        if (skippedRows > 0) {
+            console.warn(`[Data Import] Automatically skipped ${skippedRows} rows due to missing required fields (${requiredKeys.join(', ')}).`);
+        }
 
         // 写入数据库
         const tableName = `fact_${type}`;

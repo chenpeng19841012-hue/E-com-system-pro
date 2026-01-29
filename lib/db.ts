@@ -108,25 +108,36 @@ export const DB = {
       startDate?: string, 
       endDate?: string, 
       sku?: string, 
-      shopName?: string 
+      shopName?: string,
+      qualityFilter?: 'date_issue' | 'duplicates' | 'all'
   }, limit = 100): Promise<any[]> {
       const supabase = getClient();
       if (!supabase) return [];
 
       let query = supabase.from(tableName).select('*');
 
-      if (filters.startDate) query = query.gte('date', filters.startDate);
-      if (filters.endDate) query = query.lte('date', filters.endDate);
-      
-      if (filters.shopName && filters.shopName !== 'all') {
-          query = query.eq('shop_name', filters.shopName);
-      }
+      // 质量筛选：时间异常
+      if (filters.qualityFilter === 'date_issue') {
+          // 查找 date 为 NULL 或 空字符串的情况
+          // 注意：Supabase/Postgrest 并没有直接的 isNaN 检查，主要检查 NULL 和空值
+          // 真正的格式错误通常在插入时已被 Schema 拦截，或者存储为非法 Date
+          query = query.or('date.is.null,date.eq.""');
+      } 
+      // 质量筛选：重复数据 (此处不处理，由 getDuplicatePreview 处理)
+      else {
+          if (filters.startDate) query = query.gte('date', filters.startDate);
+          if (filters.endDate) query = query.lte('date', filters.endDate);
+          
+          if (filters.shopName && filters.shopName !== 'all') {
+              query = query.eq('shop_name', filters.shopName);
+          }
 
-      if (filters.sku) {
-          if (tableName === 'fact_shangzhi') {
-              query = query.or(`sku_code.ilike.%${filters.sku}%,product_name.ilike.%${filters.sku}%`);
-          } else if (tableName === 'fact_jingzhuntong') {
-              query = query.or(`tracked_sku_id.ilike.%${filters.sku}%`);
+          if (filters.sku) {
+              if (tableName === 'fact_shangzhi') {
+                  query = query.or(`sku_code.ilike.%${filters.sku}%,product_name.ilike.%${filters.sku}%`);
+              } else if (tableName === 'fact_jingzhuntong') {
+                  query = query.or(`tracked_sku_id.ilike.%${filters.sku}%`);
+              }
           }
       }
 
@@ -137,6 +148,98 @@ export const DB = {
           return [];
       }
       return data || [];
+  },
+
+  // 获取重复数据预览 (最近 2000 条内检测)
+  async getDuplicatePreview(tableName: string): Promise<any[]> {
+      const supabase = getClient();
+      if (!supabase) return [];
+      
+      // 获取最近的一批数据进行检测
+      const { data, error } = await supabase.from(tableName).select('*').order('date', { ascending: false }).limit(2000);
+      if (error || !data) return [];
+
+      const seen = new Set<string>();
+      const duplicates: any[] = [];
+
+      data.forEach(row => {
+          // 构建唯一指纹 (排除 id, created_at, updated_at)
+          const { id, created_at, updated_at, ...rest } = row;
+          // 对 keys 排序以确保稳定性
+          const signature = JSON.stringify(rest, Object.keys(rest).sort());
+          
+          if (seen.has(signature)) {
+              duplicates.push(row);
+          } else {
+              seen.add(signature);
+          }
+      });
+
+      return duplicates;
+  },
+
+  // 执行全表去重
+  async deduplicateTable(tableName: string, onProgress?: (processed: number, deleted: number) => void): Promise<number> {
+      const supabase = getClient();
+      if (!supabase) throw new Error("No connection");
+
+      // 1. 分页拉取全量数据
+      let allRows: any[] = [];
+      let page = 0;
+      const pageSize = 2000;
+      let hasMore = true;
+      let totalFetched = 0;
+
+      while(hasMore) {
+          const { data, error } = await supabase.from(tableName).select('*').range(page * pageSize, (page + 1) * pageSize - 1);
+          if (error || !data || data.length === 0) { hasMore = false; break; }
+          
+          allRows = allRows.concat(data);
+          totalFetched += data.length;
+          
+          if (data.length < pageSize) hasMore = false;
+          page++;
+          
+          if (onProgress) onProgress(totalFetched, 0);
+          await sleep(20); // 避免主线程卡顿
+      }
+
+      // 2. 内存中识别重复项
+      const map = new Map<string, number>(); // Signature -> ID (keep the largest/latest ID)
+      const idsToDelete: number[] = [];
+
+      allRows.forEach(r => {
+          const { id, created_at, updated_at, ...rest } = r;
+          const signature = JSON.stringify(rest, Object.keys(rest).sort());
+
+          if (map.has(signature)) {
+              // 已存在，比较 ID
+              const existingId = map.get(signature)!;
+              if (r.id > existingId) {
+                  // 当前 ID 更大（通常意味着更新），保留当前，删除旧的
+                  idsToDelete.push(existingId);
+                  map.set(signature, r.id);
+              } else {
+                  // 当前 ID 较小，删除当前
+                  idsToDelete.push(r.id);
+              }
+          } else {
+              map.set(signature, r.id);
+          }
+      });
+
+      // 3. 批量删除
+      if (idsToDelete.length > 0) {
+          const CHUNK_SIZE = 500;
+          for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
+              const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
+              await supabase.from(tableName).delete().in('id', chunk);
+              if (onProgress) onProgress(totalFetched, Math.min(i + CHUNK_SIZE, idsToDelete.length));
+              await sleep(50);
+          }
+      }
+
+      return idsToDelete.length;
   },
 
   // 核心上传逻辑：重构为稳健的光标循环模式

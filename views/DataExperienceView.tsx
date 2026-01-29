@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck } from 'lucide-react';
+import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck, CopyMinus } from 'lucide-react';
 import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
@@ -9,9 +9,9 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { DB } from '../lib/db';
 
 // 进度弹窗 - 指挥中心风格
-const ProgressModal = ({ isOpen, current, total }: { isOpen: boolean, current: number, total: number }) => {
+const ProgressModal = ({ isOpen, current, total, mode = 'delete' }: { isOpen: boolean, current: number, total: number, mode?: 'delete' | 'dedupe' }) => {
     if (!isOpen) return null;
-    const percent = Math.floor((current / total) * 100);
+    const percent = total > 0 ? Math.floor((current / total) * 100) : 0;
 
     return (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
@@ -36,8 +36,8 @@ const ProgressModal = ({ isOpen, current, total }: { isOpen: boolean, current: n
                         <LoaderCircle className="animate-spin text-brand" size={32} />
                     </div>
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 mb-2">执行物理层空间清理</h3>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Atomic Erasure in Progress</p>
+                <h3 className="text-2xl font-black text-slate-900 mb-2">{mode === 'dedupe' ? '全量去重扫描中' : '执行物理层空间清理'}</h3>
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-10">Atomic {mode === 'dedupe' ? 'Scanning & Merging' : 'Erasure in Progress'}</p>
                 
                 <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-4 p-0.5 shadow-inner">
                     <div className="bg-brand h-full rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(112,173,71,0.5)]" style={{ width: `${percent}%` }}></div>
@@ -45,7 +45,7 @@ const ProgressModal = ({ isOpen, current, total }: { isOpen: boolean, current: n
                 
                 <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
                     <span>Progress: {percent}%</span>
-                    <span>{current.toLocaleString()} / {total.toLocaleString()} Rows</span>
+                    <span>{mode === 'dedupe' ? `Scanned: ${current.toLocaleString()}` : `${current.toLocaleString()} / ${total.toLocaleString()} Rows`}</span>
                 </div>
             </div>
         </div>
@@ -171,8 +171,9 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
     const [isClearModalOpen, setIsClearModalOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [isDeleteSelectedModalOpen, setIsDeleteSelectedModalOpen] = useState(false);
+    const [isDedupeModalOpen, setIsDedupeModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
-    const [deleteProgress, setDeleteProgress] = useState<{ current: number, total: number } | null>(null);
+    const [deleteProgress, setDeleteProgress] = useState<{ current: number, total: number, mode?: 'delete' | 'dedupe' } | null>(null);
     
     // Search & Data States
     const [tableTypeSearch, setTableTypeSearch] = useState<TableType>('shangzhi');
@@ -180,6 +181,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
     const [shopSearch, setShopSearch] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [qualityFilter, setQualityFilter] = useState<'all' | 'date_issue' | 'duplicates'>('all');
     
     // Data Management
     const [tableData, setTableData] = useState<any[]>([]);
@@ -209,17 +211,29 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
         setIsLoadingData(true);
         setSelectedRowIds(new Set());
         try {
-            // [Fix] Call Server-Side Search instead of filtering empty props
-            const data = await DB.queryData(`fact_${tableTypeSearch}`, {
-                startDate: startDate || undefined,
-                endDate: endDate || undefined,
-                sku: skuSearch || undefined,
-                shopName: shopSearch || undefined
-            }, 10); // Limit to 10 rows for performance
-            setTableData(data);
-            if (data.length === 0) {
-                addToast('info', '检索完成', '未找到匹配的物理记录。');
+            let data = [];
+            if (qualityFilter === 'duplicates') {
+                // 执行特定的重复检查逻辑 (预览最近 2000 条)
+                data = await DB.getDuplicatePreview(`fact_${tableTypeSearch}`);
+                if (data.length === 0) {
+                    addToast('info', '质量检查通过', '最近 2000 条记录中未发现完全重复数据。');
+                } else {
+                    addToast('warning', '发现冗余', `检测到 ${data.length} 条重复数据 (预览模式)。请使用“执行去重”功能清洗。`);
+                }
+            } else {
+                // 标准查询
+                data = await DB.queryData(`fact_${tableTypeSearch}`, {
+                    startDate: startDate || undefined,
+                    endDate: endDate || undefined,
+                    sku: skuSearch || undefined,
+                    shopName: shopSearch || undefined,
+                    qualityFilter: qualityFilter
+                }, 10);
+                if (data.length === 0) {
+                    addToast('info', '检索完成', '未找到匹配的物理记录。');
+                }
             }
+            setTableData(data);
         } catch (e: any) {
             addToast('error', '检索失败', e.message);
         } finally {
@@ -250,13 +264,13 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
         const allIdsToDelete = Array.from(selectedRowIds);
         const total = allIdsToDelete.length;
         setIsDeleteSelectedModalOpen(false);
-        setDeleteProgress({ current: 0, total });
+        setDeleteProgress({ current: 0, total, mode: 'delete' });
         const CHUNK_SIZE = 5000;
         try {
             for (let i = 0; i < total; i += CHUNK_SIZE) {
                 const chunk = allIdsToDelete.slice(i, i + CHUNK_SIZE);
                 await onDeleteRows(tableTypeSearch, chunk);
-                setDeleteProgress({ current: Math.min(i + CHUNK_SIZE, total), total });
+                setDeleteProgress({ current: Math.min(i + CHUNK_SIZE, total), total, mode: 'delete' });
                 await new Promise(r => setTimeout(r, 50));
             }
             // Refresh local data view
@@ -267,9 +281,26 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
         finally { setSelectedRowIds(new Set()); setDeleteProgress(null); }
     };
 
+    const handleExecuteDedupe = async () => {
+        setIsDedupeModalOpen(false);
+        setDeleteProgress({ current: 0, total: 100, mode: 'dedupe' });
+        try {
+            const removedCount = await DB.deduplicateTable(`fact_${tableTypeSearch}`, (scanned, deleted) => {
+                setDeleteProgress({ current: scanned, total: 100, mode: 'dedupe' });
+            });
+            await handleExecuteSearch();
+            await onRefreshData();
+            addToast('success', '去重完成', `全表扫描结束，共清洗 ${removedCount} 条冗余物理数据。`);
+        } catch (e: any) {
+            addToast('error', '去重失败', e.message);
+        } finally {
+            setDeleteProgress(null);
+        }
+    };
+
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
-            <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} />
+            <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} mode={deleteProgress?.mode} />
             
             <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setTableData([]); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>正在执行物理层移除指令：<strong className="font-black text-slate-900">[{getTableName(tableTypeSearch)}]</strong></p>
@@ -279,6 +310,15 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
             <ConfirmModal isOpen={isDeleteSelectedModalOpen} title="批量物理记录注销" onConfirm={handleConfirmDeleteSelected} onCancel={() => setIsDeleteSelectedModalOpen(false)} confirmText="确认移除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>您已勾选 <strong className="font-black text-rose-600">{selectedRowIds.size.toLocaleString()}</strong> 条物理事实行。</p>
                 <p className="mt-2 text-slate-500 font-bold opacity-80">执行后，本地库对应空间将被回收。确认物理移除？</p>
+            </ConfirmModal>
+
+            <ConfirmModal isOpen={isDedupeModalOpen} title="全量物理去重扫描" onConfirm={handleExecuteDedupe} onCancel={() => setIsDedupeModalOpen(false)} confirmText="开始扫描并去重" confirmButtonClass="bg-brand hover:bg-[#5da035] shadow-brand/20">
+                <p>即将对 <strong className="font-black text-slate-900">[{getTableName(tableTypeSearch)}]</strong> 执行全量去重操作。</p>
+                <ul className="mt-3 text-slate-500 font-bold text-xs space-y-2 list-disc pl-4">
+                    <li>扫描所有物理记录。</li>
+                    <li>识别所有字段（除 ID 外）完全相同的记录。</li>
+                    <li><span className="text-brand">保留最新的一条</span>，物理删除其余重复项。</li>
+                </ul>
             </ConfirmModal>
 
             <ConfirmModal isOpen={isResetModalOpen} title="重置物理映射架构" onConfirm={handleConfirmResetSchema} onCancel={() => setIsResetModalOpen(false)} confirmText="执行重置" confirmButtonClass="bg-orange-500 hover:bg-orange-600 shadow-orange-500/20">
@@ -368,15 +408,22 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">资产/映射 ID 检索</label>
-                                    <div className="relative"><Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" /><input placeholder="SKU / PID / Tracked ID (模糊)" className="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:border-brand shadow-sm" value={skuSearch} onChange={(e) => setSkuSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleExecuteSearch()} /></div>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">数据质量诊断</label>
+                                    <div className="relative">
+                                        <select value={qualityFilter} onChange={e => setQualityFilter(e.target.value as any)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm">
+                                            <option value="all">全量数据 (All Records)</option>
+                                            <option value="date_issue">❌ 时间空值/异常 (Date Errors)</option>
+                                            <option value="duplicates">⚠️ 完全重复数据 (Duplicate Rows)</option>
+                                        </select>
+                                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">物理时间跨度</label>
                                     <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-2 py-1.5 shadow-sm"><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[9px] font-black text-slate-600 px-1 outline-none" /><span className="text-slate-300 font-black">/</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[9px] font-black text-slate-600 px-1 outline-none" /></div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">资产归属/清洗状态</label>
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">资产归属筛选</label>
                                     <div className="relative">
                                         <select value={shopSearch} onChange={e => setShopSearch(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm">
                                             <option value="">所有物理记录</option>
@@ -397,7 +444,10 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                                     {selectedRowIds.size > 0 && <div className="px-5 py-3.5 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3"><Trash2 size={14} className="text-rose-500"/><span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">已锁定物理行: {selectedRowIds.size.toLocaleString()}</span></div>}
                                 </div>
                                 <div className="flex gap-3">
-                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
+                                    <button onClick={() => setIsDedupeModalOpen(true)} className="px-8 py-4 rounded-[22px] bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 hover:text-brand hover:border-brand transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                        <CopyMinus size={14} /> 执行去重
+                                    </button>
+                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
                                     <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-12 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
                                         {isLoadingData ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16}/>}
                                         {isLoadingData ? '穿透中...' : '执行云端探测'}
