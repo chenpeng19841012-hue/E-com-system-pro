@@ -37,10 +37,10 @@ const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.
 const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, activeMetric }: any) => {
     if (!isOpen) return null;
 
-    const { enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap } = filters;
+    const { enabledSkusMap, disabledSkuCodes, shopIdToMode, shopMap } = filters;
     const szData = rawData?.shangzhi || [];
     
-    // --- Metric Breakdown Logic (Same strict logic as main dashboard) ---
+    // --- Metric Breakdown Logic (Strict SKU Asset Check) ---
     const calculateBreakdown = () => {
         const skuAgg: Record<string, { code: string, name: string, shop: string, val: number }> = {};
         const dateAgg: Record<string, { date: string, val: number }> = {};
@@ -63,20 +63,15 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
 
             const skuConfig = enabledSkusMap.get(code);
 
+            // STRICT LOGIC: Row is valid ONLY if SKU is known (in enabledSkusMap) AND Shop is tracked.
             if (skuConfig) {
-                // Case A: Known Enabled SKU -> Check if its Shop is in the configured list
                 const shopMode = shopIdToMode.get(skuConfig.shopId);
                 if (shopMode) {
                     shouldCount = true;
                     shopName = shopMap.get(skuConfig.shopId)?.name || shopName;
                 }
-            } else if (r.shop_name) {
-                // Case B: Unknown SKU -> Check shop whitelist based on row data
-                const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                if (matchedMode) {
-                    shouldCount = true;
-                }
-            }
+            } 
+            // NO FALLBACK for unknown SKUs, even if shop matches.
 
             if (!shouldCount) {
                 droppedRowsCount++;
@@ -89,7 +84,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
             let val = 0;
             if (activeMetric === 'ca') val = Number(r.paid_items) || 0;
             else if (activeMetric === 'gmv') val = Number(r.paid_amount) || 0;
-            else if (activeMetric === 'spend') val = 0; // Spend is in Jzt table, handled simply here for SZ context
+            else if (activeMetric === 'spend') val = 0; 
             
             totalVal += val;
 
@@ -153,7 +148,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
                             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">被过滤行数 (Ignored)</p>
                             <p className="text-lg font-black text-rose-400 mt-1">{stats.droppedRowsCount.toLocaleString()}</p>
-                            <p className="text-[8px] text-slate-600 mt-1">因店铺不在名录或 SKU 被禁用</p>
+                            <p className="text-[8px] text-slate-600 mt-1">因 SKU 未登记、被禁用或店铺不在名录</p>
                         </div>
                     </div>
 
@@ -225,14 +220,10 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
     );
 };
 
-// ----------------------------------------------------------------------
-// MAIN DASHBOARD COMPONENT
-// ----------------------------------------------------------------------
-
-// 诊断卡片组件 - 紧凑版适配
+// ... (DiagnosisCard, SubValueTrend, KPICard, MainTrendVisual components - reuse existing implementations)
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClickMore?: () => void }> = ({ d, mode = 'carousel', onClickMore }) => {
     const detailEntries = Object.entries(d.details);
-    const limit = mode === 'carousel' ? 2 : 100; // Carousel 模式下只显示前2条，更紧凑
+    const limit = mode === 'carousel' ? 2 : 100;
     const visibleDetails = detailEntries.slice(0, limit);
     const hiddenCount = detailEntries.length - limit;
 
@@ -269,18 +260,14 @@ const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClic
 };
 
 const SubValueTrend = ({ current, previous, isHigherBetter = true }: { current: number, previous: number, isHigherBetter?: boolean }) => {
-    // 允许 0 的显示，只有当 previous 为 0 且 current 也为 0 时才不显示趋势
     if (previous === 0 && current === 0) return null;
-    
     let chg = 0;
     if (previous === 0) {
-        chg = 100; // 从0增长到非0，视为100%增长
+        chg = 100;
     } else {
         chg = ((current - previous) / previous) * 100;
     }
-    
     const isGood = (chg >= 0 && isHigherBetter) || (chg < 0 && !isHigherBetter);
-    
     return (
         <div className={`flex items-center gap-0.5 font-black text-[10px] mt-0.5 ${isGood ? 'text-green-500' : 'text-rose-500'}`}>
             {chg >= 0 ? <ArrowUp size={8} strokeWidth={4}/> : <ArrowDown size={8} strokeWidth={4}/>}
@@ -335,11 +322,9 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
 const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: MetricKey }) => {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
-    // Adjusted height for compressed container (420px total height -> approx 240px chart area)
     const width = 1000; const height = 240; const padding = { top: 20, right: 30, bottom: 30, left: 50 };
     const maxVal = Math.max(...data.map(d => Math.max(d.self, d.pop)), 0.1) * 1.2;
     
-    // Fix: Handle single data point case to prevent division by zero
     const getX = (i: number) => {
         if (data.length <= 1) return width / 2;
         return padding.left + (i / (data.length - 1)) * (width - padding.left - padding.right);
@@ -364,7 +349,6 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
         </div>
     );
 
-    // Render single point if only 1 day selected
     if (data.length === 1) {
         return (
             <div className="w-full h-full relative group/canvas flex items-center justify-center">
@@ -441,16 +425,13 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
 export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
-    // Default to '7d' to auto-snap to anchor
     const [rangeType, setRangeType] = useState<RangeType>('7d');
     
-    // Data Anchors & Status
     const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [isDataStale, setIsDataStale] = useState(false);
     const [viewRangeDisplay, setViewRangeDisplay] = useState('');
-    const [isDebugOpen, setIsDebugOpen] = useState(false); // Debugger toggle
+    const [isDebugOpen, setIsDebugOpen] = useState(false);
     
-    // Debug Data Storage
     const [debugRawData, setDebugRawData] = useState<{shangzhi: any[], jingzhuntong: any[]}>({ shangzhi: [], jingzhuntong: [] });
 
     const [customRange, setCustomRange] = useState({
@@ -470,19 +451,15 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
     const [diagOffset, setDiagOffset] = useState(0);
 
-    // Dynamic Version Calculation
     const totalRows = (factStats?.shangzhi?.count || 0) + (factStats?.jingzhuntong?.count || 0) + (factStats?.customer_service?.count || 0);
     const systemVersion = `v6.0.${totalRows.toLocaleString().replace(/,/g, '')}`;
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
-            // EXPERT MODE: Trust the data source strictly.
-            // If latest data is 2026-01-28, set that as anchor.
             setDataAnchorDate(factStats.shangzhi.latestDate);
         }
     }, [factStats]);
 
-    // Use Sets for O(1) lookup of enabled/disabled SKUs
     const { enabledSkusMap, disabledSkuCodes } = useMemo(() => {
         const enabled = new Map<string, ProductSKU>();
         const disabled = new Set<string>();
@@ -501,7 +478,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
     const shopMap = useMemo(() => new Map(shops.map(s => [s.id, s])), [shops]);
     
-    // Create a reverse mapping for Shop Name -> Mode (Fallback mechanism)
+    // Reverse shop mapping for loose matching (Deprecated but kept for reference)
     const shopNameToMode = useMemo(() => {
         const map = new Map<string, string>();
         shops.forEach(s => map.set(s.name.trim(), s.mode));
@@ -518,22 +495,17 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         setIsLoading(true);
         setIsDataStale(false);
 
-        // EXPERT MODE: All relative dates are relative to dataAnchorDate, NOT System Time.
-        // This solves the issue where data is in 2026 but system is 2025.
-        
         let start = "";
         let end = "";
         
         const anchor = new Date(dataAnchorDate);
-        const anchorStr = dataAnchorDate; // 2026-01-28
+        const anchorStr = dataAnchorDate;
 
         if (rangeType === 'realtime') {
-            // "Realtime" in this context means "Latest Available Data"
             start = end = anchorStr;
             const systemToday = new Date().toISOString().split('T')[0];
             if (dataAnchorDate < systemToday) setIsDataStale(true);
         } else if (rangeType === 'yesterday') {
-            // "Yesterday" relative to latest data
             const y = new Date(anchor);
             y.setDate(y.getDate() - 1);
             start = end = y.toISOString().split('T')[0];
@@ -541,7 +513,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             start = customRange.start;
             end = customRange.end;
         } else {
-            // 7d, 30d
             const daysMap: Record<string, number> = { '7d': 6, '30d': 29 };
             const days = daysMap[rangeType] || 6;
             const refTime = anchor.getTime();
@@ -557,22 +528,16 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         const prevStart = new Date(prevEndTimestamp - (diff - 1) * 86400000).toISOString().split('T')[0];
 
         try {
-            // Optimize: Check if cachedData (last 60 days from anchor) covers the requested range
-            // The cachedData comes from App.tsx which fetches relative to the *same* anchor logic
             let currSz = [], currJzt = [], prevSz = [], prevJzt = [];
             
-            // App.tsx ensures cachedData covers [Anchor - 90d, Anchor]
-            // So for standard ranges relative to Anchor, cache should hit.
             const isRangeCached = (rangeType !== 'custom') && cachedData && cachedData.shangzhi.length > 0;
 
             if (isRangeCached && cachedData) {
-                // Filter from memory cache
                 currSz = cachedData.shangzhi.filter(r => r.date >= start && r.date <= end);
                 currJzt = cachedData.jingzhuntong.filter(r => r.date >= start && r.date <= end);
                 prevSz = cachedData.shangzhi.filter(r => r.date >= prevStart && r.date <= prevEnd);
                 prevJzt = cachedData.jingzhuntong.filter(r => r.date >= prevStart && r.date <= prevEnd);
             } else {
-                // Fetch from Cloud (Fallback for custom ranges or if cache is empty)
                 [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
                     DB.getRange('fact_shangzhi', start, end),
                     DB.getRange('fact_jingzhuntong', start, end),
@@ -581,7 +546,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 ]);
             }
             
-            // Update Debug Context for the Inspector Modal
             setDebugRawData({ shangzhi: currSz, jingzhuntong: currJzt });
 
             const processStats = (sz: any[], jzt: any[]) => {
@@ -589,9 +553,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 
                 sz.forEach(r => {
                     const code = getSkuIdentifier(r)?.trim();
-                    if (!code) return; // Skip invalid rows
+                    if (!code) return;
 
-                    // 1. Strict Filter: If explicitly disabled, skip immediately
                     if (disabledSkuCodes.has(code)) return;
 
                     let mode = '自营';
@@ -600,27 +563,13 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const skuConfig = enabledSkusMap.get(code);
 
                     if (skuConfig) {
-                        // Case A: Known Enabled SKU -> Check if its Shop is in the configured list
                         const shopMode = shopIdToMode.get(skuConfig.shopId);
                         if (shopMode) {
                             mode = shopMode;
                             shouldCount = true;
                         }
-                        // If shop not found in shopIdToMode (e.g. deleted shop), shouldCount remains false.
-                    } else {
-                        // Case B: Unknown SKU (Not in assets DB)
-                        // Must check if it belongs to a configured Shop
-                        if (r.shop_name) {
-                            const shopName = r.shop_name.trim();
-                            const matchedMode = shopNameToMode.get(shopName);
-                            if (matchedMode) {
-                                // Shop is tracked -> Count it
-                                mode = matchedMode;
-                                shouldCount = true;
-                            } 
-                            // Else: Shop is NOT tracked -> Ignore (Removed previous Case C)
-                        }
                     }
+                    // STRICT CHECK: NO ELSE BLOCK for unknown SKUs
 
                     if (shouldCount) {
                         const val = Number(r.paid_amount) || 0;
@@ -642,26 +591,20 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
-                    if (disabledSkuCodes.has(code)) return; // Skip disabled
+                    if (disabledSkuCodes.has(code)) return;
 
                     const skuConfig = enabledSkusMap.get(code);
                     let mode = '自营';
                     let shouldCount = false;
 
                     if (skuConfig) {
-                        // FIX HERE: Strict Shop Check for Ads too
                         const shopMode = shopIdToMode.get(skuConfig.shopId);
                         if (shopMode) {
                             mode = shopMode;
                             shouldCount = true;
                         }
-                    } else if (r.shop_name) {
-                        const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                        if (matchedMode) {
-                            mode = matchedMode;
-                            shouldCount = true;
-                        }
                     }
+                    // STRICT CHECK: NO ELSE BLOCK for unknown SKUs
 
                     if (shouldCount) {
                         const cost = Number(r.cost) || 0;
@@ -684,31 +627,25 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             
             const factorTable = activeMetric === 'gmv' ? currSz : (activeMetric === 'spend' ? currJzt : currSz);
             factorTable.forEach(r => {
-                if (!dailyAgg[r.date]) return; // Skip if date out of range (defensive)
+                if (!dailyAgg[r.date]) return;
                 
                 const code = getSkuIdentifier(r)?.trim();
                 if (!code) return;
                 
-                if (disabledSkuCodes.has(code)) return; // Skip disabled
+                if (disabledSkuCodes.has(code)) return;
 
                 const skuConfig = enabledSkusMap.get(code);
                 let mode = '自营';
                 let shouldCount = false;
 
                 if (skuConfig) {
-                    // FIX HERE: Strict Shop Check for Trend Chart
                     const shopMode = shopIdToMode.get(skuConfig.shopId);
                     if (shopMode) {
                         mode = shopMode;
                         shouldCount = true;
                     }
-                } else if (r.shop_name) {
-                    const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                    if (matchedMode) {
-                        mode = matchedMode;
-                        shouldCount = true;
-                    }
                 }
+                // STRICT CHECK: NO ELSE BLOCK
 
                 if (shouldCount) {
                     let val = 0;
@@ -716,11 +653,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     else if (activeMetric === 'ca') val = Number(r.paid_items);
                     else if (activeMetric === 'spend') val = Number(r.cost);
                     else if (activeMetric === 'roi') {
-                        // ROI calc logic... simplified for trend accumulation, logic needs aggregation first ideally
-                        // For daily trend, we can just sum numerator here, but ROI trend is tricky. 
-                        // Let's stick to simple sum for GMV/Spend trends.
-                        // If user selects ROI trend, we might show GMV trend or calculate correctly.
-                        // Current logic: Sum of paid amount for Self/POP for visual.
                         val = Number(r.paid_amount); 
                     }
                     
@@ -742,11 +674,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             });
             setTrends(Object.values(dailyAgg));
 
-            // Diagnostics Logic (Only run if we have data)
             const diag: Diagnosis[] = [];
             const currSkusSet = new Set(currSz.map(getSkuIdentifier));
             
-            // Helper to get enriched SKU info string
             const getSkuInfoStr = (code: string) => {
                 const s = enabledSkusMap.get(code);
                 if (!s) return code;
