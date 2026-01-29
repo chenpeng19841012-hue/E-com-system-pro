@@ -1,7 +1,7 @@
 
 /**
  * Cloud-Native Database Adapter
- * v5.5.0 Upgrade: Real-time Speed Calculation & Anti-Freeze Logic
+ * v5.6.0 Upgrade: Stability Patch for Large Datasets
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -164,14 +164,23 @@ export const DB = {
     const cleanData = rows.map(({ id, ...rest }: any) => {
         const clean = { ...rest };
         if (tableName.startsWith('fact_')) { delete clean.id; }
+        
         // 强制转换日期格式，防止 Supabase 报错
         if (clean.date instanceof Date) clean.date = clean.date.toISOString().split('T')[0];
         if (typeof clean.date === 'string' && clean.date.includes('T')) { clean.date = clean.date.split('T')[0]; }
         
         clean.updated_at = new Date().toISOString(); 
-        // 移除 undefined，转换 null
+        
+        // 移除 undefined，转换 null，处理数值异常
         Object.keys(clean).forEach(key => { 
-            if (clean[key] === undefined) clean[key] = null; 
+            const val = clean[key];
+            if (val === undefined) {
+                clean[key] = null; 
+            } else if (typeof val === 'number') {
+                // 修复 Infinity / NaN 导致的网络传输错误
+                if (!isFinite(val) || isNaN(val)) clean[key] = 0;
+            }
+            
             // 确保 account_nickname 存在，否则联合主键会失败
             if (key === 'account_nickname' && !clean[key]) clean[key] = 'default';
         });
@@ -181,8 +190,8 @@ export const DB = {
     const total = cleanData.length;
     let processed = 0;
     
-    // 初始批量大小
-    let currentBatchSize = 100; 
+    // 稳定性优化：降低默认批次大小 (100 -> 50)，防止 Payload Too Large 或网络超时
+    let currentBatchSize = 50; 
 
     if (onProgress) onProgress(0, total);
 
@@ -211,16 +220,18 @@ export const DB = {
                 success = true;
                 processed += chunk.length;
                 
-                // 如果成功且批量很小，尝试慢慢恢复
-                if (currentBatchSize < 200) currentBatchSize = Math.min(200, currentBatchSize * 2);
+                // 成功后也不要急着增加 batch size，保持稳定
+                // if (currentBatchSize < 200) currentBatchSize = Math.min(200, currentBatchSize * 2);
 
             } catch (e: any) {
                 lastError = e;
                 
                 // 遇到容量/超时问题，立即降级
-                if (e.isSizeIssue || e.message?.includes('timeout') || e.message?.includes('fetch')) {
-                    console.warn(`[Cloud] Batch too large or timeout. Reducing size from ${currentBatchSize} to ${Math.max(10, Math.floor(currentBatchSize / 2))}`);
-                    currentBatchSize = Math.max(10, Math.floor(currentBatchSize / 2));
+                if (e.isSizeIssue || e.message?.includes('timeout') || e.message?.includes('fetch') || e.message?.includes('NetworkError')) {
+                    console.warn(`[Cloud] Network/Size issue. Reducing batch size from ${currentBatchSize} to ${Math.max(10, Math.floor(currentBatchSize / 2))}`);
+                    currentBatchSize = Math.max(5, Math.floor(currentBatchSize / 2));
+                    // 严重错误时等待更久
+                    await sleep(2000);
                     // 不扣减 retries，直接用新 size 重试当前 processed 游标
                     break; 
                 }
@@ -240,6 +251,10 @@ export const DB = {
             if (lastError?.code === '42501') {
                 throw new Error(`权限不足 (RLS Policy Violation)。请在 Supabase 执行 SQL 脚本授予匿名写入权限。`);
             }
+            if (lastError?.code === '23505') {
+                 // Unique violation handled by onConflict usually, but just in case
+                 throw new Error(`数据冲突 (Unique Key Violation)。请检查去重键配置。`);
+            }
             
             throw new Error(`写入中断 (Row ${processed + 1}): ${msg} ${hint} ${details}`);
         }
@@ -248,8 +263,8 @@ export const DB = {
             onProgress(processed, total);
         }
 
-        // [关键] 释放主线程，防止浏览器在百万行处理时假死
-        await new Promise(r => setTimeout(r, 5));
+        // [关键优化] 增加批次间的喘息时间 (Throttling)，防止浏览器并发限制
+        await new Promise(r => setTimeout(r, 50));
     }
   },
 
