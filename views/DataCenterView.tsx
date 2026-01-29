@@ -279,9 +279,9 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
     <>
       <SyncProgressModal isOpen={isProcessing} stats={uploadStats} />
       
-      <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
+      <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
         {/* Command Header - Standardized */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-200 pb-6">
             <div>
                 <div className="flex items-center gap-3 mb-2">
                     <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
@@ -293,8 +293,8 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
             <div className="flex gap-4">
                 <button 
                     onClick={() => setIsToolboxOpen(!isToolboxOpen)}
-                    className={`flex items-center gap-3 px-8 py-3.5 rounded-[22px] font-black text-xs transition-all shadow-xl active:scale-95 uppercase tracking-widest ${isToolboxOpen ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                    <Wrench size={16} /> 物理层治理工具箱
+                    className={`flex items-center gap-3 px-8 py-3 rounded-[22px] font-black text-xs transition-all shadow-xl active:scale-95 uppercase tracking-widest ${isToolboxOpen ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                    <Wrench size={14} /> 物理层治理工具箱
                 </button>
             </div>
         </div>
@@ -330,34 +330,34 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
             </div>
         )}
 
-        {/* High-Impact Statistics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
-            <StatCard label="商智核心事实行" value={shangzhiCount} date={shangzhiLatestDate} icon={<Database size={22}/>} color="text-brand" bg="bg-brand/5" />
-            <StatCard label="广告投放事实行" value={jingzhuntongCount} date={jingzhuntongLatestDate} icon={<BarChart3 size={22}/>} color="text-blue-600" bg="bg-blue-50" />
-            <StatCard label="客服接待流水" value={csCount} date="N/A" icon={<Headset size={22}/>} color="text-purple-600" bg="bg-purple-50" />
-            <StatCard label="物理空间占用" value={`${sizeMB} MB`} date="Cloud Native" icon={<Server size={22}/>} color="text-slate-900" bg="bg-slate-50" />
+        {/* High-Impact Statistics Grid - Compressed */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <StatCard label="商智核心事实行" value={shangzhiCount} date={shangzhiLatestDate} icon={<Database size={20}/>} color="text-brand" bg="bg-brand/5" />
+            <StatCard label="广告投放事实行" value={jingzhuntongCount} date={jingzhuntongLatestDate} icon={<BarChart3 size={20}/>} color="text-blue-600" bg="bg-blue-50" />
+            <StatCard label="客服接待流水" value={csCount} date="N/A" icon={<Headset size={20}/>} color="text-purple-600" bg="bg-purple-50" />
+            <StatCard label="物理空间占用" value={`${sizeMB} MB`} date="Cloud Native" icon={<Server size={20}/>} color="text-slate-900" bg="bg-slate-50" />
         </div>
 
-        {/* Unified Operations Card */}
-        <div className="bg-white rounded-[56px] shadow-sm border border-slate-100 p-12 relative overflow-hidden group">
+        {/* Unified Operations Card - Compressed */}
+        <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 p-8 relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.025),transparent_70%)] pointer-events-none"></div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 relative z-10">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 relative z-10">
                 {/* Section 2: Sync Engine (The Centerpiece) */}
-                <div className="lg:col-span-8 space-y-8">
+                <div className="lg:col-span-8 space-y-6">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center text-brand shadow-inner">
-                            <UploadCloud size={24} />
+                        <div className="w-10 h-10 rounded-2xl bg-brand/10 flex items-center justify-center text-brand shadow-inner">
+                            <UploadCloud size={20} />
                         </div>
                         <div>
                             <h3 className="font-black text-slate-800 text-lg tracking-tight uppercase">物理同步引擎</h3>
-                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">ETL Core Pipeline</p>
+                            <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">ETL Core Pipeline</p>
                         </div>
                     </div>
 
                     {!stagedAnalysis ? (
                         /* State 1: Upload & Initial Config */
-                        <div className="space-y-8 animate-fadeIn">
+                        <div className="space-y-6 animate-fadeIn">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">目标原子表</label>
@@ -365,7 +365,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                         <select 
                                             value={activeImportTab} 
                                             onChange={e => setActiveImportTab(e.target.value as TableType)}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-inner"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-inner"
                                         >
                                             <option value="shangzhi">商智: 销售事实</option>
                                             <option value="jingzhuntong">广告: 投放事实</option>
@@ -380,7 +380,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                         <select 
                                             value={defaultShopId} 
                                             onChange={e => setDefaultShopId(e.target.value)}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-inner"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-inner"
                                         >
                                             <option value="">-- 自动物理探测 --</option>
                                             {shops.map((s:Shop) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -390,21 +390,21 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[40px] p-12 flex flex-col items-center justify-center relative group/upload">
-                                <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl text-brand mb-6 group-hover/upload:scale-110 transition-transform duration-500">
-                                    {isAnalyzing ? <LoaderCircle size={36} className="animate-spin" /> : <UploadCloud size={36} />}
+                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[32px] p-8 flex flex-col items-center justify-center relative group/upload">
+                                <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-xl text-brand mb-4 group-hover/upload:scale-110 transition-transform duration-500">
+                                    {isAnalyzing ? <LoaderCircle size={28} className="animate-spin" /> : <UploadCloud size={28} />}
                                 </div>
-                                <div className="text-center mb-10">
-                                    <h4 className="font-black text-slate-900 text-lg tracking-tight">
+                                <div className="text-center mb-6">
+                                    <h4 className="font-black text-slate-900 text-sm tracking-tight">
                                         {isAnalyzing ? '正在解析物理结构...' : '点击挂载 Excel 物理文件'}
                                     </h4>
-                                    <p className="text-[10px] text-slate-400 font-black mt-2 tracking-[0.2em] uppercase italic">
+                                    <p className="text-[9px] text-slate-400 font-black mt-1 tracking-[0.2em] uppercase italic">
                                         支持超大数据量 (System Auto-Splitting Enabled)
                                     </p>
                                 </div>
                                 <div className="relative">
                                     <input type="file" onChange={handleFileSelect} accept=".xlsx, .xls" disabled={isAnalyzing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <button disabled={isAnalyzing} className="px-10 py-4 bg-white border-2 border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
+                                    <button disabled={isAnalyzing} className="px-8 py-3 bg-white border-2 border-slate-200 text-slate-500 font-black text-[10px] rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
                                         {isAnalyzing ? '分析中...' : '选择本地文件'}
                                     </button>
                                 </div>
@@ -412,27 +412,27 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                         </div>
                     ) : (
                         /* State 2: Analysis Result & Confirmation */
-                        <div className="space-y-8 animate-fadeIn">
-                            <div className="bg-blue-50/50 rounded-[32px] p-8 border border-blue-100 flex flex-col gap-6">
+                        <div className="space-y-6 animate-fadeIn">
+                            <div className="bg-blue-50/50 rounded-[32px] p-6 border border-blue-100 flex flex-col gap-4">
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-50"><FileText size={24}/></div>
+                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-50"><FileText size={20}/></div>
                                         <div>
-                                            <h4 className="text-lg font-black text-slate-800">{stagedAnalysis.fileName}</h4>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                            <h4 className="text-sm font-black text-slate-800">{stagedAnalysis.fileName}</h4>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
                                                 {stagedAnalysis.totalRows.toLocaleString()} Rows Detected
                                             </p>
                                         </div>
                                     </div>
                                     
                                     {/* 手动修正目标表功能，防止自动识别错误 */}
-                                    <div className="bg-white p-3 rounded-2xl flex items-center gap-3 border border-slate-100 shadow-sm">
-                                        <Database size={16} className="text-slate-400" />
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">目标写入表:</span>
+                                    <div className="bg-white p-2 rounded-2xl flex items-center gap-3 border border-slate-100 shadow-sm">
+                                        <Database size={14} className="text-slate-400" />
+                                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">目标写入表:</span>
                                         <select 
                                             value={stagedAnalysis.targetType} 
                                             onChange={(e) => setStagedAnalysis({...stagedAnalysis, targetType: e.target.value as TableType})}
-                                            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-black text-slate-800 outline-none focus:border-brand cursor-pointer hover:bg-slate-100 transition-colors appearance-none"
+                                            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-black text-slate-800 outline-none focus:border-brand cursor-pointer hover:bg-slate-100 transition-colors appearance-none"
                                         >
                                             <option value="shangzhi">商智 (Sales)</option>
                                             <option value="jingzhuntong">广告 (Ads)</option>
@@ -443,48 +443,48 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                                 
                                 {stagedAnalysis.chunks.length > 1 ? (
-                                    <div className="bg-white rounded-2xl p-6 border border-blue-100 shadow-sm">
-                                        <div className="flex items-center gap-3 text-blue-600 mb-4">
-                                            <Split size={18} />
-                                            <span className="text-xs font-black uppercase tracking-widest">大文件优化策略已激活</span>
+                                    <div className="bg-white rounded-2xl p-4 border border-blue-100 shadow-sm">
+                                        <div className="flex items-center gap-2 text-blue-600 mb-2">
+                                            <Split size={14} />
+                                            <span className="text-[10px] font-black uppercase tracking-widest">大文件优化策略已激活</span>
                                         </div>
-                                        <p className="text-xs text-slate-600 font-bold leading-relaxed mb-4">
+                                        <p className="text-[10px] text-slate-600 font-bold leading-relaxed mb-2">
                                             为防止浏览器内存溢出，系统已将数据自动拆分为 <strong className="text-slate-900">{stagedAnalysis.chunks.length}</strong> 个传输切片 (每片 {CHUNK_SIZE} 行)。
                                         </p>
                                         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                                             {stagedAnalysis.chunks.map((_, idx) => (
-                                                <div key={idx} className="flex-shrink-0 w-24 h-16 bg-blue-50 rounded-xl flex flex-col items-center justify-center border border-blue-100">
-                                                    <span className="text-[9px] font-black text-blue-400 uppercase">Part {idx+1}</span>
-                                                    <span className="text-xs font-black text-slate-700">{_.length} 行</span>
+                                                <div key={idx} className="flex-shrink-0 w-20 h-12 bg-blue-50 rounded-xl flex flex-col items-center justify-center border border-blue-100">
+                                                    <span className="text-[8px] font-black text-blue-400 uppercase">Part {idx+1}</span>
+                                                    <span className="text-[10px] font-black text-slate-700">{_.length} 行</span>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="bg-green-50 rounded-2xl p-4 border border-green-100 flex items-center gap-3">
-                                        <Check size={16} className="text-green-600" />
-                                        <span className="text-xs font-black text-green-700">文件规模正常，可直接同步。</span>
+                                    <div className="bg-green-50 rounded-2xl p-3 border border-green-100 flex items-center gap-3">
+                                        <Check size={14} className="text-green-600" />
+                                        <span className="text-[10px] font-black text-green-700">文件规模正常，可直接同步。</span>
                                     </div>
                                 )}
 
-                                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100 flex items-start gap-3">
-                                    <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                                <div className="bg-amber-50 rounded-2xl p-3 border border-amber-100 flex items-start gap-3">
+                                    <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
                                     <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">数据去重提示</p>
-                                        <p className="text-xs font-bold text-amber-600 leading-relaxed">
+                                        <p className="text-[9px] font-black text-amber-700 uppercase tracking-widest">数据去重提示</p>
+                                        <p className="text-[10px] font-bold text-amber-600 leading-relaxed">
                                             如果上传的行数 ({stagedAnalysis.totalRows}) 大于实际新增行数，说明部分数据因【{stagedAnalysis.targetType === 'jingzhuntong' ? '日期+账户+SKU+花费' : '日期+SKU'}】重复被自动合并更新。
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
-                                    <button onClick={handleCancelAnalysis} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:bg-slate-50 transition-all uppercase tracking-widest">取消操作</button>
+                                <div className="flex gap-4 pt-2">
+                                    <button onClick={handleCancelAnalysis} className="flex-1 py-3 bg-white border border-slate-200 text-slate-500 font-black text-[10px] rounded-2xl hover:bg-slate-50 transition-all uppercase tracking-widest">取消操作</button>
                                     <button 
                                         onClick={handleExecuteUpload} 
                                         disabled={isProcessing}
-                                        className="flex-[2] py-4 bg-brand text-white font-black text-xs rounded-2xl shadow-xl shadow-brand/20 hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 uppercase tracking-widest active:scale-95"
+                                        className="flex-[2] py-3 bg-brand text-white font-black text-[10px] rounded-2xl shadow-xl shadow-brand/20 hover:bg-[#5da035] transition-all flex items-center justify-center gap-3 uppercase tracking-widest active:scale-95"
                                     >
-                                        {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} className="fill-white" />}
+                                        {isProcessing ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} className="fill-white" />}
                                         {stagedAnalysis.chunks.length > 1 ? '执行分片同步' : '立即同步'}
                                     </button>
                                 </div>
@@ -494,10 +494,10 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                 </div>
 
                 {/* Section 3: Archive (Full Export) */}
-                <div className="lg:col-span-4 space-y-8">
+                <div className="lg:col-span-4 space-y-6">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-brand">
-                            <Archive size={24} />
+                        <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-brand">
+                            <Archive size={20} />
                         </div>
                         <div>
                             <h3 className="font-black text-slate-800 text-lg tracking-tight uppercase">物理归档</h3>
@@ -586,9 +586,9 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
 };
 
 const StatCard = ({ label, value, date, icon, color, bg }: any) => (
-    <div className={`bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm group hover:shadow-2xl transition-all duration-500 hover:-translate-y-1 relative overflow-hidden`}>
-        <div className="flex justify-between items-start mb-6">
-            <div className={`w-14 h-14 ${bg} rounded-2xl flex items-center justify-center ${color} shadow-inner group-hover:scale-110 transition-transform duration-500`}>{icon}</div>
+    <div className={`bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm group hover:shadow-2xl transition-all duration-500 hover:-translate-y-1 relative overflow-hidden`}>
+        <div className="flex justify-between items-start mb-4">
+            <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center ${color} shadow-inner group-hover:scale-110 transition-transform duration-500`}>{icon}</div>
             <div className="text-right">
                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</h4>
                 <div className="flex items-center gap-1.5 justify-end">
