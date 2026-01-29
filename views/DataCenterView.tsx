@@ -207,6 +207,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
 
         try {
             // 调用 App.tsx 传下来的直接数据处理接口
+            // 关键：直接使用 stagedAnalysis.targetType，这是用户最后确认的值
             await onImportData(chunkData, targetType, defaultShopId, fileName, (current: number, total: number) => {
                 setUploadStats(prev => ({ ...prev, current, total }));
             });
@@ -413,13 +414,31 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                         /* State 2: Analysis Result & Confirmation */
                         <div className="space-y-8 animate-fadeIn">
                             <div className="bg-blue-50/50 rounded-[32px] p-8 border border-blue-100 flex flex-col gap-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-50"><FileText size={24}/></div>
-                                    <div>
-                                        <h4 className="text-lg font-black text-slate-800">{stagedAnalysis.fileName}</h4>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                                            {stagedAnalysis.totalRows.toLocaleString()} Rows Detected
-                                        </p>
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-50"><FileText size={24}/></div>
+                                        <div>
+                                            <h4 className="text-lg font-black text-slate-800">{stagedAnalysis.fileName}</h4>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                                {stagedAnalysis.totalRows.toLocaleString()} Rows Detected
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* 手动修正目标表功能，防止自动识别错误 */}
+                                    <div className="bg-white p-3 rounded-2xl flex items-center gap-3 border border-slate-100 shadow-sm">
+                                        <Database size={16} className="text-slate-400" />
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">目标写入表:</span>
+                                        <select 
+                                            value={stagedAnalysis.targetType} 
+                                            onChange={(e) => setStagedAnalysis({...stagedAnalysis, targetType: e.target.value as TableType})}
+                                            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-black text-slate-800 outline-none focus:border-brand cursor-pointer hover:bg-slate-100 transition-colors appearance-none"
+                                        >
+                                            <option value="shangzhi">商智 (Sales)</option>
+                                            <option value="jingzhuntong">广告 (Ads)</option>
+                                            <option value="customer_service">客服 (CS)</option>
+                                        </select>
+                                        <ChevronDown size={12} className="text-slate-400 pointer-events-none -ml-1" />
                                     </div>
                                 </div>
                                 

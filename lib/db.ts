@@ -1,7 +1,7 @@
 
 /**
  * Cloud-Native Database Adapter
- * v5.6.0 Upgrade: Stability Patch for Large Datasets
+ * v5.7.0 Upgrade: Robust Network Handling & Retry Logic
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
@@ -79,18 +79,14 @@ export const DB = {
     return getClient();
   },
 
-  // [新增] 轻量级获取表统计信息 (行数 + 最新日期)
   async getTableSummary(tableName: string): Promise<{ count: number, latestDate: string }> {
       const supabase = getClient();
       if (!supabase) return { count: 0, latestDate: 'N/A' };
 
       try {
-          // 1. 获取总行数 (使用 count: 'exact', head: true 不下载数据)
           const { count, error: countError } = await supabase.from(tableName).select('*', { count: 'exact', head: true });
-          
           if (countError) throw countError;
 
-          // 2. 获取最新日期 (只取 1 行)
           const { data: dateData, error: dateError } = await supabase.from(tableName)
               .select('date')
               .order('date', { ascending: false })
@@ -108,11 +104,10 @@ export const DB = {
       }
   },
 
-  // [升级] 支持复杂筛选的云端查询
   async queryData(tableName: string, filters: { 
       startDate?: string, 
       endDate?: string, 
-      sku?: string, // 支持模糊搜索
+      sku?: string, 
       shopName?: string 
   }, limit = 100): Promise<any[]> {
       const supabase = getClient();
@@ -127,10 +122,7 @@ export const DB = {
           query = query.eq('shop_name', filters.shopName);
       }
 
-      // SKU 模糊搜索 (对 fact 表可能需要关联或直接搜字段)
       if (filters.sku) {
-          // 简单实现：尝试在 sku_code / tracked_sku_id / product_id 中搜索
-          // 注意：Supabase 的 or 语法需要特定格式
           if (tableName === 'fact_shangzhi') {
               query = query.or(`sku_code.ilike.%${filters.sku}%,product_name.ilike.%${filters.sku}%`);
           } else if (tableName === 'fact_jingzhuntong') {
@@ -147,41 +139,35 @@ export const DB = {
       return data || [];
   },
 
-  // 核心上传逻辑：支持详细进度回调 (current, total)
+  // 核心上传逻辑：重构为稳健的光标循环模式
   async bulkAdd(tableName: string, rows: any[], onProgress?: (current: number, total: number) => void): Promise<void> {
     const supabase = getClient();
     if (!supabase) throw new Error(`云端连接初始化失败 (Supabase Client is null)。请检查配置。`);
 
     let conflictKey = undefined;
     if (tableName === 'fact_shangzhi') conflictKey = 'date,sku_code';
-    // [Updated] Jingzhuntong now uses quadruple key: date + account + sku + cost
     else if (tableName === 'fact_jingzhuntong') conflictKey = 'date,account_nickname,tracked_sku_id,cost';
     else if (tableName === 'fact_customer_service') conflictKey = 'date,agent_account';
     else if (tableName === 'app_config') conflictKey = 'key';
     else if (tableName === 'dim_skus') conflictKey = 'id';
 
-    // 数据清洗 (Secondary Safety Net)
+    // 数据清洗
     const cleanData = rows.map(({ id, ...rest }: any) => {
         const clean = { ...rest };
         if (tableName.startsWith('fact_')) { delete clean.id; }
         
-        // 强制转换日期格式，防止 Supabase 报错
         if (clean.date instanceof Date) clean.date = clean.date.toISOString().split('T')[0];
         if (typeof clean.date === 'string' && clean.date.includes('T')) { clean.date = clean.date.split('T')[0]; }
         
         clean.updated_at = new Date().toISOString(); 
         
-        // 移除 undefined，转换 null，处理数值异常
         Object.keys(clean).forEach(key => { 
             const val = clean[key];
             if (val === undefined) {
                 clean[key] = null; 
             } else if (typeof val === 'number') {
-                // 修复 Infinity / NaN 导致的网络传输错误
                 if (!isFinite(val) || isNaN(val)) clean[key] = 0;
             }
-            
-            // 确保 account_nickname 存在，否则联合主键会失败
             if (key === 'account_nickname' && !clean[key]) clean[key] = 'default';
         });
         return clean;
@@ -190,90 +176,79 @@ export const DB = {
     const total = cleanData.length;
     let processed = 0;
     
-    // 稳定性优化：降低默认批次大小 (100 -> 50)，防止 Payload Too Large 或网络超时
-    let currentBatchSize = 50; 
+    // 初始保守批次大小，遇到错误自动减半
+    let currentBatchSize = 20; 
 
     if (onProgress) onProgress(0, total);
 
     while (processed < total) {
-        // 动态切片
+        // 动态切片：每次循环重新计算 slice，确保 currentBatchSize 变化即时生效
         const chunk = cleanData.slice(processed, processed + currentBatchSize);
         if (chunk.length === 0) break;
 
-        let retries = 3;
-        let success = false;
-        let lastError: any = null;
-        
-        while (retries > 0 && !success) {
-            try {
-                // ignoreDuplicates: false 确保 upsert 生效（更新旧数据）
-                const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false });
-                
-                if (error) {
-                    // 如果是 413 (Payload Too Large) 或 5xx 错误，尝试减小 Batch Size
-                    if (error.code === '413' || error.message.includes('Payload') || parseInt(error.code) >= 500) {
-                        throw { isSizeIssue: true, originalError: error };
-                    }
-                    throw error;
-                }
-                
-                success = true;
-                processed += chunk.length;
-                
-                // 成功后也不要急着增加 batch size，保持稳定
-                // if (currentBatchSize < 200) currentBatchSize = Math.min(200, currentBatchSize * 2);
+        try {
+            // 每次写入前短暂休眠，防止浏览器主线程或网络拥塞
+            await sleep(50);
 
-            } catch (e: any) {
-                lastError = e;
-                
-                // 遇到容量/超时问题，立即降级
-                if (e.isSizeIssue || e.message?.includes('timeout') || e.message?.includes('fetch') || e.message?.includes('NetworkError')) {
-                    console.warn(`[Cloud] Network/Size issue. Reducing batch size from ${currentBatchSize} to ${Math.max(10, Math.floor(currentBatchSize / 2))}`);
-                    currentBatchSize = Math.max(5, Math.floor(currentBatchSize / 2));
-                    // 严重错误时等待更久
-                    await sleep(2000);
-                    // 不扣减 retries，直接用新 size 重试当前 processed 游标
-                    break; 
-                }
-
-                console.error(`[Cloud Upload] Retry ${retries} failed:`, e);
-                retries--;
-                await sleep(1000 + Math.random() * 1000);
-            }
-        }
-
-        if (!success && lastError && !lastError.isSizeIssue) {
-            // 如果不是因为 Size 问题导致的失败，那就是硬伤（权限、格式），直接抛出
-            const msg = lastError?.message || JSON.stringify(lastError);
-            const hint = lastError?.hint || '';
-            const details = lastError?.details || '';
+            const { error } = await supabase.from(tableName).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false });
             
-            if (lastError?.code === '42501') {
-                throw new Error(`权限不足 (RLS Policy Violation)。请在 Supabase 执行 SQL 脚本授予匿名写入权限。`);
-            }
-            if (lastError?.code === '23505') {
-                 // Unique violation handled by onConflict usually, but just in case
-                 throw new Error(`数据冲突 (Unique Key Violation)。请检查去重键配置。`);
+            if (error) {
+                // 将 API 错误包装抛出，以便 catch 统一处理降级逻辑
+                throw error;
             }
             
-            throw new Error(`写入中断 (Row ${processed + 1}): ${msg} ${hint} ${details}`);
-        }
+            // 成功：推进光标
+            processed += chunk.length;
+            if (onProgress) onProgress(processed, total);
+            
+            // 慢启动策略：成功后尝试缓慢增加批次，上限 100
+            if (currentBatchSize < 100) {
+                currentBatchSize = Math.min(100, Math.ceil(currentBatchSize * 1.1));
+            }
 
-        if (onProgress) {
-            onProgress(processed, total);
-        }
+        } catch (e: any) {
+            // 捕获所有错误（包括 NetworkError, FetchError, 413 Payload Too Large 等）
+            console.warn(`[Cloud Sync] Batch failed (Size: ${currentBatchSize}, Row: ${processed}). Error:`, e);
 
-        // [关键优化] 增加批次间的喘息时间 (Throttling)，防止浏览器并发限制
-        await new Promise(r => setTimeout(r, 50));
+            // 检查是否为网络/容量相关错误
+            const isNetworkOrSizeIssue = 
+                e.code === '413' || // Payload Too Large
+                e.message?.includes('Payload') || 
+                e.message?.includes('NetworkError') || 
+                e.message?.includes('fetch') ||
+                e.message?.includes('Failed to fetch') ||
+                e.name === 'TypeError'; // fetch 失败通常是 TypeError
+
+            if (isNetworkOrSizeIssue && currentBatchSize > 1) {
+                // 策略：降级重试
+                // 不推进 processed 光标，只减小 batch size，下一次循环会处理相同数据但更小的块
+                currentBatchSize = Math.max(1, Math.floor(currentBatchSize / 2));
+                console.log(`[Cloud Sync] Downgrading batch size to ${currentBatchSize} and retrying...`);
+                
+                // 避让等待
+                await sleep(1000);
+                continue; // 重新开始循环
+            } else {
+                // 无法降级或非网络错误（如权限不足、字段缺失），抛出致命错误中断流程
+                const msg = e?.message || JSON.stringify(e);
+                let userMsg = `写入中断 (Row ${processed + 1}): ${msg}`;
+                
+                if (e?.code === '42501') {
+                    userMsg = `权限不足 (RLS Policy Violation)。请在 Supabase 执行 SQL 脚本授予匿名写入权限。`;
+                } else if (e?.code === 'PGRST204') {
+                    userMsg = `列名匹配失败: 数据库中缺少字段。${e.details || e.hint || ''}`;
+                }
+                
+                throw new Error(userMsg);
+            }
+        }
     }
   },
 
   async loadConfig<T>(key: string, defaultValue: T): Promise<T> {
-    // 强制刷新 Config 逻辑，确保能读到环境变量
     if (key === 'cloud_sync_config') {
         const envUrl = process.env.SUPABASE_URL;
         const envKey = process.env.SUPABASE_KEY;
-        
         if (envUrl && envKey) {
             return { 
                 url: envUrl.replace(/"/g, '').trim(), 
@@ -281,7 +256,6 @@ export const DB = {
                 isEnv: true 
             } as unknown as T;
         }
-        
         if (memoryCloudConfig) return memoryCloudConfig as unknown as T;
         try {
             const raw = localStorage.getItem('yunzhou_cloud_config');
@@ -303,7 +277,7 @@ export const DB = {
     if (key === 'cloud_sync_config') {
         memoryCloudConfig = data; 
         localStorage.setItem('yunzhou_cloud_config', JSON.stringify(data));
-        supabaseInstance = null; // 重置实例
+        supabaseInstance = null; 
         return;
     }
 
@@ -315,22 +289,17 @@ export const DB = {
     if (error) console.error("Config Save Error:", error);
   },
 
-  // 深度诊断：真实写入测试
   async diagnoseConnection(): Promise<{ step: string, status: 'ok'|'fail'|'warn', msg: string }[]> {
       const results = [];
-      
-      // 1. Client Init
       const supabase = getClient();
       if (!supabase) {
           return [{ step: '客户端初始化', status: 'fail', msg: '无法创建 Supabase 客户端，URL/Key 为空' }];
       }
       results.push({ step: '客户端初始化', status: 'ok', msg: 'Supabase JS Client 已就绪' });
 
-      // 2. Read Test
       const t1 = Date.now();
       const { data, error: readError } = await supabase.from('app_config').select('key').limit(1);
       if (readError) {
-          // 如果表不存在
           if (readError.code === '42P01') {
               return [...results, { step: '读取测试', status: 'fail', msg: '连接成功，但数据库表未初始化 (Table not found)。请运行 SQL 脚本。' }];
           }
@@ -338,7 +307,6 @@ export const DB = {
       }
       results.push({ step: '读取测试', status: 'ok', msg: `读取成功 (延迟 ${Date.now() - t1}ms)` });
 
-      // 3. Write Test (Crucial)
       const t2 = Date.now();
       const testPayload = { key: 'sys_write_test', data: { ts: t2, browser: navigator.userAgent }, updated_at: new Date().toISOString() };
       const { error: writeError } = await supabase.from('app_config').upsert(testPayload);
@@ -351,11 +319,8 @@ export const DB = {
           }
       } else {
           results.push({ step: '写入测试', status: 'ok', msg: `写入成功 (延迟 ${Date.now() - t2}ms)` });
-          
-          // Cleanup
           await supabase.from('app_config').delete().eq('key', 'sys_write_test');
       }
-
       return results;
   },
 
