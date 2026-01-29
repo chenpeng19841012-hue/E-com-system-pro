@@ -184,7 +184,7 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
     );
 };
 
-export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], shops: Shop[], addToast: any }) => {
+export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
@@ -204,6 +204,10 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
     const [activeDiagIndex, setActiveDiagIndex] = useState(0);
+
+    // Dynamic Version Calculation
+    const totalRows = (factStats?.shangzhi?.count || 0) + (factStats?.jingzhuntong?.count || 0) + (factStats?.customer_service?.count || 0);
+    const systemVersion = `v6.0.${totalRows.toLocaleString().replace(/,/g, '')}`;
 
     const enabledSkusMap = useMemo(() => {
         const map = new Map<string, ProductSKU>();
@@ -351,7 +355,7 @@ export const DashboardView = ({ skus, shops, addToast }: { skus: ProductSKU[], s
                 <div className="space-y-1">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
-                        <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">版本号：v5.2.6</span>
+                        <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">系统版本：{systemVersion}</span>
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略指挥控制台</h1>
                     <p className="text-slate-400 font-bold text-sm tracking-wide">Strategic Performance Intelligence & AI Dashboard</p>

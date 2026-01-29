@@ -165,129 +165,99 @@ export const App = () => {
         return true;
     };
 
-    // 统一数据上传处理器 - 支持进度回调
-    const handleUpload = async (file: File, type: TableType, shopId?: string, onProgress?: (current: number, total: number) => void) => {
-        // 重置客户端以确保获取最新配置
+    // 新增：直接处理已解析数据的接口 (支持切片上传)
+    const handleRawDataImport = async (data: any[], type: TableType, shopId?: string, fileName: string = 'batch_upload', onProgress?: (current: number, total: number) => void) => {
         DB.resetClient();
         
-        return new Promise<void>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const { data } = parseExcelFile(e.target?.result);
-                    if (data.length === 0) throw new Error("文件内容为空或格式无法识别");
+        // 1. 构建映射表 (DB Schema Map)
+        const headerMap: Record<string, string> = {};
+        const currentSchema = schemas[type];
+        const typeMap: Record<string, string> = {};
+        
+        if (currentSchema && Array.isArray(currentSchema)) {
+            currentSchema.forEach((field: any) => {
+                headerMap[field.label] = field.key;
+                headerMap[field.label.trim()] = field.key;
+                typeMap[field.key] = field.type;
+                if (field.tags) field.tags.forEach((tag: string) => headerMap[tag] = field.key);
+                headerMap[field.key] = field.key;
+            });
+        }
 
-                    // 1. 构建映射表 (Excel Header -> DB Column)
-                    const headerMap: Record<string, string> = {};
-                    const currentSchema = schemas[type];
-                    
-                    // 辅助：建立字段类型映射，用于后续清洗数据
-                    const typeMap: Record<string, string> = {};
-                    
-                    if (currentSchema && Array.isArray(currentSchema)) {
-                        currentSchema.forEach((field: any) => {
-                            // 映射 Label (e.g., 'CA') -> Key (e.g., 'paid_items')
-                            headerMap[field.label] = field.key;
-                            headerMap[field.label.trim()] = field.key;
-                            typeMap[field.key] = field.type;
-                            
-                            // 映射 Tags (e.g., '成交商品件数') -> Key
-                            if (field.tags) {
-                                field.tags.forEach((tag: string) => headerMap[tag] = field.key);
-                            }
-                            // 映射自身 Key
-                            headerMap[field.key] = field.key;
-                        });
+        // 2. 数据增强与映射
+        const enrichedData = data.map(row => {
+            const mappedRow: any = {};
+            
+            // 标准化日期
+            let normalizedDate = null;
+            if (row['日期']) {
+                    if (typeof row['日期'] === 'number') {
+                        const date = new Date((row['日期'] - 25569) * 86400 * 1000);
+                        normalizedDate = date.toISOString().split('T')[0];
+                    } else {
+                        normalizedDate = row['日期'];
                     }
+            } else if (row['date']) {
+                normalizedDate = row['date'];
+            }
+            if (normalizedDate) mappedRow['date'] = normalizedDate;
 
-                    // 2. 数据增强与映射
-                    const enrichedData = data.map(row => {
-                        const mappedRow: any = {};
-                        
-                        // 标准化日期
-                        let normalizedDate = null;
-                        if (row['日期']) {
-                             if (typeof row['日期'] === 'number') {
-                                 const date = new Date((row['日期'] - 25569) * 86400 * 1000);
-                                 normalizedDate = date.toISOString().split('T')[0];
-                             } else {
-                                 normalizedDate = row['日期'];
-                             }
-                        } else if (row['date']) {
-                            normalizedDate = row['date'];
-                        }
-                        if (normalizedDate) mappedRow['date'] = normalizedDate;
+            // 注入 shopId
+            if (shopId) {
+                const shop = shops.find(s => s.id === shopId);
+                if (shop) mappedRow['shop_name'] = shop.name;
+            } else if (row['店铺名称'] || row['shop_name']) {
+                mappedRow['shop_name'] = row['店铺名称'] || row['shop_name'];
+            }
 
-                        // 注入 shopId
-                        if (shopId) {
-                            const shop = shops.find(s => s.id === shopId);
-                            if (shop) mappedRow['shop_name'] = shop.name;
-                        } else if (row['店铺名称'] || row['shop_name']) {
-                            mappedRow['shop_name'] = row['店铺名称'] || row['shop_name'];
-                        }
+            // 核心映射与清洗逻辑
+            Object.keys(row).forEach(excelKey => {
+                const cleanKey = excelKey.trim();
+                const dbKey = headerMap[cleanKey] || headerMap[cleanKey.toUpperCase()];
+                
+                if (dbKey) {
+                    if ((dbKey === 'date' || dbKey === 'shop_name') && mappedRow[dbKey]) return;
+                    
+                    let value = row[excelKey];
+                    const fieldType = typeMap[dbKey];
 
-                        // 核心映射与清洗逻辑
-                        Object.keys(row).forEach(excelKey => {
-                            const cleanKey = excelKey.trim();
-                            const dbKey = headerMap[cleanKey] || headerMap[cleanKey.toUpperCase()];
+                    if (fieldType === 'INTEGER' || fieldType === 'REAL' || fieldType === 'NUMERIC') {
+                        if (value === '-' || value === '' || value === null || value === 'null' || value === undefined) {
+                            value = 0;
+                        } else if (typeof value === 'string') {
+                            const cleanVal = value.replace(/[¥,]/g, '').trim();
+                            if (cleanVal === '-' || cleanVal === '') value = 0;
+                            else value = Number(cleanVal);
                             
-                            if (dbKey) {
-                                // 防止覆盖已处理的 date/shop_name
-                                if ((dbKey === 'date' || dbKey === 'shop_name') && mappedRow[dbKey]) return;
-                                
-                                let value = row[excelKey];
-                                const fieldType = typeMap[dbKey];
-
-                                // [关键修复] 数值清洗：将 "-", "null", "" 转换为 0
-                                if (fieldType === 'INTEGER' || fieldType === 'REAL' || fieldType === 'NUMERIC') {
-                                    if (value === '-' || value === '' || value === null || value === 'null' || value === undefined) {
-                                        value = 0;
-                                    } else if (typeof value === 'string') {
-                                        // 移除可能的逗号或货币符号
-                                        const cleanVal = value.replace(/[¥,]/g, '').trim();
-                                        if (cleanVal === '-' || cleanVal === '') value = 0;
-                                        else value = Number(cleanVal);
-                                        
-                                        if (isNaN(value)) value = 0;
-                                    }
-                                }
-
-                                mappedRow[dbKey] = value;
-                            }
-                        });
-
-                        return mappedRow;
-                    });
-
-                    // 写入数据库
-                    const tableName = `fact_${type}`;
-                    await DB.bulkAdd(tableName, enrichedData, onProgress);
-
-                    // 记录历史
-                    const newHistoryItem: UploadHistory = {
-                        id: Date.now().toString(),
-                        fileName: file.name,
-                        fileSize: (file.size / 1024).toFixed(1) + 'KB',
-                        rowCount: data.length,
-                        uploadTime: new Date().toLocaleString(),
-                        status: '成功',
-                        targetTable: type
-                    };
-                    const updatedHistory = [newHistoryItem, ...uploadHistory];
-                    setUploadHistory(updatedHistory);
-                    await DB.saveConfig('upload_history', updatedHistory);
-
-                    // 刷新视图 (统计信息 + 热数据)
-                    await loadMetadata();
-                    addToast('success', '云端写入完成', `已成功将 ${data.length} 条数据注入 Supabase 数据库。`);
-                    resolve();
-                } catch (err: any) {
-                    addToast('error', '上传失败', err.message);
-                    reject(err);
+                            if (isNaN(value)) value = 0;
+                        }
+                    }
+                    mappedRow[dbKey] = value;
                 }
-            };
-            reader.readAsBinaryString(file);
+            });
+            return mappedRow;
         });
+
+        // 写入数据库
+        const tableName = `fact_${type}`;
+        await DB.bulkAdd(tableName, enrichedData, onProgress);
+
+        // 记录历史
+        const newHistoryItem: UploadHistory = {
+            id: Date.now().toString(),
+            fileName: fileName,
+            fileSize: 'Batch Processed',
+            rowCount: data.length,
+            uploadTime: new Date().toLocaleString(),
+            status: '成功',
+            targetTable: type
+        };
+        const updatedHistory = [newHistoryItem, ...uploadHistory];
+        setUploadHistory(updatedHistory);
+        await DB.saveConfig('upload_history', updatedHistory);
+
+        // 刷新视图
+        await loadMetadata();
     };
 
     const handleBatchUpdate = async (skusToUpdate: string[], shopId: string) => {
@@ -311,10 +281,11 @@ export const App = () => {
         
         const commonProps = { skus, shops, agents, schemas, addToast };
         switch (currentView) {
-            case 'dashboard': return <DashboardView {...commonProps} />;
+            case 'dashboard': return <DashboardView {...commonProps} factStats={factStats} />;
             case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={factTables.shangzhi} jingzhuntongData={factTables.jingzhuntong} />;
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id:any) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
-            case 'data-center': return <DataCenterView onUpload={handleUpload} onBatchUpdate={handleBatchUpdate} history={uploadHistory} factStats={factStats} shops={shops} schemas={schemas} addToast={addToast} />;
+            // 传递 handleRawDataImport 给 DataCenterView
+            case 'data-center': return <DataCenterView onImportData={handleRawDataImport} onBatchUpdate={handleBatchUpdate} history={uploadHistory} factStats={factStats} shops={shops} schemas={schemas} addToast={addToast} />;
             case 'cloud-sync': return <CloudSyncView addToast={addToast} />;
             case 'data-experience': return <DataExperienceView schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={onDeleteRows} onRefreshData={loadMetadata} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
             case 'products': return (
