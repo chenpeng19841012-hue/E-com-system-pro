@@ -379,13 +379,20 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         }
     }, [factStats]);
 
-    const enabledSkusMap = useMemo(() => {
-        const map = new Map<string, ProductSKU>();
+    // Use Sets for O(1) lookup of enabled/disabled SKUs
+    const { enabledSkusMap, disabledSkuCodes } = useMemo(() => {
+        const enabled = new Map<string, ProductSKU>();
+        const disabled = new Set<string>();
+        
         skus.forEach(s => { 
-            // Normalize keys to prevent matching issues
-            if (s.isStatisticsEnabled) map.set(s.code.trim(), s); 
+            const code = s.code.trim();
+            if (s.isStatisticsEnabled) {
+                enabled.set(code, s); 
+            } else {
+                disabled.add(code);
+            }
         });
-        return map;
+        return { enabledSkusMap: enabled, disabledSkuCodes: disabled };
     }, [skus]);
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
@@ -476,35 +483,33 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 
                 sz.forEach(r => {
                     const code = getSkuIdentifier(r)?.trim();
-                    if (!code) return;
+                    if (!code) return; // Skip invalid rows
 
-                    // 核心修正：
-                    // 1. 优先检查 SKU 是否已在资产库中且启用统计
-                    const skuConfig = enabledSkusMap.get(code);
-                    
+                    // 1. Strict Filter: If explicitly disabled, skip immediately
+                    if (disabledSkuCodes.has(code)) return;
+
                     let mode = '自营';
                     let shouldCount = false;
 
+                    const skuConfig = enabledSkusMap.get(code);
+
                     if (skuConfig) {
-                        // Case A: SKU 已录入，直接取其 Mode
+                        // Case A: Known Enabled SKU -> Count
                         mode = shopIdToMode.get(skuConfig.shopId) || '自营';
                         shouldCount = true;
-                    } else if (r.shop_name) {
-                        // Case B (FALLBACK): SKU 未录入，尝试通过事实表的“店铺名称”反查 Mode
-                        // 这确保了即使没录入 SKU 资产，只要店铺名称匹配，就能出数
-                        const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                        if (matchedMode) {
-                            mode = matchedMode;
-                            shouldCount = true;
-                        } else {
-                            // Case C: 店铺也未录入，默认算作自营并统计（防止数据彻底丢失）
-                            // 只有当不需要统计未知来源时才设置为 false
-                            mode = '自营';
-                            shouldCount = true; 
-                        }
                     } else {
-                        // Case D: 无 SKU 且无店铺名，视为异常数据
-                        shouldCount = false;
+                        // Case B: Unknown SKU (Not in assets DB)
+                        // Must check if it belongs to a configured Shop
+                        if (r.shop_name) {
+                            const shopName = r.shop_name.trim();
+                            const matchedMode = shopNameToMode.get(shopName);
+                            if (matchedMode) {
+                                // Shop is tracked -> Count it
+                                mode = matchedMode;
+                                shouldCount = true;
+                            } 
+                            // Else: Shop is NOT tracked -> Ignore (Removed previous Case C)
+                        }
                     }
 
                     if (shouldCount) {
@@ -527,6 +532,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
+                    if (disabledSkuCodes.has(code)) return; // Skip disabled
+
                     const skuConfig = enabledSkusMap.get(code);
                     let mode = '自营';
                     let shouldCount = false;
@@ -536,10 +543,10 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                         shouldCount = true;
                     } else if (r.shop_name) {
                         const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                        if (matchedMode) mode = matchedMode;
-                        shouldCount = true;
-                    } else {
-                        shouldCount = true; // Fallback
+                        if (matchedMode) {
+                            mode = matchedMode;
+                            shouldCount = true;
+                        }
                     }
 
                     if (shouldCount) {
@@ -567,6 +574,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 
                 const code = getSkuIdentifier(r)?.trim();
                 if (!code) return;
+                
+                if (disabledSkuCodes.has(code)) return; // Skip disabled
 
                 const skuConfig = enabledSkusMap.get(code);
                 let mode = '自营';
@@ -577,10 +586,10 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     shouldCount = true;
                 } else if (r.shop_name) {
                     const matchedMode = shopNameToMode.get(r.shop_name.trim());
-                    if (matchedMode) mode = matchedMode;
-                    shouldCount = true;
-                } else {
-                    shouldCount = true;
+                    if (matchedMode) {
+                        mode = matchedMode;
+                        shouldCount = true;
+                    }
                 }
 
                 if (shouldCount) {
@@ -647,7 +656,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData, shopNameToMode]); 
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, disabledSkuCodes, shopIdToMode, dataAnchorDate, cachedData, shopNameToMode]); 
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
