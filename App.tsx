@@ -185,6 +185,44 @@ export const App = () => {
         return true;
     };
 
+    // --- HELPER: Safe ID Normalizer (Handles Scientific Notation) ---
+    const normalizeIdString = (val: any) => {
+        if (val === undefined || val === null || val === '') return null;
+        // 如果是数字类型，使用 fullwide 避免科学计数法转换 (e.g. 1.02E+13 -> "10200000000000")
+        if (typeof val === 'number') {
+            return val.toLocaleString('fullwide', { useGrouping: false });
+        }
+        return String(val).trim();
+    };
+
+    // --- HELPER: Robust Date Parser (Handles YYYYMMDD, YYYY/MM/DD, Excel Serial) ---
+    const normalizeDateString = (val: any) => {
+        if (!val) return null;
+        let dateStr = String(val).trim();
+        
+        // 1. Excel Serial Date (e.g. 45678)
+        if (typeof val === 'number' && val > 25569 && val < 2958465) {
+            const date = new Date((val - 25569) * 86400 * 1000);
+            return date.toISOString().split('T')[0];
+        }
+
+        // 2. Compact Number YYYYMMDD (e.g. 20260101)
+        if (/^\d{8}$/.test(dateStr)) {
+            const y = dateStr.substring(0, 4);
+            const m = dateStr.substring(4, 6);
+            const d = dateStr.substring(6, 8);
+            return `${y}-${m}-${d}`;
+        }
+
+        // 3. String formats (YYYY/MM/DD, YYYY-MM-DD)
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().split('T')[0];
+        }
+        
+        return null;
+    };
+
     // 新增：直接处理已解析数据的接口 (支持切片上传)
     const handleRawDataImport = async (data: any[], type: TableType, shopId?: string, fileName: string = 'batch_upload', onProgress?: (current: number, total: number) => void) => {
         DB.resetClient();
@@ -213,22 +251,11 @@ export const App = () => {
         const enrichedData = data.map(row => {
             const mappedRow: any = {};
             
-            // 标准化日期
-            let normalizedDate = null;
-            if (row['日期']) {
-                    if (typeof row['日期'] === 'number') {
-                        const date = new Date((row['日期'] - 25569) * 86400 * 1000);
-                        normalizedDate = date.toISOString().split('T')[0];
-                    } else {
-                        normalizedDate = row['日期'];
-                    }
-            } else if (row['date']) {
-                normalizedDate = row['date'];
-            }
-            if (normalizedDate && String(normalizedDate).trim() === '') normalizedDate = null;
-            if (normalizedDate) mappedRow['date'] = normalizedDate;
+            // A. 标准化日期 (使用增强版解析器)
+            const rawDate = row['日期'] || row['date'] || row['Date'];
+            mappedRow['date'] = normalizeDateString(rawDate);
 
-            // 注入 shopId
+            // B. 注入 shopId
             if (shopId) {
                 const shop = shops.find(s => s.id === shopId);
                 if (shop) mappedRow['shop_name'] = shop.name;
@@ -236,12 +263,13 @@ export const App = () => {
                 mappedRow['shop_name'] = row['店铺名称'] || row['shop_name'];
             }
 
-            // 核心映射与清洗逻辑
+            // C. 核心映射与清洗逻辑
             Object.keys(row).forEach(excelKey => {
                 const cleanKey = excelKey.trim();
                 const dbKey = headerMap[cleanKey] || headerMap[cleanKey.toUpperCase()];
                 
                 if (dbKey) {
+                    // 跳过已特殊处理的字段
                     if ((dbKey === 'date' || dbKey === 'shop_name') && mappedRow[dbKey]) return;
                     
                     let value = row[excelKey];
@@ -252,7 +280,11 @@ export const App = () => {
                         value = null;
                     }
 
-                    if (fieldType === 'INTEGER' || fieldType === 'REAL' || fieldType === 'NUMERIC') {
+                    // ID 类字段特殊处理 (防止科学计数法)
+                    if (dbKey === 'sku_code' || dbKey === 'product_id' || dbKey === 'tracked_sku_id' || dbKey === 'item_number') {
+                        value = normalizeIdString(value);
+                    } else if (fieldType === 'INTEGER' || fieldType === 'REAL' || fieldType === 'NUMERIC') {
+                        // 数值清洗
                         if (value === null || value === '-') {
                             value = 0;
                         } else if (typeof value === 'string') {
@@ -263,17 +295,10 @@ export const App = () => {
                             if (isNaN(value)) value = 0;
                         }
                     } else if (fieldType === 'TIMESTAMP') {
+                        // 时间清洗
                         if (value !== null) {
-                            if (typeof value === 'number') {
-                                // Excel Serial Date
-                                const date = new Date((value - 25569) * 86400 * 1000);
-                                value = date.toISOString();
-                            } else {
-                                // String Parse
-                                const d = new Date(value);
-                                if (isNaN(d.getTime())) value = null;
-                                else value = d.toISOString();
-                            }
+                            const parsed = normalizeDateString(value);
+                            value = parsed ? new Date(parsed).toISOString() : null;
                         }
                     }
                     
@@ -281,34 +306,33 @@ export const App = () => {
                 }
             });
 
-            // --- 智能字段互通策略 (Start) ---
-            // 业务背景：商智(自营)用'SKU', 商智(POP)用'商品ID', 广告用'跟单SKU ID'
-            // 我们需要将这些不同来源的ID归一化到数据库对应的必填字段中
-            
-            // 获取原始值，防止 Schema 未定义导致 mappedRow 拿不到
-            const rawSku = row['SKU'] || row['sku'] || row['SKU编码'] || mappedRow['sku_code'];
-            const rawPid = row['商品ID'] || row['商品id'] || row['product_id'] || mappedRow['product_id'];
-            const rawTrackedId = row['跟单SKU ID'] || row['跟单SKU'] || row['tracked_sku_id'] || mappedRow['tracked_sku_id'];
+            // --- 智能字段互通与兜底策略 (Start) ---
+            const rawSku = normalizeIdString(row['SKU'] || row['sku'] || row['SKU编码']);
+            const rawPid = normalizeIdString(row['商品ID'] || row['商品id'] || row['product_id']);
+            const rawTrackedId = normalizeIdString(row['跟单SKU ID'] || row['跟单SKU'] || row['tracked_sku_id']);
 
             // 1. 商智 (fact_shangzhi) -> 目标: sku_code
             if (type === 'shangzhi') {
-                 if (!mappedRow['sku_code']) {
-                     if (rawSku) mappedRow['sku_code'] = rawSku;
-                     else if (rawPid) mappedRow['sku_code'] = rawPid;
+                 // 优先使用 SKU 字段
+                 if (rawSku) {
+                     mappedRow['sku_code'] = rawSku;
+                 } 
+                 // 兜底：如果没有 SKU 字段，检查商品ID
+                 else if (rawPid) {
+                     mappedRow['sku_code'] = rawPid; // 将商品ID作为 SKU 存储
+                     mappedRow['product_id'] = rawPid; // 同时存入 product_id
                  }
             }
             
             // 2. 广告 (fact_jingzhuntong) -> 目标: tracked_sku_id
             if (type === 'jingzhuntong') {
-                if (!mappedRow['tracked_sku_id']) {
-                    if (rawTrackedId) mappedRow['tracked_sku_id'] = rawTrackedId;
-                    else if (rawSku) mappedRow['tracked_sku_id'] = rawSku;
-                    else if (rawPid) mappedRow['tracked_sku_id'] = rawPid;
-                }
+                if (rawTrackedId) mappedRow['tracked_sku_id'] = rawTrackedId;
+                else if (rawSku) mappedRow['tracked_sku_id'] = rawSku;
+                else if (rawPid) mappedRow['tracked_sku_id'] = rawPid;
             }
             // --- 智能字段互通策略 (End) ---
 
-            // 3. 必填字段校验：如果在清洗后，必填字段仍为空，则标记为无效
+            // 3. 必填字段校验
             const isInvalid = requiredKeys.some(key => {
                 const val = mappedRow[key];
                 return val === null || val === undefined || val === '';
@@ -323,14 +347,14 @@ export const App = () => {
         }).filter((item): item is any => item !== null);
 
         if (enrichedData.length === 0) {
-             throw new Error(`未检测到有效数据。可能是因为所有行都缺少必填字段（如：日期、SKU编码/商品ID/跟单SKU ID 等）。请检查 Excel 表头是否匹配。`);
+             throw new Error(`未检测到有效数据。请检查：1.日期列格式是否正确；2.是否包含 SKU 或 商品ID 列。`);
         }
         
         if (skippedRows > 0) {
             console.warn(`[Data Import] Automatically skipped ${skippedRows} rows due to missing required fields (${requiredKeys.join(', ')}).`);
         }
 
-        // 写入数据库
+        // 写入数据库 (Supabase Upsert 会自动处理 duplicate key update)
         const tableName = `fact_${type}`;
         await DB.bulkAdd(tableName, enrichedData, onProgress);
 
