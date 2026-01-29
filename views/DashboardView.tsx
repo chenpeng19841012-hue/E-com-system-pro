@@ -37,10 +37,10 @@ const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.
 const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, activeMetric }: any) => {
     if (!isOpen) return null;
 
-    const { enabledSkusMap, disabledSkuCodes, shopIdToMode, shopMap } = filters;
+    const { enabledSkusMap, shopIdToMode, shopMap } = filters;
     const szData = rawData?.shangzhi || [];
     
-    // --- Metric Breakdown Logic (Strict SKU Asset Check) ---
+    // --- Metric Breakdown Logic (Simplified: SKU Asset -> Shop -> Mode) ---
     const calculateBreakdown = () => {
         const skuAgg: Record<string, { code: string, name: string, shop: string, val: number }> = {};
         const dateAgg: Record<string, { date: string, val: number }> = {};
@@ -50,34 +50,26 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
 
         szData.forEach((r: any) => {
             const code = getSkuIdentifier(r)?.trim();
-            if (!code) return;
+            if (!code) return; // Skip invalid rows
 
-            // 1. Strict SKU Filter: If explicitly disabled, skip immediately
-            if (disabledSkuCodes.has(code)) {
-                droppedRowsCount++;
-                return;
-            }
-
-            let shouldCount = false;
-            let shopName = r.shop_name || '未知';
-
+            // 1. Check if SKU is in the "Enabled Assets" list
             const skuConfig = enabledSkusMap.get(code);
 
-            // STRICT LOGIC: Row is valid ONLY if SKU is known (in enabledSkusMap) AND Shop is tracked.
-            if (skuConfig) {
-                const shopMode = shopIdToMode.get(skuConfig.shopId);
-                if (shopMode) {
-                    shouldCount = true;
-                    shopName = shopMap.get(skuConfig.shopId)?.name || shopName;
-                }
-            } 
-            // NO FALLBACK for unknown SKUs, even if shop matches.
-
-            if (!shouldCount) {
+            if (!skuConfig) {
+                // Not in assets OR Statistics Disabled
                 droppedRowsCount++;
                 return;
             }
 
+            // 2. Get Shop Mode from the SKU's assigned Shop ID
+            const shopMode = shopIdToMode.get(skuConfig.shopId);
+            if (!shopMode) {
+                // Shop deleted or not found
+                droppedRowsCount++;
+                return;
+            }
+
+            // Valid Row
             validRowsCount++;
             
             // Determine Value based on Active Metric
@@ -90,10 +82,11 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
 
             // SKU Aggregation
             if (!skuAgg[code]) {
+                const shopName = shopMap.get(skuConfig.shopId)?.name || '未知店铺';
                 skuAgg[code] = { 
                     code, 
-                    name: skuConfig?.name || r.product_name || '未知商品', 
-                    shop: shopName,
+                    name: skuConfig.name, 
+                    shop: `${shopName} (${shopMode})`,
                     val: 0 
                 };
             }
@@ -148,7 +141,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
                             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">被过滤行数 (Ignored)</p>
                             <p className="text-lg font-black text-rose-400 mt-1">{stats.droppedRowsCount.toLocaleString()}</p>
-                            <p className="text-[8px] text-slate-600 mt-1">因 SKU 未登记、被禁用或店铺不在名录</p>
+                            <p className="text-[8px] text-slate-600 mt-1">因 SKU 未在资产库中登记或统计状态为“否”</p>
                         </div>
                     </div>
 
@@ -220,7 +213,9 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
     );
 };
 
-// ... (DiagnosisCard, SubValueTrend, KPICard, MainTrendVisual components - reuse existing implementations)
+// ... (DiagnosisCard, SubValueTrend, KPICard, MainTrendVisual components - Same as before, omitted for brevity but assumed present in final output)
+// To ensure the file is complete, I will include the full content of the file.
+
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClickMore?: () => void }> = ({ d, mode = 'carousel', onClickMore }) => {
     const detailEntries = Object.entries(d.details);
     const limit = mode === 'carousel' ? 2 : 100;
@@ -460,30 +455,22 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         }
     }, [factStats]);
 
-    const { enabledSkusMap, disabledSkuCodes } = useMemo(() => {
+    const { enabledSkusMap } = useMemo(() => {
         const enabled = new Map<string, ProductSKU>();
-        const disabled = new Set<string>();
-        
+        // Only include SKUs where isStatisticsEnabled is true
         skus.forEach(s => { 
             const code = s.code.trim();
             if (s.isStatisticsEnabled) {
                 enabled.set(code, s); 
-            } else {
-                disabled.add(code);
             }
         });
-        return { enabledSkusMap: enabled, disabledSkuCodes: disabled };
+        return { enabledSkusMap: enabled };
     }, [skus]);
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
     const shopMap = useMemo(() => new Map(shops.map(s => [s.id, s])), [shops]);
     
-    // Reverse shop mapping for loose matching (Deprecated but kept for reference)
-    const shopNameToMode = useMemo(() => {
-        const map = new Map<string, string>();
-        shops.forEach(s => map.set(s.name.trim(), s.mode));
-        return map;
-    }, [shops]);
+    // Removed shopNameToMode - strict asset matching only.
 
     useEffect(() => {
         if (diagnoses.length <= 2) { setDiagOffset(0); return; }
@@ -555,35 +542,26 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
-                    if (disabledSkuCodes.has(code)) return;
-
-                    let mode = '自营';
-                    let shouldCount = false;
-
+                    // STRICT LOGIC:
+                    // 1. Must be in enabled SKUs (Asset exists AND Status is Yes)
                     const skuConfig = enabledSkusMap.get(code);
+                    if (!skuConfig) return;
 
-                    if (skuConfig) {
-                        const shopMode = shopIdToMode.get(skuConfig.shopId);
-                        if (shopMode) {
-                            mode = shopMode;
-                            shouldCount = true;
-                        }
-                    }
-                    // STRICT CHECK: NO ELSE BLOCK for unknown SKUs
+                    // 2. Must be in a known Shop (to determine Self/POP mode)
+                    const shopMode = shopIdToMode.get(skuConfig.shopId);
+                    if (!shopMode) return;
 
-                    if (shouldCount) {
-                        const val = Number(r.paid_amount) || 0;
-                        const items = Number(r.paid_items) || 0;
-                        stats.gmv.total += val; 
-                        stats.ca.total += items;
-                        
-                        if (['自营', '入仓'].includes(mode)) { 
-                            stats.gmv.self += val; 
-                            stats.ca.self += items; 
-                        } else { 
-                            stats.gmv.pop += val; 
-                            stats.ca.pop += items; 
-                        }
+                    const val = Number(r.paid_amount) || 0;
+                    const items = Number(r.paid_items) || 0;
+                    stats.gmv.total += val; 
+                    stats.ca.total += items;
+                    
+                    if (['自营', '入仓'].includes(shopMode)) { 
+                        stats.gmv.self += val; 
+                        stats.ca.self += items; 
+                    } else { 
+                        stats.gmv.pop += val; 
+                        stats.ca.pop += items; 
                     }
                 });
 
@@ -591,27 +569,16 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
-                    if (disabledSkuCodes.has(code)) return;
-
                     const skuConfig = enabledSkusMap.get(code);
-                    let mode = '自营';
-                    let shouldCount = false;
+                    if (!skuConfig) return;
 
-                    if (skuConfig) {
-                        const shopMode = shopIdToMode.get(skuConfig.shopId);
-                        if (shopMode) {
-                            mode = shopMode;
-                            shouldCount = true;
-                        }
-                    }
-                    // STRICT CHECK: NO ELSE BLOCK for unknown SKUs
+                    const shopMode = shopIdToMode.get(skuConfig.shopId);
+                    if (!shopMode) return;
 
-                    if (shouldCount) {
-                        const cost = Number(r.cost) || 0;
-                        stats.spend.total += cost;
-                        if (['自营', '入仓'].includes(mode)) stats.spend.self += cost; 
-                        else stats.spend.pop += cost;
-                    }
+                    const cost = Number(r.cost) || 0;
+                    stats.spend.total += cost;
+                    if (['自营', '入仓'].includes(shopMode)) stats.spend.self += cost; 
+                    else stats.spend.pop += cost;
                 });
                 return stats;
             };
@@ -632,34 +599,23 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 const code = getSkuIdentifier(r)?.trim();
                 if (!code) return;
                 
-                if (disabledSkuCodes.has(code)) return;
-
                 const skuConfig = enabledSkusMap.get(code);
-                let mode = '自营';
-                let shouldCount = false;
+                if (!skuConfig) return;
 
-                if (skuConfig) {
-                    const shopMode = shopIdToMode.get(skuConfig.shopId);
-                    if (shopMode) {
-                        mode = shopMode;
-                        shouldCount = true;
-                    }
-                }
-                // STRICT CHECK: NO ELSE BLOCK
+                const shopMode = shopIdToMode.get(skuConfig.shopId);
+                if (!shopMode) return;
 
-                if (shouldCount) {
-                    let val = 0;
-                    if (activeMetric === 'gmv') val = Number(r.paid_amount);
-                    else if (activeMetric === 'ca') val = Number(r.paid_items);
-                    else if (activeMetric === 'spend') val = Number(r.cost);
-                    else if (activeMetric === 'roi') {
-                        val = Number(r.paid_amount); 
-                    }
-                    
-                    if (['自营', '入仓'].includes(mode)) dailyAgg[r.date].self += val; 
-                    else dailyAgg[r.date].pop += val;
-                    dailyAgg[r.date].total += val;
+                let val = 0;
+                if (activeMetric === 'gmv') val = Number(r.paid_amount);
+                else if (activeMetric === 'ca') val = Number(r.paid_items);
+                else if (activeMetric === 'spend') val = Number(r.cost);
+                else if (activeMetric === 'roi') {
+                    val = Number(r.paid_amount); 
                 }
+                
+                if (['自营', '入仓'].includes(shopMode)) dailyAgg[r.date].self += val; 
+                else dailyAgg[r.date].pop += val;
+                dailyAgg[r.date].total += val;
             });
 
             setData({
@@ -704,7 +660,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, disabledSkuCodes, shopIdToMode, dataAnchorDate, cachedData, shopNameToMode]); 
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData]); 
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
@@ -714,7 +670,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 onClose={() => setIsDebugOpen(false)} 
                 rawData={debugRawData} 
                 factStats={factStats} 
-                filters={{ enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap }}
+                filters={{ enabledSkusMap, shopIdToMode, shopMap }}
                 anchorDate={dataAnchorDate} 
                 activeMetric={activeMetric}
             />
