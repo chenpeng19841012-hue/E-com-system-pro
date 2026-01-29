@@ -7,7 +7,7 @@ import {
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
     History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
-    ListFilter, Calculator
+    ListFilter, Calculator, Microscope
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -113,7 +113,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
                 <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                            <Binary size={20} />
+                            <Microscope size={20} />
                         </div>
                         <div>
                             <h3 className="text-lg font-black text-white tracking-tight uppercase">数据透视显微镜</h3>
@@ -708,7 +708,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                                 </span>
                             </div>
                             <button onClick={() => setIsDebugOpen(true)} className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-100 transition-colors" title="打开数据透视显微镜">
-                                <Stethoscope size={12} strokeWidth={2.5}/>
+                                <Microscope size={12} strokeWidth={2.5}/>
                             </button>
                         </div>
                     </div>

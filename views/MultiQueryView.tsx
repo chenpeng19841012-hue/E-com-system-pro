@@ -211,20 +211,38 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
         try {
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-            const skuCodeToInfoMap = new Map(skus.map(s => [s.code, s]));
-            const currentSelectedShop = selectedShopId !== 'all' ? shops.find(s => s.id === selectedShopId) : null;
+            
+            // Build Enabled Assets Map (Asset-First Logic)
+            const enabledSkusMap = new Map<string, ProductSKU>();
+            skus.forEach(s => {
+                if (s.isStatisticsEnabled) {
+                    enabledSkusMap.set(s.code.trim(), s);
+                }
+            });
+
+            const shopMap = new Map(shops.map(s => [s.id, s]));
 
             // 1. Fetch Cloud Data On-Demand (Covers ANY range)
             const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
             const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
 
+            // Strict Filter Logic
             const filter = (row: any) => {
-                const code = getSkuIdentifier(row); if (!row.date || !code) return false;
-                if (parsedSkus.length > 0 && !parsedSkus.includes(code)) return false;
-                if (currentSelectedShop) {
-                    const assetShopId = skuCodeToInfoMap.get(code)?.shopId;
-                    if (assetShopId !== currentSelectedShop.id && row.shop_name !== currentSelectedShop.name) return false;
+                const code = getSkuIdentifier(row); 
+                if (!row.date || !code) return false;
+
+                // 1. Check if SKU is in Enabled Assets
+                const asset = enabledSkusMap.get(code);
+                if (!asset) return false;
+
+                // 2. Check if Shop matches (based on Asset's shopId, NOT raw string)
+                if (selectedShopId !== 'all') {
+                    if (asset.shopId !== selectedShopId) return false;
                 }
+
+                // 3. Check SKU Input Filter
+                if (parsedSkus.length > 0 && !parsedSkus.includes(code)) return false;
+
                 return true;
             };
 
@@ -232,20 +250,37 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 const merged = new Map<string, any>();
                 const proc = (row: any) => {
                     const code = getSkuIdentifier(row)!;
+                    // Note: We use Asset info for metadata, NOT raw row info
+                    const asset = enabledSkusMap.get(code);
+                    if (!asset) return; // Should be caught by filter, but double check
+
                     const d = new Date(row.date);
                     let key = row.date;
                     if (timeDimension === 'month') key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
                     else if (timeDimension === 'week') { d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1); key = d.toISOString().split('T')[0]; }
+                    
                     const aggKey = `${key}-${code}`;
-                    if (!merged.has(aggKey)) merged.set(aggKey, { date: row.date, aggDate: key, sku_code: code, sku_shop: { code, shopName: row.shop_name || shops.find(s => s.id === skuCodeToInfoMap.get(code)?.shopId)?.name || '未知' } });
+                    
+                    if (!merged.has(aggKey)) {
+                        const shopName = shopMap.get(asset.shopId)?.name || '未知店铺';
+                        merged.set(aggKey, { 
+                            date: row.date, 
+                            aggDate: key, 
+                            sku_code: code, 
+                            sku_shop: { code, shopName } 
+                        });
+                    }
+                    
                     const ent = merged.get(aggKey)!;
                     [...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'paid_customers', 'total_order_amount'].forEach(m => {
                         if (m === 'paid_users') ent[m] = (ent[m] || 0) + (Number(row.paid_users) || Number(row.paid_customers) || 0);
                         else ent[m] = (ent[m] || 0) + (Number(row[m]) || 0);
                     });
                 };
+                
                 sz.filter(filter).forEach(proc);
                 jzt.filter(filter).forEach(proc);
+                
                 return Array.from(merged.values());
             };
 
@@ -281,7 +316,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             setVisualisationData({ mainTotals: calcTotals(mainData), compTotals: calcTotals(compData), dailyData: dData });
             setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date)));
             
-            addToast('success', '计算完成', `已聚合 ${mainData.length} 条物理记录。`);
+            addToast('success', '计算完成', `已基于资产库聚合 ${mainData.length} 条有效记录。`);
         } catch (e: any) {
             addToast('error', '检索失败', e.message);
         } finally {
