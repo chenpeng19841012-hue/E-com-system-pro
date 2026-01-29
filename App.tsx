@@ -200,6 +200,7 @@ export const App = () => {
             } else if (row['date']) {
                 normalizedDate = row['date'];
             }
+            if (normalizedDate && String(normalizedDate).trim() === '') normalizedDate = null;
             if (normalizedDate) mappedRow['date'] = normalizedDate;
 
             // 注入 shopId
@@ -221,8 +222,13 @@ export const App = () => {
                     let value = row[excelKey];
                     const fieldType = typeMap[dbKey];
 
+                    // 全局清洗：空字符串转换为 null
+                    if (value === undefined || value === null || String(value).trim() === '') {
+                        value = null;
+                    }
+
                     if (fieldType === 'INTEGER' || fieldType === 'REAL' || fieldType === 'NUMERIC') {
-                        if (value === '-' || value === '' || value === null || value === 'null' || value === undefined) {
+                        if (value === null || value === '-') {
                             value = 0;
                         } else if (typeof value === 'string') {
                             const cleanVal = value.replace(/[¥,]/g, '').trim();
@@ -231,7 +237,21 @@ export const App = () => {
                             
                             if (isNaN(value)) value = 0;
                         }
+                    } else if (fieldType === 'TIMESTAMP') {
+                        if (value !== null) {
+                            if (typeof value === 'number') {
+                                // Excel Serial Date
+                                const date = new Date((value - 25569) * 86400 * 1000);
+                                value = date.toISOString();
+                            } else {
+                                // String Parse
+                                const d = new Date(value);
+                                if (isNaN(d.getTime())) value = null;
+                                else value = d.toISOString();
+                            }
+                        }
                     }
+                    
                     mappedRow[dbKey] = value;
                 }
             });
