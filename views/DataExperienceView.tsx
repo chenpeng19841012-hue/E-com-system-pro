@@ -395,7 +395,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                     <div className="animate-fadeIn relative z-10 flex-1 flex flex-col space-y-10 min-h-0">
                         {/* Tactical Filter Panel */}
                         <div className="bg-slate-50/50 rounded-[40px] p-10 border border-slate-100 shadow-inner space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">物理源目标</label>
                                     <div className="relative">
@@ -405,6 +405,19 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                                             <option value="customer_service">客服接待流水物理表</option>
                                         </select>
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 穿透检索</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            value={skuSearch} 
+                                            onChange={e => setSkuSearch(e.target.value)} 
+                                            placeholder="输入 SKU / 商品ID..."
+                                            className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-sm transition-all hover:bg-slate-50 placeholder:font-normal" 
+                                        />
+                                        <Search size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
