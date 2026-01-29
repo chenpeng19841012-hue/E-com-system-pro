@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck } from 'lucide-react';
@@ -5,6 +6,7 @@ import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { DB } from '../lib/db';
 
 // 进度弹窗 - 指挥中心风格
 const ProgressModal = ({ isOpen, current, total }: { isOpen: boolean, current: number, total: number }) => {
@@ -160,11 +162,11 @@ const formatDateForDisplay = (dateValue: any): string => {
     return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
 };
 
-interface FilterCriteria { tableType: TableType; sku: string; shop: string; start: string; end: string; }
-
-export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, onRefreshData, addToast }: any) => {
+export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, onRefreshData, addToast }: any) => {
     const [activeTab, setActiveTab] = useState<DataExpSubView>('preview');
     const [selectedSchemaType, setSelectedSchemaType] = useState<TableType>('shangzhi');
+    
+    // Modal States
     const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
     const [isClearModalOpen, setIsClearModalOpen] = useState(false);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -172,64 +174,61 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
     const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
     const [deleteProgress, setDeleteProgress] = useState<{ current: number, total: number } | null>(null);
     
-    // 搜索表单状态
+    // Search & Data States
     const [tableTypeSearch, setTableTypeSearch] = useState<TableType>('shangzhi');
     const [skuSearch, setSkuSearch] = useState('');
     const [shopSearch, setShopSearch] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     
-    // 实际应用的筛选条件
-    const [appliedFilters, setAppliedFilters] = useState<FilterCriteria | null>(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const PAGE_SIZE = 50;
+    // Data Management
+    const [tableData, setTableData] = useState<any[]>([]);
+    const [isLoadingData, setIsLoadingData] = useState(false);
     const [selectedRowIds, setSelectedRowIds] = useState<Set<any>>(new Set());
 
+    // Load initial data on mount (recent 20 rows) to show something
+    useEffect(() => {
+        handleExecuteSearch(); 
+    }, [tableTypeSearch]);
+
     const currentSchema = schemas[selectedSchemaType] || [];
+    
     const displaySchema = useMemo(() => {
-        const type = appliedFilters?.tableType || tableTypeSearch;
+        const type = tableTypeSearch;
         const schema = schemas[type] || [];
         if (type === 'customer_service') {
             const dateField = schema.find((f:any) => f.key === 'date');
             return dateField ? [dateField, ...schema.filter((f:any) => f.key !== 'date')] : schema;
         }
         return schema;
-    }, [appliedFilters, tableTypeSearch, schemas]);
+    }, [tableTypeSearch, schemas]);
     
     const sortedSchema = [...currentSchema].sort((a, b) => (a.required === b.required ? 0 : a.required ? -1 : 1));
 
-    const filteredData = useMemo(() => {
-        if (!appliedFilters) return [];
-        const { tableType, sku, shop, start, end } = appliedFilters;
-        const tableData = factTables[tableType] || [];
-        const directoryShopNames = new Set(shops.map((s: Shop) => s.name));
-        const searchTerms = sku.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
-
-        return tableData.filter((row: any) => {
-            const rowSku = String(getSkuIdentifier(row) || '');
-            const rowProdId = String(row.product_id || '');
-            const rowTrackedId = String(row.tracked_sku_id || '');
-            let skuMatch = searchTerms.length === 0 || searchTerms.some(term => rowSku.includes(term) || rowProdId.includes(term) || rowTrackedId.includes(term));
-            const rowShop = row.shop_name || '';
-            let shopMatch = shop === "__EMPTY__" ? (!rowShop || rowShop.trim() === '') : shop === "__OTHER__" ? (rowShop && rowShop.trim() !== '' && !directoryShopNames.has(rowShop)) : (!shop || rowShop === shop);
-            const rowDate = row.date || '';
-            const dateMatch = (!start || rowDate >= start) && (!end || rowDate <= end);
-            return skuMatch && shopMatch && dateMatch;
-        });
-    }, [appliedFilters, factTables, shops]);
-
-    const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * PAGE_SIZE;
-        return filteredData.slice(start, start + PAGE_SIZE);
-    }, [filteredData, currentPage]);
-
-    const totalPages = Math.ceil(filteredData.length / PAGE_SIZE);
-    const handleExecuteSearch = () => {
-        setAppliedFilters({ tableType: tableTypeSearch, sku: skuSearch, shop: shopSearch, start: startDate, end: endDate });
-        setCurrentPage(1); setSelectedRowIds(new Set());
+    const handleExecuteSearch = async () => {
+        setIsLoadingData(true);
+        setSelectedRowIds(new Set());
+        try {
+            // [Fix] Call Server-Side Search instead of filtering empty props
+            const data = await DB.queryData(`fact_${tableTypeSearch}`, {
+                startDate: startDate || undefined,
+                endDate: endDate || undefined,
+                sku: skuSearch || undefined,
+                shopName: shopSearch || undefined
+            }, 100); // Limit to 100 rows for performance
+            setTableData(data);
+            if (data.length === 0) {
+                addToast('info', '检索完成', '未找到匹配的物理记录。');
+            }
+        } catch (e: any) {
+            addToast('error', '检索失败', e.message);
+        } finally {
+            setIsLoadingData(false);
+        }
     };
 
-    const handleSelectAll = () => setSelectedRowIds(selectedRowIds.size === filteredData.length && filteredData.length > 0 ? new Set() : new Set(filteredData.map(r => r.id)));
+    const handleSelectAll = () => setSelectedRowIds(selectedRowIds.size === tableData.length && tableData.length > 0 ? new Set() : new Set(tableData.map(r => r.id)));
+    
     const handleSelectRow = (id: any) => {
         const next = new Set(selectedRowIds);
         if (next.has(id)) next.delete(id); else next.add(id);
@@ -248,7 +247,6 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
     };
 
     const handleConfirmDeleteSelected = async () => {
-        if (!appliedFilters) return;
         const allIdsToDelete = Array.from(selectedRowIds);
         const total = allIdsToDelete.length;
         setIsDeleteSelectedModalOpen(false);
@@ -257,10 +255,12 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
         try {
             for (let i = 0; i < total; i += CHUNK_SIZE) {
                 const chunk = allIdsToDelete.slice(i, i + CHUNK_SIZE);
-                await onDeleteRows(appliedFilters.tableType, chunk);
+                await onDeleteRows(tableTypeSearch, chunk);
                 setDeleteProgress({ current: Math.min(i + CHUNK_SIZE, total), total });
                 await new Promise(r => setTimeout(r, 50));
             }
+            // Refresh local data view
+            handleExecuteSearch();
             await onRefreshData();
             addToast('success', '物理空间已释放', `已成功擦除 ${total} 条数据记录。`);
         } catch (e) { addToast('error', '物理删除失败', '数据库写入指令中断。'); }
@@ -271,8 +271,8 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
             <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} />
             
-            <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(appliedFilters?.tableType || tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setAppliedFilters(null); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
-                <p>正在执行物理层移除指令：<strong className="font-black text-slate-900">[{getTableName(appliedFilters?.tableType || tableTypeSearch)}]</strong></p>
+            <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setTableData([]); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
+                <p>正在执行物理层移除指令：<strong className="font-black text-slate-900">[{getTableName(tableTypeSearch)}]</strong></p>
                 <p className="mt-2 text-rose-500 font-bold opacity-80">此操作将物理性抹除全量记录，无法撤销。确认继续？</p>
             </ConfirmModal>
 
@@ -369,7 +369,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">资产/映射 ID 检索</label>
-                                    <div className="relative"><Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" /><input placeholder="SKU / PID (多值逗号分隔)" className="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:border-brand shadow-sm" value={skuSearch} onChange={(e) => setSkuSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleExecuteSearch()} /></div>
+                                    <div className="relative"><Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" /><input placeholder="SKU / PID / Tracked ID (模糊)" className="w-full pl-10 pr-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:border-brand shadow-sm" value={skuSearch} onChange={(e) => setSkuSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleExecuteSearch()} /></div>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">物理时间跨度</label>
@@ -380,8 +380,6 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                     <div className="relative">
                                         <select value={shopSearch} onChange={e => setShopSearch(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm">
                                             <option value="">所有物理记录</option>
-                                            <option value="__EMPTY__">🔴 无资产归属 (待清洗)</option>
-                                            <option value="__OTHER__">🟡 非监控内店铺 (其他商铺)</option>
                                             {shops.map((s:Shop) => <option key={s.id} value={s.name}>🔵 {s.name}</option>)}
                                         </select>
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -393,14 +391,17 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                     <div className="p-4 bg-brand/5 rounded-2xl border border-brand/10 flex items-center gap-3">
                                         <Database size={18} className="text-brand" />
                                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                            {appliedFilters ? `命中数据物理事实行: ${filteredData.length.toLocaleString()}` : '请设定治理参数并执行穿透探测'}
+                                            {isLoadingData ? '云端检索中...' : `命中数据物理事实行: ${tableData.length.toLocaleString()}`}
                                         </span>
                                     </div>
                                     {selectedRowIds.size > 0 && <div className="px-5 py-3.5 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3"><Trash2 size={14} className="text-rose-500"/><span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">已锁定物理行: {selectedRowIds.size.toLocaleString()}</span></div>}
                                 </div>
                                 <div className="flex gap-3">
-                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setAppliedFilters(null); setCurrentPage(1); setSelectedRowIds(new Set()); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
-                                    <button onClick={handleExecuteSearch} className="px-12 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95"><Filter size={16}/> 执行全链路探测</button>
+                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
+                                    <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-12 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
+                                        {isLoadingData ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16}/>}
+                                        {isLoadingData ? '穿透中...' : '执行云端探测'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -414,7 +415,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                         <tr className="bg-slate-50/95 backdrop-blur-sm">
                                             <th className="px-8 py-6 border-b border-slate-100 w-16 text-center sticky left-0 bg-slate-50 z-30">
                                                 <button onClick={handleSelectAll} className="text-slate-300 hover:text-brand transition-colors">
-                                                    {selectedRowIds.size === filteredData.length && filteredData.length > 0 ? <CheckSquare size={20} className="text-brand" /> : <Square size={20} />}
+                                                    {selectedRowIds.size === tableData.length && tableData.length > 0 ? <CheckSquare size={20} className="text-brand" /> : <Square size={20} />}
                                                 </button>
                                             </th>
                                             {displaySchema.map((f:FieldDefinition) => (
@@ -423,10 +424,10 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {!appliedFilters ? (
-                                             <tr><td colSpan={displaySchema.length + 1} className="py-48 text-center text-slate-300 opacity-20 italic font-black uppercase tracking-[0.5em]">Command Awaiting Parameters</td></tr>
-                                        ) : paginatedData.length > 0 ? (
-                                            paginatedData.map((row: any, rIdx: number) => (
+                                        {isLoadingData ? (
+                                             <tr><td colSpan={displaySchema.length + 1} className="py-48 text-center"><div className="flex flex-col items-center gap-4 text-slate-300 animate-pulse"><Activity size={48} /><p className="font-black uppercase tracking-[0.4em] text-xs">Retrieving Cloud Artifacts...</p></div></td></tr>
+                                        ) : tableData.length > 0 ? (
+                                            tableData.map((row: any, rIdx: number) => (
                                                 <tr key={row.id || rIdx} className={`hover:bg-slate-50/50 transition-all group/row ${selectedRowIds.has(row.id) ? 'bg-brand/5' : ''}`}>
                                                     <td className="px-8 py-4 border-b border-slate-50 text-center sticky left-0 bg-white group-hover/row:bg-slate-50/80 z-10">
                                                         <button onClick={() => handleSelectRow(row.id)} className={`${selectedRowIds.has(row.id) ? 'text-brand' : 'text-slate-200'} hover:text-brand transition-colors`}>
@@ -441,7 +442,7 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                                 </tr>
                                             ))
                                         ) : (
-                                            <tr><td colSpan={displaySchema.length + 1} className="py-48 text-center text-slate-300 opacity-20 italic font-black uppercase tracking-[0.5em]">No Atomic Records Found</td></tr>
+                                            <tr><td colSpan={displaySchema.length + 1} className="py-48 text-center text-slate-300 opacity-20 italic font-black uppercase tracking-[0.5em]">No Atomic Records Found in Search Range</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -451,8 +452,8 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                             <div className="p-8 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between shrink-0 relative z-10">
                                 <div className="flex items-center gap-6">
                                     <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-4">
-                                        <span>展示 {(currentPage-1)*PAGE_SIZE + 1} - {Math.min(currentPage*PAGE_SIZE, filteredData.length)} / 共 {filteredData.length.toLocaleString()} 行记录</span>
-                                        {filteredData.length > 0 && <span className="text-brand/50 font-black italic">提示: 字段较多时可按住 Shift 配合滚轮或拖动底部条横向滑动</span>}
+                                        <span>当前展示 {tableData.length} 行记录 (已截断前 100 行以优化性能)</span>
+                                        {tableData.length > 0 && <span className="text-brand/50 font-black italic">提示: 字段较多时可按住 Shift 配合滚轮或拖动底部条横向滑动</span>}
                                     </div>
                                     {selectedRowIds.size > 0 && (
                                         <button onClick={() => setIsDeleteSelectedModalOpen(true)} className="px-6 py-2.5 bg-rose-500 text-white rounded-xl text-[10px] font-black hover:bg-rose-600 shadow-xl shadow-rose-500/20 transition-all active:scale-95 uppercase tracking-widest flex items-center gap-2 animate-slideIn">
@@ -460,13 +461,6 @@ export const DataExperienceView = ({ factTables, schemas, shops, onUpdateSchema,
                                         </button>
                                     )}
                                 </div>
-                                {appliedFilters && filteredData.length > 0 && (
-                                    <div className="flex items-center gap-4">
-                                        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-3 rounded-2xl border border-slate-200 bg-white text-slate-400 hover:text-slate-900 disabled:opacity-20 transition-all shadow-sm"><ChevronLeft size={16} /></button>
-                                        <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest px-4 bg-white border border-slate-200 py-3 rounded-2xl shadow-sm">Page {currentPage} / {totalPages}</div>
-                                        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="p-3 rounded-2xl border border-slate-200 bg-white text-slate-400 hover:text-slate-900 disabled:opacity-20 transition-all shadow-sm"><ChevronRight size={16} /></button>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>

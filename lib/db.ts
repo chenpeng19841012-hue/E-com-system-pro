@@ -79,6 +79,74 @@ export const DB = {
     return getClient();
   },
 
+  // [新增] 轻量级获取表统计信息 (行数 + 最新日期)
+  async getTableSummary(tableName: string): Promise<{ count: number, latestDate: string }> {
+      const supabase = getClient();
+      if (!supabase) return { count: 0, latestDate: 'N/A' };
+
+      try {
+          // 1. 获取总行数 (使用 count: 'exact', head: true 不下载数据)
+          const { count, error: countError } = await supabase.from(tableName).select('*', { count: 'exact', head: true });
+          
+          if (countError) throw countError;
+
+          // 2. 获取最新日期 (只取 1 行)
+          const { data: dateData, error: dateError } = await supabase.from(tableName)
+              .select('date')
+              .order('date', { ascending: false })
+              .limit(1);
+
+          let latest = 'N/A';
+          if (!dateError && dateData && dateData.length > 0) {
+              latest = dateData[0].date;
+          }
+
+          return { count: count || 0, latestDate: latest };
+      } catch (e) {
+          console.error(`[DB] Failed to get summary for ${tableName}`, e);
+          return { count: 0, latestDate: 'N/A' };
+      }
+  },
+
+  // [升级] 支持复杂筛选的云端查询
+  async queryData(tableName: string, filters: { 
+      startDate?: string, 
+      endDate?: string, 
+      sku?: string, // 支持模糊搜索
+      shopName?: string 
+  }, limit = 100): Promise<any[]> {
+      const supabase = getClient();
+      if (!supabase) return [];
+
+      let query = supabase.from(tableName).select('*');
+
+      if (filters.startDate) query = query.gte('date', filters.startDate);
+      if (filters.endDate) query = query.lte('date', filters.endDate);
+      
+      if (filters.shopName && filters.shopName !== 'all') {
+          query = query.eq('shop_name', filters.shopName);
+      }
+
+      // SKU 模糊搜索 (对 fact 表可能需要关联或直接搜字段)
+      if (filters.sku) {
+          // 简单实现：尝试在 sku_code / tracked_sku_id / product_id 中搜索
+          // 注意：Supabase 的 or 语法需要特定格式
+          if (tableName === 'fact_shangzhi') {
+              query = query.or(`sku_code.ilike.%${filters.sku}%,product_name.ilike.%${filters.sku}%`);
+          } else if (tableName === 'fact_jingzhuntong') {
+              query = query.or(`tracked_sku_id.ilike.%${filters.sku}%`);
+          }
+      }
+
+      const { data, error } = await query.order('date', { ascending: false }).limit(limit);
+      
+      if (error) {
+          console.error("[DB] Query Error:", error);
+          return [];
+      }
+      return data || [];
+  },
+
   // 核心上传逻辑：支持详细进度回调 (current, total)
   async bulkAdd(tableName: string, rows: any[], onProgress?: (current: number, total: number) => void): Promise<void> {
     const supabase = getClient();

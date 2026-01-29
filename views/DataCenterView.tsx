@@ -100,7 +100,7 @@ const SyncProgressModal = ({ isOpen, stats }: { isOpen: boolean, stats: { curren
     );
 };
 
-export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, shops, schemas, addToast }: any) => {
+export const DataCenterView = ({ onUpload, onBatchUpdate, history, factStats, shops, schemas, addToast }: any) => {
   const [activeImportTab, setActiveImportTab] = useState<TableType>('shangzhi');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -217,8 +217,7 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
   const handleDownloadTemplate = (tableType: TableType, isOnlyTemplate: boolean = true) => {
     try {
         let currentSchema = schemas[tableType];
-        const data = isOnlyTemplate ? [] : factTables[tableType];
-
+        
         if (!currentSchema) {
             addToast('error', '操作失败', '未找到对应的表结构。');
             return;
@@ -232,18 +231,17 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
         }
         
         const headers = currentSchema.map((field: any) => field.label);
-        const dataRows = data.map((row: any) => 
-            currentSchema.map((field: any) => row[field.key] ?? null)
-        );
+        const sheetData = [headers];
+        
+        if (!isOnlyTemplate) {
+            addToast('info', '云端归档', '全量导出功能正在迁移至云端异步任务，当前仅提供模板下载。');
+        }
 
-        const sheetData = [headers, ...dataRows];
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, getTableName(tableType));
         
-        const fileName = isOnlyTemplate 
-            ? `${getTableName(tableType)}_标准导入模板.xlsx`
-            : `${getTableName(tableType)}_全量数据导出_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const fileName = `${getTableName(tableType)}_标准导入模板.xlsx`;
             
         XLSX.writeFile(wb, fileName);
         addToast('success', '下载开始', `正在准备: ${fileName}`);
@@ -252,24 +250,14 @@ export const DataCenterView = ({ onUpload, onBatchUpdate, history, factTables, s
     }
   };
 
-  const getLatestDate = (data: any[]) => {
-    if (!data || data.length === 0) return 'N/A';
-    try {
-      const latest = data.reduce((maxDateStr, row) => {
-        if (!row.date || typeof row.date !== 'string') return maxDateStr;
-        return row.date > maxDateStr ? row.date : maxDateStr;
-      }, '1970-01-01');
-      return latest === '1970-01-01' ? 'N/A' : latest;
-    } catch { return '日期无效'; }
-  };
-
-  const shangzhiCount = factTables.shangzhi?.length || 0;
-  const jingzhuntongCount = factTables.jingzhuntong?.length || 0;
-  const csCount = factTables.customer_service?.length || 0;
+  const shangzhiCount = factStats.shangzhi?.count || 0;
+  const jingzhuntongCount = factStats.jingzhuntong?.count || 0;
+  const csCount = factStats.customer_service?.count || 0;
   const totalRows = shangzhiCount + jingzhuntongCount + csCount;
+  // Estimated size: 200 bytes per row
   const sizeMB = (totalRows * 200 / 1024 / 1024).toFixed(2);
-  const shangzhiLatestDate = getLatestDate(factTables.shangzhi);
-  const jingzhuntongLatestDate = getLatestDate(factTables.jingzhuntong);
+  const shangzhiLatestDate = factStats.shangzhi?.latestDate || 'N/A';
+  const jingzhuntongLatestDate = factStats.jingzhuntong?.latestDate || 'N/A';
 
   return (
     <>

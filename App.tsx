@@ -49,6 +49,15 @@ export const App = () => {
     const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
     const [quotingData, setQuotingData] = useState<QuotingData>(INITIAL_QUOTING_DATA);
     const [snapshotSettings, setSnapshotSettings] = useState<SnapshotSettings>({ autoSnapshotEnabled: true, retentionDays: 7 });
+    
+    // 事实表元数据统计 (代替全量数据)
+    const [factStats, setFactStats] = useState({
+        shangzhi: { count: 0, latestDate: 'N/A' },
+        jingzhuntong: { count: 0, latestDate: 'N/A' },
+        customer_service: { count: 0, latestDate: 'N/A' }
+    });
+    
+    // 仍然保留 factTables 结构以兼容旧代码，但初始化为空，不再自动填充
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
 
     // Competitor Monitoring Data
@@ -63,7 +72,7 @@ export const App = () => {
 
     const loadMetadata = useCallback(async () => {
         try {
-            // 在云原生模式下，DB.loadConfig 直接从 Supabase 拉取
+            // 1. 加载配置数据
             const [s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
@@ -79,14 +88,25 @@ export const App = () => {
                 DB.loadConfig('comp_groups', [])
             ]);
             
+            // 2. 加载事实表统计信息 (轻量级)
+            const [statSz, statJzt, statCs] = await Promise.all([
+                DB.getTableSummary('fact_shangzhi'),
+                DB.getTableSummary('fact_jingzhuntong'),
+                DB.getTableSummary('fact_customer_service')
+            ]);
+
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
             setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
-            
-            // 直连模式下不全量拉取 factTables
-            setFactTables({ shangzhi: [], jingzhuntong: [], customer_service: [] }); 
-            
             setCompShops(s_compShops); setCompGroups(s_compGroups);
+            
+            // 更新统计状态
+            setFactStats({
+                shangzhi: statSz,
+                jingzhuntong: statJzt,
+                customer_service: statCs
+            });
+
         } catch (e) {
             console.error("Initialization failed:", e);
         }
@@ -104,6 +124,7 @@ export const App = () => {
     const onDeleteRows = async (tableType: TableType, ids: any[]) => {
         try {
             await DB.deleteRows(`fact_${tableType}`, ids);
+            await loadMetadata(); // 刷新统计
         } catch (e) {
             addToast('error', '物理删除失败', '操作数据库时发生错误。');
             throw e;
@@ -239,7 +260,7 @@ export const App = () => {
                     setUploadHistory(updatedHistory);
                     await DB.saveConfig('upload_history', updatedHistory);
 
-                    // 刷新视图
+                    // 刷新视图 (统计信息)
                     await loadMetadata();
                     addToast('success', '云端写入完成', `已成功将 ${data.length} 条数据注入 Supabase 数据库。`);
                     resolve();
@@ -276,9 +297,9 @@ export const App = () => {
             case 'dashboard': return <DashboardView {...commonProps} />;
             case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={factTables.shangzhi} jingzhuntongData={factTables.jingzhuntong} />;
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id:any) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
-            case 'data-center': return <DataCenterView onUpload={handleUpload} onBatchUpdate={handleBatchUpdate} history={uploadHistory} factTables={factTables} shops={shops} schemas={schemas} addToast={addToast} />;
+            case 'data-center': return <DataCenterView onUpload={handleUpload} onBatchUpdate={handleBatchUpdate} history={uploadHistory} factStats={factStats} shops={shops} schemas={schemas} addToast={addToast} />;
             case 'cloud-sync': return <CloudSyncView addToast={addToast} />;
-            case 'data-experience': return <DataExperienceView factTables={factTables} schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={onDeleteRows} onRefreshData={loadMetadata} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
+            case 'data-experience': return <DataExperienceView schemas={schemas} shops={shops} onClearTable={async (k:any)=>await DB.clearTable(`fact_${k}`)} onDeleteRows={onDeleteRows} onRefreshData={loadMetadata} onUpdateSchema={async (t:any, s:any) => { const ns = {...schemas, [t]: s}; setSchemas(ns); await DB.saveConfig(`schema_${t}`, s); }} addToast={addToast} />;
             case 'products': return (
                 <SKUManagementView 
                     {...commonProps} 
