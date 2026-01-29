@@ -41,14 +41,14 @@ const getChange = (current: number, previous: number) => {
     return ((current - previous) / previous) * 100;
 };
 
-// 微型趋势图组件 - Height Reduced
+// 微型趋势图组件
 const MiniSparkline = ({ data, color }: { data: number[], color: string }) => {
     if (!data || data.length < 2) return <div className="h-6" />;
     const max = Math.max(...data, 0.0001);
     const min = Math.min(...data);
     const range = max - min || 1;
     const width = 120;
-    const height = 24; // Reduced height
+    const height = 24; 
     const pts = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(' L ');
     
     return (
@@ -274,15 +274,11 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     const asset = enabledSkusMap.get(code);
                     
                     // 核心修正：严格使用字符串日期，禁止 new Date() 时区转换
-                    // The 'date' field from DB is typically YYYY-MM-DD string.
-                    // We split by 'T' just in case it's a full ISO string.
                     let key = String(row.date).split('T')[0]; 
                     
                     if (timeDimension === 'month') {
-                        // Only for Month aggregation do we perform substring parsing
                         key = key.substring(0, 7); // YYYY-MM
                     } else if (timeDimension === 'week') {
-                        // Only for Week aggregation do we use Date object math
                         const d = new Date(key);
                         d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1);
                         key = d.toISOString().split('T')[0];
@@ -405,7 +401,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     </div>
                 </div>
 
-                {/* 配置面板 - Grid Layout Fix for Alignment */}
+                {/* 配置面板 */}
                 <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative z-10">
@@ -447,7 +443,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         </div>
                     </div>
                     
-                    {/* Fixed Alignment Row - Refactored to Grid for better vertical alignment */}
                     <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end pt-6 border-t border-slate-50 relative z-10">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索 (支持逗号分隔)</label>
@@ -498,7 +493,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             return (
                                 <div key={key} 
                                     onClick={() => setChartMetrics(p => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n; })} 
-                                    className={`p-3 rounded-3xl transition-all cursor-pointer border relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
+                                    className={`p-3 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
                                     style={{ borderColor: isSelected ? color : 'transparent' }}>
                                     
                                     <div className="space-y-0.5">

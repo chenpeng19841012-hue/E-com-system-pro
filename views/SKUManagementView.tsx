@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Package, Database, Plus, Download, UploadCloud, Edit2, ChevronDown, User, X, Trash2, List, ChevronsUpDown, LoaderCircle, CheckCircle2, AlertCircle, Store, ChevronLeft, ChevronRight, Search, ToggleLeft, ToggleRight, Box, Filter, LayoutGrid, Sparkles, ShieldAlert, CheckSquare, Square, BarChart2 } from 'lucide-react';
@@ -241,10 +242,7 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
     }, [isOpen, shopToEdit]);
 
     const handleConfirm = async () => {
-        if (!name.trim()) {
-            setError('店铺名称不能为空。');
-            return;
-        }
+        if (!name.trim()) { setError('店铺名称不可为空。'); return; }
         const payload = { id: shopToEdit?.id, name: name.trim(), platformId: platformId.trim(), mode };
         if (await onConfirm(payload)) onClose();
     };
@@ -253,30 +251,26 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
 
     return (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
-            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md p-12 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
-                <h3 className="text-2xl font-black text-slate-900 mb-10 tracking-tight uppercase">{title}</h3>
+            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg p-10 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{title}</h3>
+                    <button onClick={onClose} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all"><X size={20}/></button>
+                </div>
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">店铺物理全称 *</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
-                    </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">平台 ID / Account</label>
-                        <input type="text" value={platformId} onChange={e => setPlatformId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner font-mono" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">店铺名称</label>
+                        <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">经营模式控制</label>
-                        <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-                             {['自营', 'POP'].map(m => (
-                                 <button key={m} onClick={() => setMode(m)} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all ${mode === m ? 'bg-white text-slate-900 shadow-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}>{m}</button>
-                             ))}
-                        </div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">平台 ID</label>
+                        <input value={platformId} onChange={e => setPlatformId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-mono font-black text-slate-600 outline-none focus:border-brand shadow-inner" />
                     </div>
+                    <SelectInput label="经营模式" value={mode} options={['自营', 'POP', '分销']} onChange={setMode} />
                 </div>
-                 {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-4 rounded-xl border border-rose-100 font-bold">{error}</p>}
-                <div className="flex justify-end gap-4 mt-10 pt-8 border-t border-slate-50">
-                    <button onClick={onClose} className="flex-1 py-4 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
-                    <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl bg-brand text-white font-black text-xs shadow-2xl shadow-brand/20 transition-all uppercase">{confirmText}</button>
+                {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-3 rounded-xl font-bold border border-rose-100">{error}</p>}
+                <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-slate-50">
+                    <button onClick={onClose} className="px-8 py-3.5 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
+                    <button onClick={handleConfirm} className="px-10 py-3.5 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all active:scale-95 uppercase">{confirmText}</button>
                 </div>
             </div>
         </div>
@@ -286,28 +280,21 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
 const AgentFormModal = ({ isOpen, onClose, onConfirm, agentToEdit, shops, title, confirmText }: any) => {
     const [name, setName] = useState('');
     const [account, setAccount] = useState('');
-    const [selectedShopIds, setSelectedShopIds] = useState<string[]>([]);
+    const [shopIds, setShopIds] = useState<string[]>([]);
     const [error, setError] = useState('');
 
     React.useEffect(() => {
         if (isOpen) {
             setName(agentToEdit?.name || '');
             setAccount(agentToEdit?.account || '');
-            setSelectedShopIds(agentToEdit?.shopIds || []);
+            setShopIds(agentToEdit?.shopIds || []);
             setError('');
         }
     }, [isOpen, agentToEdit]);
 
-    const handleShopSelection = (shopId: string) => {
-        setSelectedShopIds(prev => prev.includes(shopId) ? prev.filter(id => id !== shopId) : [...prev, shopId]);
-    };
-
     const handleConfirm = async () => {
-        if (!name.trim() || !account.trim()) {
-            setError('物理身份字段不能为空。');
-            return;
-        }
-        const payload = { id: agentToEdit?.id, name: name.trim(), account: account.trim(), shopIds: selectedShopIds };
+        if (!name.trim() || !account.trim()) { setError('姓名与账号为必填项。'); return; }
+        const payload = { id: agentToEdit?.id, name: name.trim(), account: account.trim(), shopIds };
         if (await onConfirm(payload)) onClose();
     };
 
@@ -315,60 +302,59 @@ const AgentFormModal = ({ isOpen, onClose, onConfirm, agentToEdit, shops, title,
 
     return (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
-            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-md p-12 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
-                 <h3 className="text-2xl font-black text-slate-900 mb-10 tracking-tight uppercase">{title}</h3>
+            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg p-10 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{title}</h3>
+                    <button onClick={onClose} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all"><X size={20}/></button>
+                </div>
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">真实姓名</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">客服姓名</label>
+                        <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">平台工号 / Account</label>
-                        <input type="text" value={account} onChange={e => setAccount(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner font-mono" />
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">平台账号</label>
+                        <input value={account} onChange={e => setAccount(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-mono font-black text-slate-600 outline-none focus:border-brand shadow-inner" />
                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属服务店铺</label>
-                        <div className="max-h-48 overflow-y-auto bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 no-scrollbar shadow-inner">
-                            {shops.map((shop:Shop) => (
-                                <label key={shop.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white transition-all cursor-pointer group">
-                                    <input type="checkbox" checked={selectedShopIds.includes(shop.id)} onChange={() => handleShopSelection(shop.id)} className="hidden" />
-                                    {selectedShopIds.includes(shop.id) ? <CheckSquare size={16} className="text-brand" /> : <Square size={16} className="text-slate-300 group-hover:text-slate-400" />}
-                                    <span className="text-xs font-bold text-slate-700">{shop.name}</span>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">关联店铺权限</label>
+                        <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto no-scrollbar p-2 bg-slate-50 rounded-2xl border border-slate-200">
+                            {shops.map((s: Shop) => (
+                                <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-white rounded-xl cursor-pointer transition-colors">
+                                    <input type="checkbox" checked={shopIds.includes(s.id)} onChange={() => setShopIds(p => p.includes(s.id) ? p.filter(i => i !== s.id) : [...p, s.id])} className="rounded text-brand focus:ring-brand" />
+                                    <span className="text-xs font-bold text-slate-700">{s.name}</span>
                                 </label>
                             ))}
                         </div>
                     </div>
                 </div>
-                 {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-4 rounded-xl border border-rose-100 font-bold">{error}</p>}
-                <div className="flex justify-end gap-4 mt-10 pt-8 border-t border-slate-50">
-                    <button onClick={onClose} className="flex-1 py-4 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
-                    <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl bg-brand text-white font-black text-xs shadow-2xl shadow-brand/20 transition-all uppercase">{confirmText}</button>
+                {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-3 rounded-xl font-bold border border-rose-100">{error}</p>}
+                <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-slate-50">
+                    <button onClick={onClose} className="px-8 py-3.5 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
+                    <button onClick={handleConfirm} className="px-10 py-3.5 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all active:scale-95 uppercase">{confirmText}</button>
                 </div>
             </div>
         </div>
     );
 };
 
-const SkuListFormModal = ({ isOpen, onClose, onConfirm, listToEdit }: { isOpen: boolean, onClose: () => void, onConfirm: (data: Omit<SkuList, 'id'> | SkuList) => Promise<boolean> | boolean, listToEdit?: SkuList | null }) => {
+const SkuListFormModal = ({ isOpen, onClose, onConfirm, listToEdit }: any) => {
     const [name, setName] = useState('');
     const [skuCodes, setSkuCodes] = useState('');
     const [error, setError] = useState('');
 
-    useEffect(() => {
+    React.useEffect(() => {
         if (isOpen) {
             setName(listToEdit?.name || '');
-            setSkuCodes(listToEdit?.skuCodes.join('\n') || '');
+            setSkuCodes(listToEdit?.skuCodes?.join('\n') || '');
             setError('');
         }
     }, [isOpen, listToEdit]);
 
     const handleConfirm = async () => {
-        if (!name.trim()) {
-            setError('清单映射标识不能为空。');
-            return;
-        }
-        const parsedSkuCodes = skuCodes.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-        const payload = { id: listToEdit?.id, name: name.trim(), skuCodes: parsedSkuCodes };
+        if (!name.trim()) { setError('清单名称必填。'); return; }
+        const codes = skuCodes.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+        const payload = { id: listToEdit?.id, name: name.trim(), skuCodes: codes };
         if (await onConfirm(payload)) onClose();
     };
 
@@ -376,25 +362,25 @@ const SkuListFormModal = ({ isOpen, onClose, onConfirm, listToEdit }: { isOpen: 
 
     return (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
-            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-xl p-12 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-10 border-b border-slate-50 pb-6">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{listToEdit ? '编辑 SKU 清单' : '建立物理分层清单'}</h3>
-                    <button onClick={onClose} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 shadow-sm transition-all"><X size={20} /></button>
+            <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-lg p-10 m-4 border border-slate-200" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6">
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">{listToEdit ? '编辑清单' : '创建分层清单'}</h3>
+                    <button onClick={onClose} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all"><X size={20}/></button>
                 </div>
                 <div className="space-y-6">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">清单名称标识</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">清单名称</label>
+                        <input value={name} onChange={e => setName(e.target.value)} placeholder="例如：高端游戏本促销组" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 链路池 (回车/逗号分隔)</label>
-                        <textarea value={skuCodes} onChange={e => setSkuCodes(e.target.value)} placeholder="100228755791..." className="w-full h-48 bg-slate-50 border border-slate-200 rounded-[32px] px-6 py-5 text-xs font-mono font-bold text-slate-700 outline-none focus:border-brand shadow-inner resize-none no-scrollbar" />
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 编码列表 (每行一个)</label>
+                        <textarea value={skuCodes} onChange={e => setSkuCodes(e.target.value)} className="w-full h-40 bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-mono font-bold text-slate-600 outline-none focus:border-brand shadow-inner resize-none no-scrollbar" placeholder="SKU12345&#10;SKU67890..." />
                     </div>
                 </div>
-                {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-4 rounded-xl border border-rose-100 font-bold">{error}</p>}
-                <div className="flex justify-end gap-4 mt-12 pt-8 border-t border-slate-50">
-                    <button onClick={onClose} className="flex-1 py-4 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
-                    <button onClick={handleConfirm} className="flex-[2] py-4 rounded-2xl bg-brand text-white font-black text-xs shadow-2xl shadow-brand/20 transition-all uppercase tracking-widest">{listToEdit ? '保存更改' : '执行全链路映射'}</button>
+                {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-3 rounded-xl font-bold border border-rose-100">{error}</p>}
+                <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-slate-50">
+                    <button onClick={onClose} className="px-8 py-3.5 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs hover:bg-slate-50 transition-all uppercase">取消</button>
+                    <button onClick={handleConfirm} className="px-10 py-3.5 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all active:scale-95 uppercase">保存清单</button>
                 </div>
             </div>
         </div>
@@ -402,26 +388,26 @@ const SkuListFormModal = ({ isOpen, onClose, onConfirm, listToEdit }: { isOpen: 
 };
 
 interface SKUManagementViewProps {
-    shops: Shop[];
     skus: ProductSKU[];
+    shops: Shop[];
     agents: CustomerServiceAgent[];
     skuLists: SkuList[];
     onAddNewSKU: (sku: any) => Promise<boolean>;
     onUpdateSKU: (sku: ProductSKU) => Promise<boolean>;
     onDeleteSKU: (id: string) => Promise<void>;
-    onBulkAddSKUs: (newList: any[]) => Promise<void>;
+    onBulkAddSKUs: (skus: any[]) => Promise<void>;
     onAddNewShop: (shop: any) => Promise<boolean>;
     onUpdateShop: (shop: Shop) => Promise<boolean>;
     onDeleteShop: (id: string) => Promise<void>;
-    onBulkAddShops: (newList: any[]) => Promise<void>;
+    onBulkAddShops: (shops: any[]) => Promise<void>;
     onAddNewAgent: (agent: any) => Promise<boolean>;
     onUpdateAgent: (agent: CustomerServiceAgent) => Promise<boolean>;
     onDeleteAgent: (id: string) => Promise<void>;
-    onBulkAddAgents: (newList: any[]) => Promise<void>;
+    onBulkAddAgents: (agents: any[]) => Promise<void>;
     onAddNewSkuList: (list: any) => Promise<boolean>;
-    onUpdateSkuList: (list: any) => Promise<boolean>;
+    onUpdateSkuList: (list: SkuList) => Promise<boolean>;
     onDeleteSkuList: (id: string) => void;
-    addToast: any;
+    addToast: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
 export const SKUManagementView = ({ 
@@ -432,34 +418,27 @@ export const SKUManagementView = ({
     onAddNewSkuList, onUpdateSkuList, onDeleteSkuList,
     addToast 
 }: SKUManagementViewProps) => {
+    // ... (Existing State) ...
     const [activeTab, setActiveTab] = useState<ProductSubView>('sku');
     const [importModal, setImportModal] = useState({ isOpen: false, progress: 0, status: '', errors: [] as string[] });
 
-    // SKU states
+    // ... (Modals State) ...
     const [isAddSKUModalOpen, setIsAddSKUModalOpen] = useState(false);
     const [editingSku, setEditingSku] = useState<ProductSKU | null>(null);
     const skuFileInputRef = useRef<HTMLInputElement>(null);
-
-    // Shop states
     const [isAddShopModalOpen, setIsAddShopModalOpen] = useState(false);
     const [editingShop, setEditingShop] = useState<Shop | null>(null);
     const shopFileInputRef = useRef<HTMLInputElement>(null);
-
-    // Agent states
     const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
     const [editingAgent, setEditingAgent] = useState<CustomerServiceAgent | null>(null);
     const agentFileInputRef = useRef<HTMLInputElement>(null);
-
-    // Sku List states
     const [isListFormModalOpen, setIsListFormModalOpen] = useState(false);
     const [editingList, setEditingList] = useState<SkuList | null>(null);
     const [expandedListId, setExpandedListId] = useState<string | null>(null);
-    
-    // Common states
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'sku' | 'shop' | 'agent' | 'list' } | null>(null);
 
-    // SKU Filter States
-    const [selectedBrand, setSelectedBrand] = useState('all');
+    // SKU Filter States - CHANGED: Replace selectedBrand with selectedStats
+    const [selectedStats, setSelectedStats] = useState('all'); // 'all' | 'true' | 'false'
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedShop, setSelectedShop] = useState('all');
     const [selectedStatus, setSelectedStatus] = useState('all');
@@ -475,13 +454,15 @@ export const SKUManagementView = ({
 
     const skuCodeToNameMap = useMemo(() => new Map(skus.map(s => [s.code, s.name])), [skus]);
     const shopIdToName = useMemo(() => new Map(shops.map(s => [s.id, s.name])), [shops]);
-    const uniqueBrands = useMemo(() => Array.from(new Set(skus.map(sku => sku.brand).filter(Boolean))).sort(), [skus]);
     const uniqueCategories = useMemo(() => Array.from(new Set(skus.map(sku => sku.category).filter(Boolean))).sort(), [skus]);
     const uniqueModels = useMemo(() => Array.from(new Set(skus.map(sku => sku.model).filter(Boolean))).sort(), [skus]);
 
+    // FILTER LOGIC - UPDATED
     const filteredSkus = useMemo(() => {
         return skus.filter(sku => {
-            const brandMatch = selectedBrand === 'all' || sku.brand === selectedBrand;
+            const statsMatch = selectedStats === 'all' || 
+                               (selectedStats === 'true' && sku.isStatisticsEnabled) || 
+                               (selectedStats === 'false' && !sku.isStatisticsEnabled);
             const categoryMatch = selectedCategory === 'all' || sku.category === selectedCategory;
             const shopMatch = selectedShop === 'all' || sku.shopId === selectedShop;
             const statusMatch = selectedStatus === 'all' || sku.status === selectedStatus;
@@ -494,10 +475,11 @@ export const SKUManagementView = ({
                     sku.code.includes(term) || sku.name.includes(term) || (sku.model && sku.model.includes(term))
                 );
             }
-            return brandMatch && categoryMatch && shopMatch && statusMatch && adMatch && modeMatch && modelMatch && skuTextMatch;
+            return statsMatch && categoryMatch && shopMatch && statusMatch && adMatch && modeMatch && modelMatch && skuTextMatch;
         });
-    }, [skus, selectedBrand, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
+    }, [skus, selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
 
+    // ... (rest of filtering and sorting logic) ...
     const sortedAndFilteredSkus = useMemo(() => {
         const order: any = { '在售': 1, '待售': 2, '下架': 3 };
         return [...filteredSkus].sort((a, b) => (order[a.status ?? '下架'] || 99) - (order[b.status ?? '下架'] || 99));
@@ -509,15 +491,16 @@ export const SKUManagementView = ({
         return sortedAndFilteredSkus.slice(start, start + ROWS_PER_PAGE);
     }, [sortedAndFilteredSkus, currentPage]);
 
-    useEffect(() => setCurrentPage(1), [selectedBrand, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
+    useEffect(() => setCurrentPage(1), [selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
 
+    // ... (Handlers) ...
     const handleSearchClick = () => {
         const terms = skuSearchText.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
         setAppliedSkuSearch(terms);
     };
 
     const handleResetFilters = () => {
-        setSelectedBrand('all'); setSelectedCategory('all'); setSelectedShop('all');
+        setSelectedStats('all'); setSelectedCategory('all'); setSelectedShop('all');
         setSelectedStatus('all'); setSelectedAdStatus('all'); setSelectedMode('all');
         setSelectedModel('all'); setSkuSearchText(''); setAppliedSkuSearch([]);
     };
@@ -532,6 +515,7 @@ export const SKUManagementView = ({
         setDeleteTarget(null);
     };
 
+    // ... (Export/Import Handlers) ...
     const handleDownloadTemplate = (type: 'sku' | 'shop' | 'agent') => {
         let headers = type === 'sku' ? ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', '小型号 (subModel)', 'MTM (mtm)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)', '统计 (isStatisticsEnabled)']
                     : type === 'shop' ? ['店铺名称 (name)', '店铺ID (platformId)', '经营模式 (mode)']
@@ -628,6 +612,7 @@ export const SKUManagementView = ({
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 pb-20 bg-[#F8FAFC] min-h-screen">
+            {/* ... (ImportProgressModal, ConfirmModal, SKUFormModal, ShopFormModal, AgentFormModal, SkuListFormModal, Inputs) same as before ... */}
             <ImportProgressModal isOpen={importModal.isOpen} progress={importModal.progress} status={importModal.status} errorReport={importModal.errors} />
             <ConfirmModal isOpen={!!deleteTarget} title="物理层删除确认" onConfirm={handleConfirmDelete} onCancel={() => setDeleteTarget(null)} confirmText="永久移除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>您正在执行物理层移除指令：<strong className="font-black text-slate-900">"{deleteTarget?.name}"</strong></p>
@@ -675,7 +660,10 @@ export const SKUManagementView = ({
                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-5">
                                 <SelectFilter label="归属店铺" value={selectedShop} onChange={setSelectedShop} options={[{v:'all',l:'全域探测'}, ...shops.map(s=>({v:s.id,l:s.name}))]} />
                                 <SelectFilter label="类目筛选" value={selectedCategory} onChange={setSelectedCategory} options={[{v:'all',l:'所有类目'}, ...uniqueCategories.map(c=>({v:c,l:c}))]} />
-                                <SelectFilter label="品牌标识" value={selectedBrand} onChange={setSelectedBrand} options={[{v:'all',l:'所有品牌'}, ...uniqueBrands.map(b=>({v:b,l:b}))]} />
+                                
+                                {/* REPLACED: Brand -> Statistics Status */}
+                                <SelectFilter label="统计状态" value={selectedStats} onChange={setSelectedStats} options={[{v:'all',l:'全部状态'}, {v:'true',l:'统计中'}, {v:'false',l:'已忽略'}]} />
+                                
                                 <SelectFilter label="型号检索" value={selectedModel} onChange={setSelectedModel} options={[{v:'all',l:'所有型号'}, ...uniqueModels.map(m=>({v:m,l:m}))]} />
                                 <SelectFilter label="物理状态" value={selectedStatus} onChange={setSelectedStatus} options={[{v:'all',l:'所有状态'}, {v:'在售',l:'在售中'}, {v:'待售',l:'待上架'}, {v:'下架',l:'已下架'}]} />
                                 <SelectFilter label="广告权重" value={selectedAdStatus} onChange={setSelectedAdStatus} options={[{v:'all',l:'全权重'}, {v:'在投',l:'重点投放'}, {v:'未投',l:'自然量'}]} />
@@ -814,6 +802,7 @@ export const SKUManagementView = ({
 
                 {activeTab !== 'sku' && (
                     <div className="space-y-12 animate-fadeIn">
+                        {/* ... (Shops, Agents, Lists views content) ... */}
                         <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-8">
                              <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center text-brand">
