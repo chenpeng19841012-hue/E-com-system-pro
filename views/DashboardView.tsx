@@ -6,7 +6,8 @@ import {
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
-    History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary
+    History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
+    ListFilter, Calculator
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -33,22 +34,91 @@ const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.
 // ----------------------------------------------------------------------
 // DATA INSPECTOR (DEBUGGER)
 // ----------------------------------------------------------------------
-const DataInspectorModal = ({ isOpen, onClose, cachedData, factStats, anchorDate, currentRange }: any) => {
+const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: any) => {
     if (!isOpen) return null;
 
-    const szCache = cachedData?.shangzhi || [];
-    const jztCache = cachedData?.jingzhuntong || [];
+    const { enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap } = filters;
+    const szData = rawData?.shangzhi || [];
     
-    // Calculate simple stats from cache
-    const szDates = szCache.map((r:any) => r.date).sort();
-    const minDate = szDates[0] || 'N/A';
-    const maxDate = szDates[szDates.length - 1] || 'N/A';
-    
-    const sampleRow = szCache.length > 0 ? szCache[0] : (jztCache.length > 0 ? jztCache[0] : null);
+    // --- Metric Breakdown Logic (Same strict logic as main dashboard) ---
+    const calculateBreakdown = () => {
+        const skuAgg: Record<string, { code: string, name: string, shop: string, ca: number, gmv: number }> = {};
+        const dateAgg: Record<string, { date: string, ca: number, gmv: number }> = {};
+        let validRowsCount = 0;
+        let droppedRowsCount = 0;
+
+        szData.forEach((r: any) => {
+            const code = getSkuIdentifier(r)?.trim();
+            if (!code) return;
+
+            // Strict Filter Check
+            if (disabledSkuCodes.has(code)) {
+                droppedRowsCount++;
+                return;
+            }
+
+            let mode = '自营';
+            let shouldCount = false;
+            let shopName = r.shop_name || '未知';
+
+            const skuConfig = enabledSkusMap.get(code);
+
+            if (skuConfig) {
+                // Known SKU
+                const shopMode = shopIdToMode.get(skuConfig.shopId);
+                if (shopMode) {
+                    shouldCount = true;
+                    shopName = shopMap.get(skuConfig.shopId)?.name || shopName;
+                }
+            } else if (r.shop_name) {
+                // Unknown SKU, check shop whitelist
+                const matchedMode = shopNameToMode.get(r.shop_name.trim());
+                if (matchedMode) {
+                    shouldCount = true;
+                }
+            }
+
+            if (!shouldCount) {
+                droppedRowsCount++;
+                return;
+            }
+
+            validRowsCount++;
+            const ca = Number(r.paid_items) || 0;
+            const gmv = Number(r.paid_amount) || 0;
+
+            // SKU Aggregation
+            if (!skuAgg[code]) {
+                skuAgg[code] = { 
+                    code, 
+                    name: skuConfig?.name || r.product_name || '未知商品', 
+                    shop: shopName,
+                    ca: 0, 
+                    gmv: 0 
+                };
+            }
+            skuAgg[code].ca += ca;
+            skuAgg[code].gmv += gmv;
+
+            // Date Aggregation
+            if (!dateAgg[r.date]) {
+                dateAgg[r.date] = { date: r.date, ca: 0, gmv: 0 };
+            }
+            dateAgg[r.date].ca += ca;
+            dateAgg[r.date].gmv += gmv;
+        });
+
+        const sortedSkus = Object.values(skuAgg).sort((a,b) => b.ca - a.ca).slice(0, 50);
+        const sortedDates = Object.values(dateAgg).sort((a,b) => a.date.localeCompare(b.date));
+        
+        return { sortedSkus, sortedDates, validRowsCount, droppedRowsCount };
+    };
+
+    const stats = calculateBreakdown();
 
     return (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
-            <div className="bg-slate-950 rounded-[32px] w-full max-w-4xl p-8 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-950 rounded-[32px] w-full max-w-5xl p-8 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -56,68 +126,95 @@ const DataInspectorModal = ({ isOpen, onClose, cachedData, factStats, anchorDate
                         </div>
                         <div>
                             <h3 className="text-lg font-black text-white tracking-tight uppercase">数据透视显微镜</h3>
-                            <p className="text-[10px] text-slate-500 font-mono">RAM Cache & State Inspector</p>
+                            <p className="text-[10px] text-slate-500 font-mono">Metric Breakdown & Attribution</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={24}/></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto no-scrollbar space-y-6">
-                    {/* 1. Time & Anchor State */}
-                    <div className="grid grid-cols-3 gap-4">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-4 gap-4">
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">智能锚点 (Anchor)</p>
-                            <p className="text-xl font-black text-brand mt-1">{anchorDate}</p>
-                            <p className="text-[9px] text-slate-600 mt-1">系统认为的"今天"</p>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">当前锚点日期</p>
+                            <p className="text-lg font-black text-brand mt-1">{anchorDate}</p>
                         </div>
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">当前计算周期</p>
-                            <p className="text-sm font-bold text-white mt-2 font-mono">{currentRange.start}</p>
-                            <p className="text-xs text-slate-600 text-center">to</p>
-                            <p className="text-sm font-bold text-white font-mono">{currentRange.end}</p>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">周期内原始行数</p>
+                            <p className="text-lg font-black text-white mt-1">{szData.length.toLocaleString()}</p>
                         </div>
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">云端元数据 (Cloud)</p>
-                            <div className="flex justify-between mt-2 text-xs text-slate-300">
-                                <span>商智行数:</span> <span className="font-mono text-white">{factStats?.shangzhi?.count}</span>
-                            </div>
-                            <div className="flex justify-between mt-1 text-xs text-slate-300">
-                                <span>最新日期:</span> <span className="font-mono text-brand">{factStats?.shangzhi?.latestDate}</span>
-                            </div>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">有效聚合行数 (Valid)</p>
+                            <p className="text-lg font-black text-emerald-400 mt-1">{stats.validRowsCount.toLocaleString()}</p>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">已过滤行数 (Ignored)</p>
+                            <p className="text-lg font-black text-rose-400 mt-1">{stats.droppedRowsCount.toLocaleString()}</p>
+                            <p className="text-[8px] text-slate-600 mt-1">因店铺不在名录或 SKU 被禁用</p>
                         </div>
                     </div>
 
-                    {/* 2. Cache Health */}
-                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-                        <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <DatabaseZap size={14} /> 内存缓存状态 (RAM Cache)
-                        </h4>
-                        <div className="grid grid-cols-2 gap-8">
-                            <div>
-                                <p className="text-[10px] text-slate-500 uppercase">商智缓存 (Fact Shangzhi)</p>
-                                <p className="text-2xl font-black text-white tabular-nums my-1">{szCache.length.toLocaleString()} <span className="text-xs text-slate-600">rows</span></p>
-                                <p className="text-[10px] text-slate-400 font-mono">范围: {minDate} ~ {maxDate}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-500 uppercase">广告缓存 (Fact Jingzhuntong)</p>
-                                <p className="text-2xl font-black text-white tabular-nums my-1">{jztCache.length.toLocaleString()} <span className="text-xs text-slate-600">rows</span></p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Top SKUs Breakdown */}
+                        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col h-[400px]">
+                            <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <ListFilter size={14} /> CA (销量) 贡献 Top SKU
+                            </h4>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                <table className="w-full text-left text-[10px]">
+                                    <thead className="sticky top-0 bg-slate-900 z-10 text-slate-500 uppercase font-black">
+                                        <tr>
+                                            <th className="pb-2 pl-2">SKU / 名称</th>
+                                            <th className="pb-2 text-right">CA (件)</th>
+                                            <th className="pb-2 text-right pr-2">GMV</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/50 text-slate-300">
+                                        {stats.sortedSkus.map((sku) => (
+                                            <tr key={sku.code} className="hover:bg-white/5">
+                                                <td className="py-2 pl-2">
+                                                    <div className="font-mono text-xs font-bold text-white">{sku.code}</div>
+                                                    <div className="truncate w-40 text-slate-500" title={sku.name}>{sku.name}</div>
+                                                    <div className="text-[9px] text-slate-600">{sku.shop}</div>
+                                                </td>
+                                                <td className="py-2 text-right font-mono font-bold text-brand">{sku.ca}</td>
+                                                <td className="py-2 text-right pr-2 font-mono text-slate-400">¥{sku.gmv.toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                    </div>
 
-                    {/* 3. Raw Data Preview */}
-                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-                        <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <SearchCode size={14} /> 缓存样本抽检 (First Row)
-                        </h4>
-                        {sampleRow ? (
-                            <pre className="text-[10px] font-mono text-slate-300 bg-black/50 p-4 rounded-xl overflow-x-auto border border-slate-800 leading-relaxed">
-                                {JSON.stringify(sampleRow, null, 2)}
-                            </pre>
-                        ) : (
-                            <div className="text-center py-8 text-slate-600 italic text-xs">缓存为空，无法采样</div>
-                        )}
-                        <p className="text-[9px] text-slate-500 mt-2 italic">* 请检查 'date' 字段格式是否为 YYYY-MM-DD，以及 'paid_amount' 是否为数字。</p>
+                        {/* Daily Breakdown */}
+                        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col h-[400px]">
+                            <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <CalendarDays size={14} /> 每日聚合明细
+                            </h4>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                <table className="w-full text-left text-[10px]">
+                                    <thead className="sticky top-0 bg-slate-900 z-10 text-slate-500 uppercase font-black">
+                                        <tr>
+                                            <th className="pb-2 pl-2">日期</th>
+                                            <th className="pb-2 text-right">总销量 (CA)</th>
+                                            <th className="pb-2 text-right pr-2">总流水 (GMV)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/50 text-slate-300">
+                                        {stats.sortedDates.map((d) => (
+                                            <tr key={d.date} className="hover:bg-white/5">
+                                                <td className="py-3 pl-2 font-mono font-bold">{d.date}</td>
+                                                <td className="py-3 text-right font-mono font-bold text-brand">{d.ca}</td>
+                                                <td className="py-3 text-right pr-2 font-mono text-slate-400">¥{d.gmv.toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                        {stats.sortedDates.length === 0 && (
+                                            <tr><td colSpan={3} className="py-10 text-center text-slate-600">无有效数据</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -349,6 +446,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
     const [isDataStale, setIsDataStale] = useState(false);
     const [viewRangeDisplay, setViewRangeDisplay] = useState('');
     const [isDebugOpen, setIsDebugOpen] = useState(false); // Debugger toggle
+    
+    // Debug Data Storage
+    const [debugRawData, setDebugRawData] = useState<{shangzhi: any[], jingzhuntong: any[]}>({ shangzhi: [], jingzhuntong: [] });
 
     const [customRange, setCustomRange] = useState({
         start: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
@@ -477,6 +577,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
                 ]);
             }
+            
+            // Update Debug Context for the Inspector Modal
+            setDebugRawData({ shangzhi: currSz, jingzhuntong: currJzt });
 
             const processStats = (sz: any[], jzt: any[]) => {
                 const stats = { gmv: { total: 0, self: 0, pop: 0 }, ca: { total: 0, self: 0, pop: 0 }, spend: { total: 0, self: 0, pop: 0 } };
@@ -676,8 +779,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             <DataInspectorModal 
                 isOpen={isDebugOpen} 
                 onClose={() => setIsDebugOpen(false)} 
-                cachedData={cachedData} 
+                rawData={debugRawData} 
                 factStats={factStats} 
+                filters={{ enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap }}
                 anchorDate={dataAnchorDate} 
                 currentRange={{ start: viewRangeDisplay.split('~')[0]?.trim(), end: viewRangeDisplay.split('~')[1]?.trim() }}
             />
