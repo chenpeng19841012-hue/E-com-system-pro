@@ -28,6 +28,13 @@ const METRIC_COLORS: Record<string, string> = {
     'roi': '#D946EF'                 // 粉紫
 };
 
+// 严格定义指标来源，防止跨表重复计算 (Anti-Duplication Logic)
+const SOURCE_MAP: Record<string, 'sz' | 'jzt' | 'calc'> = {
+    'pv': 'sz', 'uv': 'sz', 'paid_items': 'sz', 'paid_amount': 'sz', 'paid_users': 'sz', 'paid_orders': 'sz',
+    'cost': 'jzt', 'clicks': 'jzt', 'impressions': 'jzt',
+    'cpc': 'calc', 'roi': 'calc', 'paid_conversion_rate': 'calc'
+};
+
 const formatMetricValue = (value: number, key: string) => {
     if (key === 'roi') return (value || 0).toFixed(1);
     if (key === 'cpc') return `¥${(value || 0).toFixed(2)}`;
@@ -213,7 +220,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             const isExplicitSearch = parsedSkus.length > 0;
             
-            // Build Enabled Assets Map (Asset-First Logic)
             const enabledSkusMap = new Map<string, ProductSKU>();
             skus.forEach(s => {
                 if (s.isStatisticsEnabled) {
@@ -223,30 +229,21 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const shopMap = new Map(shops.map(s => [s.id, s]));
 
-            // 1. Fetch Cloud Data On-Demand (Covers ANY range)
             const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
             const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
 
-            // Strict Filter Logic - NOW RELAXED for Explicit Search
             const filter = (row: any) => {
                 const codeRaw = getSkuIdentifier(row); 
                 if (!row.date || !codeRaw) return false;
                 const code = String(codeRaw).trim();
 
-                // 优先处理：精确搜索 (Force Penetration Mode)
                 if (isExplicitSearch) {
-                    // 如果指定了 SKU，只匹配这些 SKU。使用 trim() 确保匹配
                     if (!parsedSkus.includes(code)) return false;
-                    
-                    // 在精确搜索模式下，无视“是否已录入资产/是否启用统计”
-                    // 但如果选了店铺，我们仍需尝试匹配店铺
                     if (selectedShopId !== 'all') {
                         const asset = enabledSkusMap.get(code); 
                         if (asset) {
-                            // 如果有资产记录，用资产的归属店铺ID匹配
                             if (asset.shopId !== selectedShopId) return false;
                         } else if (row.shop_name) {
-                            // 如果是纯物理数据，尝试用 shop_name 字符串匹配
                             const targetShopName = shopMap.get(selectedShopId)?.name;
                             if (targetShopName && row.shop_name !== targetShopName) return false;
                         }
@@ -254,30 +251,22 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     return true;
                 }
 
-                // 常规模式：必须是已录入且启用的资产
                 const asset = enabledSkusMap.get(code);
                 if (!asset) return false;
-
-                // Check if Shop matches (based on Asset's shopId)
                 if (selectedShopId !== 'all') {
                     if (asset.shopId !== selectedShopId) return false;
                 }
-
                 return true;
             };
 
             const processData = (sz: any[], jzt: any[]) => {
                 const merged = new Map<string, any>();
-                const proc = (row: any) => {
+                const proc = (row: any, source: 'sz' | 'jzt') => {
                     const code = String(getSkuIdentifier(row)).trim();
-                    // Try to get asset, but don't fail if missing (for Raw Search)
-                    const asset = enabledSkusMap.get(code);
-                    
-                    // 核心修正：严格使用字符串日期，禁止 new Date() 时区转换
                     let key = String(row.date).split('T')[0]; 
                     
                     if (timeDimension === 'month') {
-                        key = key.substring(0, 7); // YYYY-MM
+                        key = key.substring(0, 7); 
                     } else if (timeDimension === 'week') {
                         const d = new Date(key);
                         d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1);
@@ -287,11 +276,11 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     const aggKey = key;
                     
                     if (!merged.has(aggKey)) {
-                        // Display label logic
                         let shopName = '多店铺/多SKU';
                         if (selectedShopId !== 'all') shopName = shopMap.get(selectedShopId)?.name || '未知';
                         
                         if (parsedSkus.length === 1) {
+                             const asset = enabledSkusMap.get(code);
                              if(asset) {
                                  shopName = shopMap.get(asset.shopId)?.name || '未知';
                              } else if (row.shop_name) {
@@ -302,7 +291,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         }
 
                         merged.set(aggKey, { 
-                            date: key, // Use the computed key (YYYY-MM-DD) for display
+                            date: key, 
                             aggDate: aggKey, 
                             sku_code: 'AGGREGATED', 
                             sku_shop: { 
@@ -314,8 +303,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     
                     const ent = merged.get(aggKey)!;
                     
-                    // 核心修正：智能元数据补全
-                    // 如果当前聚合记录的店铺名称无效（如“未录入资产”），而当前 row 有效，则更新它
                     if (parsedSkus.length === 1) {
                         const currentShopName = ent.sku_shop.shopName;
                         if ((currentShopName === '未录入资产' || !currentShopName) && row.shop_name) {
@@ -323,21 +310,30 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         }
                     }
 
+                    // 核心修改：基于数据源严格隔离指标，防止双重计算
                     [...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'paid_customers', 'total_order_amount'].forEach(m => {
+                        const sourceRule = SOURCE_MAP[m];
+                        // 规则1：如果指标属于 'sz' (商智)，但当前行是 'jzt'，跳过 (防止广告表有脏数据污染销售额)
+                        if (sourceRule === 'sz' && source === 'jzt') return;
+                        // 规则2：如果指标属于 'jzt' (广告)，但当前行是 'sz'，跳过
+                        if (sourceRule === 'jzt' && source === 'sz') return;
+                        
+                        // 计算型指标 (cpc, roi, rate) 不累加，跳过
+                        if (sourceRule === 'calc') return;
+
                         if (m === 'paid_users') ent[m] = (ent[m] || 0) + (Number(row.paid_users) || Number(row.paid_customers) || 0);
                         else ent[m] = (ent[m] || 0) + (Number(row[m]) || 0);
                     });
                 };
                 
-                sz.filter(filter).forEach(proc);
-                jzt.filter(filter).forEach(proc);
+                sz.filter(filter).forEach(r => proc(r, 'sz'));
+                jzt.filter(filter).forEach(r => proc(r, 'jzt'));
                 
                 return Array.from(merged.values());
             };
 
             const mainData = processData(rowsSz, rowsJzt);
 
-            // Fetch Comparison Data
             const mainStart = new Date(startDate); const mainEnd = new Date(endDate);
             const diff = (mainEnd.getTime() - mainStart.getTime());
             let cS: Date, cE: Date;
@@ -348,7 +344,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             const compRowsJzt = await DB.getRange('fact_jingzhuntong', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
             const compData = processData(compRowsSz, compRowsJzt);
 
-            // Calculate Totals & Charts
             const calcTotals = (d: any[]) => {
                 const t = d.reduce((acc, row) => { [...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount'].forEach(k => acc[k] = (acc[k] || 0) + (Number(row[k]) || 0)); return acc; }, {} as any);
                 t.cpc = t.clicks ? t.cost / t.clicks : 0; t.roi = t.cost ? (t.total_order_amount || t.paid_amount || 0) / t.cost : 0; t.paid_conversion_rate = t.uv ? t.paid_users / t.uv : 0;
@@ -402,12 +397,12 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 </div>
 
                 {/* 配置面板 */}
-                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden">
+                <div className="bg-white rounded-[40px] shadow-sm border-2 border-slate-100 p-6 space-y-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative z-10">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">时间跨度</label>
-                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all h-11 bg-white">
+                            <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all h-12 bg-white">
                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
                                 <span className="text-slate-300 font-black">-</span>
                                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
@@ -416,7 +411,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label>
                             <div className="relative">
-                                <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
                                     <option value="day">按天 (Daily)</option>
                                     <option value="week">按周 (Weekly)</option>
                                     <option value="month">按月 (Monthly)</option>
@@ -427,7 +422,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label>
                             <div className="relative">
-                                <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
                                     <option value="all">全域探测</option>
                                     {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
@@ -436,7 +431,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label>
-                            <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-slate-700 flex items-center justify-between hover:bg-white transition-all shadow-sm">
+                            <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-slate-700 flex items-center justify-between hover:bg-white transition-all shadow-sm">
                                 <span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span>
                                 <Filter size={14} className="text-slate-400" />
                             </button>
@@ -451,21 +446,21 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                 value={skuInput} 
                                 onChange={e => setSkuInput(e.target.value)} 
                                 onKeyDown={e => e.key === 'Enter' && handleQuery()}
-                                className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
+                                className="w-full h-14 bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
                             />
                         </div>
-                        <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-12 w-14 rounded-2xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
-                            <RefreshCcw size={18}/>
+                        <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-14 w-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
+                            <RefreshCcw size={20}/>
                         </button>
-                        <button onClick={handleQuery} disabled={isLoading} className="h-12 px-8 rounded-2xl bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-xl shadow-brand/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">
-                            {isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} className="text-white" />} 
+                        <button onClick={handleQuery} disabled={isLoading} className="h-14 px-10 rounded-2xl bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-xl shadow-brand/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest border-2 border-transparent">
+                            {isLoading ? <LoaderCircle className="animate-spin" size={20} /> : <Search size={20} className="text-white" />} 
                             执行搜索
                         </button>
                     </div>
                 </div>
 
                 {/* 看板区域 */}
-                <div className="bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border border-slate-100 relative overflow-hidden group/board">
+                <div className="bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border-2 border-slate-100 relative overflow-hidden group/board">
                     <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.03),transparent_70%)] pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-6 relative z-10">
                         <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 group-hover/board:rotate-6 transition-transform duration-500"><TrendingUp size={28} className="text-white" /></div><div><h3 className="text-xl font-black tracking-tight uppercase">核心业务透视看板</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Physical Performance Insight Board</p></div></div>
@@ -479,7 +474,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             const isSelected = chartMetrics.has(key);
                             
                             if (!visualisationData) return (
-                                <div key={key} className="p-4 rounded-3xl bg-slate-50 border border-slate-100 h-28 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-400 uppercase">{label}</p><p className="text-2xl font-black text-slate-300 mt-2">-</p></div>
+                                <div key={key} className="p-4 rounded-3xl bg-slate-50 border-2 border-slate-100 h-28 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-400 uppercase">{label}</p><p className="text-2xl font-black text-slate-300 mt-2">-</p></div>
                             );
 
                             const main = visualisationData.mainTotals[key] || 0;
@@ -520,7 +515,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     </div>
 
                     {visualisationData && (
-                        <div className="bg-slate-50 rounded-[40px] p-10 border border-slate-100 relative group/chart animate-fadeIn">
+                        <div className="bg-slate-50 rounded-[40px] p-10 border-2 border-slate-100 relative group/chart animate-fadeIn">
                              <div className="absolute top-6 left-10 flex items-center gap-3"><Sparkles size={16} className="text-brand animate-pulse" /><span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Neural Trend Engine Processing</span></div>
                              <TrendChart dailyData={visualisationData.dailyData} chartMetrics={chartMetrics} metricsMap={allMetricsMap} />
                         </div>
@@ -528,7 +523,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 </div>
 
                 {/* 明细表区域 */}
-                <div className="bg-white rounded-[48px] shadow-sm border border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
+                <div className="bg-white rounded-[48px] shadow-sm border-2 border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
                     <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
                         <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">物理透视穿透明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Aggregated Physical Penetration Set</p></div></div>
                         <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 shadow-xl shadow-slate-200 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出维度明细</button>
@@ -567,7 +562,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                     <button 
                                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                         disabled={currentPage === 1}
-                                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                        className="p-2 rounded-xl border-2 border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
                                     >
                                         <ChevronLeft size={16} />
                                     </button>
@@ -577,7 +572,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                     <button 
                                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                         disabled={currentPage === totalPages}
-                                        className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
+                                        className="p-2 rounded-xl border-2 border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition-all"
                                     >
                                         <ChevronRight size={16} />
                                     </button>

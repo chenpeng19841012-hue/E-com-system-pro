@@ -213,9 +213,6 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, act
     );
 };
 
-// ... (DiagnosisCard, SubValueTrend, KPICard, MainTrendVisual components - Same as before, omitted for brevity but assumed present in final output)
-// To ensure the file is complete, I will include the full content of the file.
-
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClickMore?: () => void }> = ({ d, mode = 'carousel', onClickMore }) => {
     const detailEntries = Object.entries(d.details);
     const limit = mode === 'carousel' ? 2 : 100;
@@ -223,7 +220,7 @@ const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClic
     const hiddenCount = detailEntries.length - limit;
 
     return (
-        <div className={`transition-all duration-700 w-full flex flex-col ${mode === 'carousel' ? 'h-[160px] p-4 rounded-[20px] border border-slate-100 bg-white shadow-sm mb-3' : 'p-6 rounded-[24px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
+        <div className={`transition-all duration-700 w-full flex flex-col border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl ${mode === 'carousel' ? 'h-[160px] p-4 rounded-[20px] mb-3' : 'p-6 rounded-[24px]'}`}>
             <div className="flex items-center gap-3 mb-1.5 shrink-0">
                 <div className={`p-1.5 rounded-lg ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
                     {d.type === 'new_sku' ? <PackageSearch size={14}/> :
@@ -294,7 +291,7 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
                 </div>
                 <p className="text-4xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
             </div>
-            <div className={`px-5 py-4 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
+            <div className={`px-5 py-4 border-t-2 grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-100'}`}>
                 <div>
                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
                     <div className="flex items-baseline gap-1.5 mt-0.5">
@@ -418,6 +415,7 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
 };
 
 export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
+    // ... (State and Effects remain unchanged)
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
@@ -457,7 +455,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     const { enabledSkusMap } = useMemo(() => {
         const enabled = new Map<string, ProductSKU>();
-        // Only include SKUs where isStatisticsEnabled is true
         skus.forEach(s => { 
             const code = s.code.trim();
             if (s.isStatisticsEnabled) {
@@ -469,8 +466,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     const shopIdToMode = useMemo(() => new Map(shops.map(s => [s.id, s.mode])), [shops]);
     const shopMap = useMemo(() => new Map(shops.map(s => [s.id, s])), [shops]);
-    
-    // Removed shopNameToMode - strict asset matching only.
 
     useEffect(() => {
         if (diagnoses.length <= 2) { setDiagOffset(0); return; }
@@ -542,12 +537,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
-                    // STRICT LOGIC:
-                    // 1. Must be in enabled SKUs (Asset exists AND Status is Yes)
                     const skuConfig = enabledSkusMap.get(code);
                     if (!skuConfig) return;
 
-                    // 2. Must be in a known Shop (to determine Self/POP mode)
                     const shopMode = shopIdToMode.get(skuConfig.shopId);
                     if (!shopMode) return;
 
@@ -631,7 +623,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             setTrends(Object.values(dailyAgg));
 
             const diag: Diagnosis[] = [];
-            const currSkusSet = new Set(currSz.map(getSkuIdentifier));
             
             const getSkuInfoStr = (code: string) => {
                 const s = enabledSkusMap.get(code);
@@ -699,7 +690,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                                 </span>
                             </div>
                         )}
-                        {/* EXPERT MODE DEBUG INFO & TRIGGER */}
                         <div className="flex items-center gap-2">
                             <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
                                 <CalendarDays size={10} className="text-blue-500" />
@@ -745,7 +735,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             {/* Main Section - Compact Fixed Height */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                 {/* 增长拓扑流 - 固定高度 420px */}
-                <div className="xl:col-span-8 bg-white rounded-[40px] p-6 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group/chart h-[420px]">
+                <div className="xl:col-span-8 bg-white rounded-[40px] p-6 shadow-sm border-2 border-slate-100 flex flex-col relative overflow-hidden group/chart h-[420px]">
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-[14px] bg-slate-50 flex items-center justify-center text-brand border border-slate-100 shadow-inner group-hover/chart:rotate-6 transition-transform">
@@ -767,7 +757,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 </div>
 
                 {/* AI 诊断室 - 固定高度 420px */}
-                <div className="xl:col-span-4 bg-white rounded-[40px] p-6 shadow-xl border border-slate-100 flex flex-col relative overflow-hidden group/diag h-[420px]">
+                <div className="xl:col-span-4 bg-white rounded-[40px] p-6 shadow-xl border-2 border-slate-100 flex flex-col relative overflow-hidden group/diag h-[420px]">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-[80px] -translate-y-1/3 translate-x-1/3"></div>
                     <div className="flex items-center gap-4 mb-4 relative z-10 shrink-0">
                         <div className="w-10 h-10 rounded-[14px] bg-brand flex items-center justify-center shadow-2xl shadow-brand/30 border border-white/20 group-hover/diag:scale-110 transition-transform duration-500"><BotIcon size={20} className="text-white" /></div>
@@ -807,7 +797,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             {/* Modal for all diagnoses */}
             {isAllDiagnosesModalOpen && (
                 <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn">
-                    <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border border-slate-200 relative overflow-hidden">
+                    <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-4xl p-10 m-4 max-h-[85vh] flex flex-col border-2 border-slate-200 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                         <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6 shrink-0 relative z-10">
                             <div>
