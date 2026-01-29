@@ -40,6 +40,7 @@ export const App = () => {
     const [toasts, setToasts] = useState<ToastProps[]>([]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isAppLoading, setIsAppLoading] = useState(true);
+    const [loadingMessage, setLoadingMessage] = useState('连接云端资产库...');
     
     const [schemas, setSchemas] = useState<any>({});
     const [shops, setShops] = useState<Shop[]>([]);
@@ -57,7 +58,7 @@ export const App = () => {
         customer_service: { count: 0, latestDate: 'N/A' }
     });
     
-    // 热数据缓存 (最近 60 天)
+    // 热数据缓存 (智能动态窗口)
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
 
     // Competitor Monitoring Data
@@ -72,15 +73,36 @@ export const App = () => {
 
     const loadMetadata = useCallback(async () => {
         try {
-            // 计算热数据时间窗口 (最近 60 天)
-            const today = new Date();
-            const sixtyDaysAgo = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            const todayStr = today.toISOString().split('T')[0];
+            setLoadingMessage('正在探测数据边界...');
+            
+            // 1. 优先获取数据统计，以确定最新的数据日期 (Data Anchor)
+            // 这确保了即使数据是 2026 年的或者 2024 年的，我们也能抓取到正确的热数据窗口
+            const [statSz, statJzt, statCs] = await Promise.all([
+                DB.getTableSummary('fact_shangzhi'),
+                DB.getTableSummary('fact_jingzhuntong'),
+                DB.getTableSummary('fact_customer_service')
+            ]);
 
-            // 1. 并行加载：配置 + 统计 + 热数据
+            // 智能计算热数据时间窗口
+            let anchorDate = new Date();
+            // 如果商智有数据，以商智最新日期为准（核心业务表）
+            if (statSz.latestDate && statSz.latestDate !== 'N/A') {
+                const szDate = new Date(statSz.latestDate);
+                if (!isNaN(szDate.getTime())) {
+                    anchorDate = szDate;
+                }
+            }
+            
+            const endDateStr = anchorDate.toISOString().split('T')[0];
+            // 向前追溯 60 天
+            const startDate = new Date(anchorDate.getTime() - 60 * 24 * 60 * 60 * 1000);
+            const startDateStr = startDate.toISOString().split('T')[0];
+
+            setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
+
+            // 2. 并行加载所有配置 + 基于智能窗口的热数据
             const [
                 s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups,
-                statSz, statJzt, statCs,
                 recentSz, recentJzt, recentCs
             ] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
@@ -95,14 +117,10 @@ export const App = () => {
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA),
                 DB.loadConfig('comp_shops', []),
                 DB.loadConfig('comp_groups', []),
-                // 获取总行数统计 (全量)
-                DB.getTableSummary('fact_shangzhi'),
-                DB.getTableSummary('fact_jingzhuntong'),
-                DB.getTableSummary('fact_customer_service'),
-                // 获取最近 60 天热数据 (部分)
-                DB.getRange('fact_shangzhi', sixtyDaysAgo, todayStr),
-                DB.getRange('fact_jingzhuntong', sixtyDaysAgo, todayStr),
-                DB.getRange('fact_customer_service', sixtyDaysAgo, todayStr)
+                // 使用动态计算的日期范围
+                DB.getRange('fact_shangzhi', startDateStr, endDateStr),
+                DB.getRange('fact_jingzhuntong', startDateStr, endDateStr),
+                DB.getRange('fact_customer_service', startDateStr, endDateStr)
             ]);
 
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
@@ -117,7 +135,7 @@ export const App = () => {
                 customer_service: statCs
             });
 
-            // 注入热数据缓存 (供补货、首页等直接使用)
+            // 注入热数据缓存
             setFactTables({
                 shangzhi: recentSz,
                 jingzhuntong: recentJzt,
@@ -126,6 +144,7 @@ export const App = () => {
 
         } catch (e) {
             console.error("Initialization failed:", e);
+            addToast('error', '初始化受阻', '无法连接数据层，请检查网络。');
         }
     }, []);
 
@@ -336,7 +355,7 @@ export const App = () => {
         try {
             const shop = shops.find(s => s.id === shopId);
             if (!shop) throw new Error("目标店铺不存在");
-            addToast('error', '操作受限', '云原生模式下暂不支持批量修改海量数据，请使用 Supabase SQL Editor 执行 UPDATE 语句。');
+            addToast('error', '操作受限', '云原生模式下暂不支持批量修改海量数据，请使用 Supabase SQL Editor 执行 UPDATE语句。');
         } catch (e: any) {
             addToast('error', '批量更新失败', e.message);
         }
@@ -346,8 +365,8 @@ export const App = () => {
         if (isAppLoading) return (
             <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black bg-white">
                 <SyncIcon size={48} className="mb-4 text-brand animate-spin" />
-                <p className="tracking-[0.4em] uppercase text-xs font-black">连接云端资产库...</p>
-                <p className="text-[10px] mt-2 opacity-50">Syncing Hot Data (Last 60 Days)</p>
+                <p className="tracking-[0.4em] uppercase text-xs font-black">{loadingMessage}</p>
+                <p className="text-[10px] mt-2 opacity-50">Syncing Smart Cache (Auto-Anchored)</p>
             </div>
         );
         

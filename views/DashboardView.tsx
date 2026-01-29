@@ -259,14 +259,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
-            const latest = factStats.shangzhi.latestDate;
-            const today = new Date().toISOString().split('T')[0];
-            // If latest data is older than today, anchor to it for 7d/30d views
-            if (latest < today) {
-                setDataAnchorDate(latest);
-            } else {
-                setDataAnchorDate(today);
-            }
+            // Trust the data source. Even if data is in the future (e.g. 2026), assume it's correct for the view.
+            setDataAnchorDate(factStats.shangzhi.latestDate);
         }
     }, [factStats]);
 
@@ -298,7 +292,12 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         let start = "";
         let end = "";
 
+        // Anchor logic refinement:
+        // Use `dataAnchorDate` as the reference "Today" for relative calculations (7d, 30d).
+        // This supports viewing historical or future projected data sets seamlessly.
+        
         if (rangeType === 'realtime') {
+            // Realtime forces check against actual system time
             start = end = todayStr;
             if (dataAnchorDate < todayStr) setIsDataStale(true);
         } else if (rangeType === 'yesterday') {
@@ -308,7 +307,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             start = customRange.start;
             end = customRange.end;
         } else {
-            // 7d, 30d: Use Smart Backtracking (Anchor to latest data)
+            // 7d, 30d: Backtrack from the ANCHOR date (latest available data)
             const daysMap: Record<string, number> = { '7d': 6, '30d': 29 };
             const days = daysMap[rangeType] || 6;
             const refTime = new Date(dataAnchorDate).getTime();
@@ -321,9 +320,12 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         const prevStart = new Date(new Date(prevEnd).getTime() - (diff - 1) * 86400000).toISOString().split('T')[0];
 
         try {
-            // Optimize: Check if cachedData (last 60 days) covers the requested range
-            // The cachedData comes from App.tsx which fetches [now-60d, now]
+            // Optimize: Check if cachedData (last 60 days from anchor) covers the requested range
+            // The cachedData comes from App.tsx which fetches relative to the *same* anchor logic
             let currSz = [], currJzt = [], prevSz = [], prevJzt = [];
+            
+            // Check if the requested range is within what App.tsx likely cached (Anchor - 60d to Anchor)
+            // Since we sync App.tsx logic to use the same latestDate, this cache hit rate should be high
             const isRangeCached = (rangeType === '7d' || rangeType === '30d' || rangeType === 'yesterday' || rangeType === 'realtime') && cachedData && cachedData.shangzhi.length > 0;
 
             if (isRangeCached && cachedData) {
@@ -475,7 +477,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                                 </span>
                             </div>
                         )}
-                        {!isDataStale && dataAnchorDate < new Date().toISOString().split('T')[0] && rangeType !== 'yesterday' && rangeType !== 'realtime' && (
+                        {!isDataStale && (
                             <div className="flex items-center gap-2 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200">
                                 <History size={10} className="text-slate-500" />
                                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">
