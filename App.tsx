@@ -40,6 +40,7 @@ export const App = () => {
     const [toasts, setToasts] = useState<ToastProps[]>([]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isAppLoading, setIsAppLoading] = useState(true);
+    // loadingMessage is kept for internal logic flow but not rendered
     const [loadingMessage, setLoadingMessage] = useState('连接云端资产库...');
     
     const [schemas, setSchemas] = useState<any>({});
@@ -363,10 +364,11 @@ export const App = () => {
 
     const renderView = () => {
         if (isAppLoading) return (
-            <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black bg-white">
-                <SyncIcon size={48} className="mb-4 text-brand animate-spin" />
-                <p className="tracking-[0.4em] uppercase text-xs font-black">{loadingMessage}</p>
-                <p className="text-[10px] mt-2 opacity-50">Syncing Smart Cache (Auto-Anchored)</p>
+            <div className="flex flex-col h-full items-center justify-center bg-white">
+                <div className="relative">
+                    <div className="absolute inset-0 bg-brand/20 rounded-full blur-2xl animate-pulse transform scale-125"></div>
+                    <SyncIcon size={56} className="relative z-10 text-brand animate-spin" strokeWidth={1.5} />
+                </div>
             </div>
         );
         

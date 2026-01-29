@@ -6,7 +6,7 @@ import {
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
-    History, Store, Truck, Wifi, Clock, CalendarDays
+    History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -29,6 +29,105 @@ interface Diagnosis {
 }
 
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
+
+// ----------------------------------------------------------------------
+// DATA INSPECTOR (DEBUGGER)
+// ----------------------------------------------------------------------
+const DataInspectorModal = ({ isOpen, onClose, cachedData, factStats, anchorDate, currentRange }: any) => {
+    if (!isOpen) return null;
+
+    const szCache = cachedData?.shangzhi || [];
+    const jztCache = cachedData?.jingzhuntong || [];
+    
+    // Calculate simple stats from cache
+    const szDates = szCache.map((r:any) => r.date).sort();
+    const minDate = szDates[0] || 'N/A';
+    const maxDate = szDates[szDates.length - 1] || 'N/A';
+    
+    const sampleRow = szCache.length > 0 ? szCache[0] : (jztCache.length > 0 ? jztCache[0] : null);
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
+            <div className="bg-slate-950 rounded-[32px] w-full max-w-4xl p-8 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                            <Binary size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-white tracking-tight uppercase">数据透视显微镜</h3>
+                            <p className="text-[10px] text-slate-500 font-mono">RAM Cache & State Inspector</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={24}/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto no-scrollbar space-y-6">
+                    {/* 1. Time & Anchor State */}
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">智能锚点 (Anchor)</p>
+                            <p className="text-xl font-black text-brand mt-1">{anchorDate}</p>
+                            <p className="text-[9px] text-slate-600 mt-1">系统认为的"今天"</p>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">当前计算周期</p>
+                            <p className="text-sm font-bold text-white mt-2 font-mono">{currentRange.start}</p>
+                            <p className="text-xs text-slate-600 text-center">to</p>
+                            <p className="text-sm font-bold text-white font-mono">{currentRange.end}</p>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">云端元数据 (Cloud)</p>
+                            <div className="flex justify-between mt-2 text-xs text-slate-300">
+                                <span>商智行数:</span> <span className="font-mono text-white">{factStats?.shangzhi?.count}</span>
+                            </div>
+                            <div className="flex justify-between mt-1 text-xs text-slate-300">
+                                <span>最新日期:</span> <span className="font-mono text-brand">{factStats?.shangzhi?.latestDate}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. Cache Health */}
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                        <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <DatabaseZap size={14} /> 内存缓存状态 (RAM Cache)
+                        </h4>
+                        <div className="grid grid-cols-2 gap-8">
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase">商智缓存 (Fact Shangzhi)</p>
+                                <p className="text-2xl font-black text-white tabular-nums my-1">{szCache.length.toLocaleString()} <span className="text-xs text-slate-600">rows</span></p>
+                                <p className="text-[10px] text-slate-400 font-mono">范围: {minDate} ~ {maxDate}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase">广告缓存 (Fact Jingzhuntong)</p>
+                                <p className="text-2xl font-black text-white tabular-nums my-1">{jztCache.length.toLocaleString()} <span className="text-xs text-slate-600">rows</span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Raw Data Preview */}
+                    <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
+                        <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <SearchCode size={14} /> 缓存样本抽检 (First Row)
+                        </h4>
+                        {sampleRow ? (
+                            <pre className="text-[10px] font-mono text-slate-300 bg-black/50 p-4 rounded-xl overflow-x-auto border border-slate-800 leading-relaxed">
+                                {JSON.stringify(sampleRow, null, 2)}
+                            </pre>
+                        ) : (
+                            <div className="text-center py-8 text-slate-600 italic text-xs">缓存为空，无法采样</div>
+                        )}
+                        <p className="text-[9px] text-slate-500 mt-2 italic">* 请检查 'date' 字段格式是否为 YYYY-MM-DD，以及 'paid_amount' 是否为数字。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ----------------------------------------------------------------------
+// MAIN DASHBOARD COMPONENT
+// ----------------------------------------------------------------------
 
 // 诊断卡片组件 - 紧凑版适配
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClickMore?: () => void }> = ({ d, mode = 'carousel', onClickMore }) => {
@@ -236,6 +335,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
     const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [isDataStale, setIsDataStale] = useState(false);
     const [viewRangeDisplay, setViewRangeDisplay] = useState('');
+    const [isDebugOpen, setIsDebugOpen] = useState(false); // Debugger toggle
 
     const [customRange, setCustomRange] = useState({
         start: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
@@ -444,10 +544,20 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData]); // Added cachedData dependency
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData]); 
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
+            {/* Inspector Modal */}
+            <DataInspectorModal 
+                isOpen={isDebugOpen} 
+                onClose={() => setIsDebugOpen(false)} 
+                cachedData={cachedData} 
+                factStats={factStats} 
+                anchorDate={dataAnchorDate} 
+                currentRange={{ start: viewRangeDisplay.split('~')[0]?.trim(), end: viewRangeDisplay.split('~')[1]?.trim() }}
+            />
+
             {/* Command Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-4">
                 <div className="space-y-1">
@@ -472,12 +582,17 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                                 </span>
                             </div>
                         )}
-                        {/* EXPERT MODE DEBUG INFO */}
-                        <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
-                            <CalendarDays size={10} className="text-blue-500" />
-                            <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest leading-none">
-                                View Range: {viewRangeDisplay}
-                            </span>
+                        {/* EXPERT MODE DEBUG INFO & TRIGGER */}
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
+                                <CalendarDays size={10} className="text-blue-500" />
+                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest leading-none">
+                                    View Range: {viewRangeDisplay}
+                                </span>
+                            </div>
+                            <button onClick={() => setIsDebugOpen(true)} className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 hover:bg-indigo-100 transition-colors" title="打开数据透视显微镜">
+                                <Stethoscope size={12} strokeWidth={2.5}/>
+                            </button>
                         </div>
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略指挥控制台</h1>
