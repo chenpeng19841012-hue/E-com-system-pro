@@ -414,10 +414,32 @@ export const App = () => {
 
     const renderView = () => {
         if (isAppLoading) return (
-            <div className="flex flex-col h-full items-center justify-center bg-white">
-                <div className="relative flex items-center justify-center">
-                    <div className="absolute inset-0 bg-brand/10 rounded-full blur-2xl animate-pulse w-32 h-32"></div>
-                    <span className="relative z-10 text-brand font-black text-lg animate-pulse tracking-[0.3em]">加载中</span>
+            <div className="flex flex-col h-full items-center justify-center bg-[#F8FAFC]">
+                <div className="relative flex flex-col items-center justify-center gap-6">
+                    {/* Breathing Aura */}
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-brand/20 rounded-full blur-3xl animate-pulse w-24 h-24"></div>
+                        <div className="relative z-10 w-20 h-20 bg-white rounded-[20px] shadow-2xl flex items-center justify-center border border-white/50">
+                            {/* Changed YZ to 云舟 */}
+                            <div className="text-2xl font-black text-brand tracking-widest">云舟</div>
+                        </div>
+                    </div>
+                    {/* Text Loading */}
+                    <div className="text-center space-y-3 relative z-10">
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 justify-center">
+                            <span className="animate-pulse">系统资源装载中</span>
+                        </h3>
+                        <div className="flex flex-col items-center gap-1">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                                System Initializing
+                            </p>
+                            <div className="flex gap-1 mt-2">
+                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
