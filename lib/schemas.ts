@@ -52,7 +52,7 @@ export const INITIAL_JINGZHUNTONG_SCHEMA: FieldDefinition[] = [
     { key: 'date', label: '日期', type: 'TIMESTAMP', required: true, tags: ['时间'] },
     { key: 'shop_name', label: '店铺名称', type: 'STRING', required: false, tags: ['店铺'] }, // 新增
     { key: 'account_nickname', label: '账户昵称', type: 'STRING', required: false, tags: ['账户'] },
-    { key: 'tracked_sku_id', label: '跟单SKU ID', type: 'STRING', required: false },
+    { key: 'tracked_sku_id', label: '跟单SKU ID', type: 'STRING', required: true }, // Changed to required
     { key: 'tracked_sku_name', label: '跟单SKU名称', type: 'STRING', required: false },
     { key: 'impressions', label: '展现数', type: 'INTEGER', required: false, tags:['展现量'] },
     { key: 'clicks', label: '点击数', type: 'INTEGER', required: true, tags:['点击量'] },

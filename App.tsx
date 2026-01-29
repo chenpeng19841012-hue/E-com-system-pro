@@ -261,6 +261,33 @@ export const App = () => {
                 }
             });
 
+            // --- 智能字段互通策略 (Start) ---
+            // 业务背景：商智(自营)用'SKU', 商智(POP)用'商品ID', 广告用'跟单SKU ID'
+            // 我们需要将这些不同来源的ID归一化到数据库对应的必填字段中
+            
+            // 获取原始值，防止 Schema 未定义导致 mappedRow 拿不到
+            const rawSku = row['SKU'] || row['sku'] || row['SKU编码'] || mappedRow['sku_code'];
+            const rawPid = row['商品ID'] || row['商品id'] || row['product_id'] || mappedRow['product_id'];
+            const rawTrackedId = row['跟单SKU ID'] || row['跟单SKU'] || row['tracked_sku_id'] || mappedRow['tracked_sku_id'];
+
+            // 1. 商智 (fact_shangzhi) -> 目标: sku_code
+            if (type === 'shangzhi') {
+                 if (!mappedRow['sku_code']) {
+                     if (rawSku) mappedRow['sku_code'] = rawSku;
+                     else if (rawPid) mappedRow['sku_code'] = rawPid;
+                 }
+            }
+            
+            // 2. 广告 (fact_jingzhuntong) -> 目标: tracked_sku_id
+            if (type === 'jingzhuntong') {
+                if (!mappedRow['tracked_sku_id']) {
+                    if (rawTrackedId) mappedRow['tracked_sku_id'] = rawTrackedId;
+                    else if (rawSku) mappedRow['tracked_sku_id'] = rawSku;
+                    else if (rawPid) mappedRow['tracked_sku_id'] = rawPid;
+                }
+            }
+            // --- 智能字段互通策略 (End) ---
+
             // 3. 必填字段校验：如果在清洗后，必填字段仍为空，则标记为无效
             const isInvalid = requiredKeys.some(key => {
                 const val = mappedRow[key];
@@ -276,7 +303,7 @@ export const App = () => {
         }).filter((item): item is any => item !== null);
 
         if (enrichedData.length === 0) {
-             throw new Error(`未检测到有效数据。可能是因为所有行都缺少必填字段（如：日期、SKU编码等）。请检查 Excel 表头是否匹配。`);
+             throw new Error(`未检测到有效数据。可能是因为所有行都缺少必填字段（如：日期、SKU编码/商品ID/跟单SKU ID 等）。请检查 Excel 表头是否匹配。`);
         }
         
         if (skippedRows > 0) {
