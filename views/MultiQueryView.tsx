@@ -317,6 +317,16 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     }
                     
                     const ent = merged.get(aggKey)!;
+                    
+                    // 核心修正：智能元数据补全
+                    // 如果当前聚合记录的店铺名称无效（如“未录入资产”），而当前 row 有效，则更新它
+                    if (parsedSkus.length === 1) {
+                        const currentShopName = ent.sku_shop.shopName;
+                        if ((currentShopName === '未录入资产' || !currentShopName) && row.shop_name) {
+                            ent.sku_shop.shopName = row.shop_name + " (Raw)";
+                        }
+                    }
+
                     [...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'paid_customers', 'total_order_amount'].forEach(m => {
                         if (m === 'paid_users') ent[m] = (ent[m] || 0) + (Number(row.paid_users) || Number(row.paid_customers) || 0);
                         else ent[m] = (ent[m] || 0) + (Number(row[m]) || 0);
