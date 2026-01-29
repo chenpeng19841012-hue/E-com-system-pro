@@ -211,6 +211,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
         try {
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+            const isExplicitSearch = parsedSkus.length > 0;
             
             // Build Enabled Assets Map (Asset-First Logic)
             const enabledSkusMap = new Map<string, ProductSKU>();
@@ -226,22 +227,38 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
             const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
 
-            // Strict Filter Logic
+            // Strict Filter Logic - NOW RELAXED for Explicit Search
             const filter = (row: any) => {
                 const code = getSkuIdentifier(row); 
                 if (!row.date || !code) return false;
 
-                // 1. Check if SKU is in Enabled Assets
+                // 优先处理：精确搜索 (Force Penetration Mode)
+                if (isExplicitSearch) {
+                    // 如果指定了 SKU，只匹配这些 SKU
+                    if (!parsedSkus.includes(code)) return false;
+                    // 在精确搜索模式下，无视“是否已录入资产/是否启用统计”
+                    // 但如果选了店铺，我们仍需尝试匹配店铺（如果有 metadata 辅助，或者 raw data 有 shop_name）
+                    if (selectedShopId !== 'all') {
+                        const asset = enabledSkusMap.get(code); // Try to get asset info
+                        if (asset) {
+                            if (asset.shopId !== selectedShopId) return false;
+                        } else if (row.shop_name) {
+                            // Try to match via raw string name if asset missing
+                            const targetShopName = shopMap.get(selectedShopId)?.name;
+                            if (targetShopName && row.shop_name !== targetShopName) return false;
+                        }
+                    }
+                    return true;
+                }
+
+                // 常规模式：必须是已录入且启用的资产
                 const asset = enabledSkusMap.get(code);
                 if (!asset) return false;
 
-                // 2. Check if Shop matches (based on Asset's shopId, NOT raw string)
+                // Check if Shop matches (based on Asset's shopId)
                 if (selectedShopId !== 'all') {
                     if (asset.shopId !== selectedShopId) return false;
                 }
-
-                // 3. Check SKU Input Filter
-                if (parsedSkus.length > 0 && !parsedSkus.includes(code)) return false;
 
                 return true;
             };
@@ -250,27 +267,30 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 const merged = new Map<string, any>();
                 const proc = (row: any) => {
                     const code = getSkuIdentifier(row)!;
-                    // Note: We use Asset info for metadata, NOT raw row info
+                    // Try to get asset, but don't fail if missing (for Raw Search)
                     const asset = enabledSkusMap.get(code);
-                    if (!asset) return; // Should be caught by filter, but double check
-
+                    
                     const d = new Date(row.date);
                     let key = row.date;
                     if (timeDimension === 'month') key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
                     else if (timeDimension === 'week') { d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1); key = d.toISOString().split('T')[0]; }
                     
-                    // UPDATED LOGIC: Aggregate by Date only (Sum of all filtered SKUs)
-                    // Old: const aggKey = `${key}-${code}`;
                     const aggKey = key;
                     
                     if (!merged.has(aggKey)) {
                         // Display label logic
                         let displayCode = parsedSkus.length === 1 ? parsedSkus[0] : '聚合数据';
-                        let shopName = selectedShopId !== 'all' ? shopMap.get(selectedShopId)?.name : '多店铺/多SKU';
+                        
+                        let shopName = '多店铺/多SKU';
+                        if (selectedShopId !== 'all') shopName = shopMap.get(selectedShopId)?.name || '未知';
+                        
                         if (parsedSkus.length === 1) {
-                             const singleSku = enabledSkusMap.get(parsedSkus[0]);
-                             if(singleSku) {
-                                 shopName = shopMap.get(singleSku.shopId)?.name || '未知';
+                             if(asset) {
+                                 shopName = shopMap.get(asset.shopId)?.name || '未知';
+                             } else if (row.shop_name) {
+                                 shopName = row.shop_name + " (Raw)";
+                             } else {
+                                 shopName = "未录入资产";
                              }
                         }
 
@@ -279,7 +299,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             aggDate: key, 
                             sku_code: 'AGGREGATED', 
                             sku_shop: { 
-                                code: parsedSkus.length === 1 ? parsedSkus[0] : '当日汇总', 
+                                code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
                                 shopName: shopName 
                             } 
                         });
@@ -330,7 +350,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             setVisualisationData({ mainTotals: calcTotals(mainData), compTotals: calcTotals(compData), dailyData: dData });
             setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date)));
             
-            addToast('success', '计算完成', `已基于资产库聚合 ${mainData.length} 条有效记录。`);
+            addToast('success', '计算完成', `已基于${isExplicitSearch ? '物理全量' : '资产库'}聚合 ${mainData.length} 条有效记录。`);
         } catch (e: any) {
             addToast('error', '检索失败', e.message);
         } finally {
@@ -373,9 +393,26 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label><div className="relative"><select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="all">全域探测</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
                         <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label><button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-slate-700 flex items-center justify-between hover:bg-slate-100 transition-all shadow-sm"><span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span><Filter size={14} className="text-slate-400" /></button></div>
                     </div>
-                    <div className="flex items-end gap-6 relative z-10 pt-4 border-t border-slate-50">
-                        <div className="flex-1 space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索</label><textarea placeholder="输入 SKU 编码，以回车或逗号分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="w-full h-14 bg-slate-50 border border-slate-200 rounded-[28px] px-6 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand resize-none shadow-inner no-scrollbar font-mono" /></div>
-                        <div className="flex gap-3 pb-2"><button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 transition-all active:scale-90 flex items-center justify-center"><RefreshCcw size={16}/></button><button onClick={handleQuery} disabled={isLoading} className="px-10 py-2.5 rounded-[20px] bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-2xl shadow-brand/20 flex items-center gap-3 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">{isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} className="text-white" />} 搜索</button></div>
+                    
+                    {/* Fixed Alignment Row */}
+                    <div className="flex items-end gap-4 relative z-10 pt-4 border-t border-slate-50">
+                        <div className="flex-1 space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索 (支持逗号分隔)</label>
+                            <input 
+                                placeholder="输入 SKU 编码，物理穿透模式将无视资产建档状态..." 
+                                value={skuInput} 
+                                onChange={e => setSkuInput(e.target.value)} 
+                                onKeyDown={e => e.key === 'Enter' && handleQuery()}
+                                className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
+                            />
+                        </div>
+                        <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-12 w-14 rounded-2xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
+                            <RefreshCcw size={18}/>
+                        </button>
+                        <button onClick={handleQuery} disabled={isLoading} className="h-12 px-8 rounded-2xl bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-xl shadow-brand/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">
+                            {isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} className="text-white" />} 
+                            执行搜索
+                        </button>
                     </div>
                 </div>
 

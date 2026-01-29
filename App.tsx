@@ -414,31 +414,33 @@ export const App = () => {
 
     const renderView = () => {
         if (isAppLoading) return (
-            <div className="flex flex-col h-full items-center justify-center bg-[#F8FAFC]">
-                <div className="relative flex flex-col items-center justify-center gap-6">
-                    {/* Breathing Aura */}
-                    <div className="relative">
-                        <div className="absolute inset-0 bg-brand/20 rounded-full blur-3xl animate-pulse w-24 h-24"></div>
-                        <div className="relative z-10 w-20 h-20 bg-white rounded-[20px] shadow-2xl flex items-center justify-center border border-white/50">
-                            {/* Changed YZ to 云舟 */}
-                            <div className="text-2xl font-black text-brand tracking-widest">云舟</div>
-                        </div>
+            <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#F8FAFC]">
+                <div className="relative flex flex-col items-center">
+                    {/* Breathing Glow */}
+                    <div className="absolute inset-0 bg-brand/30 rounded-full blur-[60px] animate-pulse w-32 h-32 -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2"></div>
+                    
+                    {/* Logo Container */}
+                    <div className="relative z-10 w-28 h-28 bg-white rounded-[32px] shadow-[0_20px_50px_-12px_rgba(112,173,71,0.3)] flex items-center justify-center border border-white/80 mb-10 backdrop-blur-sm">
+                        <div className="text-4xl font-black text-brand tracking-tighter">云舟</div>
                     </div>
-                    {/* Text Loading */}
-                    <div className="text-center space-y-3 relative z-10">
-                        <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 justify-center">
-                            <span className="animate-pulse">系统资源装载中</span>
-                        </h3>
-                        <div className="flex flex-col items-center gap-1">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                                System Initializing
-                            </p>
-                            <div className="flex gap-1 mt-2">
-                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                                <div className="w-1 h-1 bg-brand rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                            </div>
+
+                    {/* Typography */}
+                    <div className="text-center space-y-4 relative z-10 animate-slideIn">
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                            云舟智能中枢
+                        </h2>
+                        <div className="h-px w-16 bg-slate-200 mx-auto opacity-50"></div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em]">
+                            INTELLIGENT COMMERCE OS
+                        </p>
+                    </div>
+
+                    {/* Subtle Loading Indicator */}
+                    <div className="absolute bottom-[-80px] flex flex-col items-center gap-3">
+                        <div className="w-24 h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-brand rounded-full animate-pulse w-1/2 mx-auto"></div>
                         </div>
+                        <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest animate-pulse">Initializing System Assets...</span>
                     </div>
                 </div>
             </div>
