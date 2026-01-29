@@ -332,6 +332,22 @@ export const App = () => {
             }
             // --- 智能字段互通策略 (End) ---
 
+            // --- 数据清洗：过滤“合计”、“总计”及纯符号行 ---
+            const targetSku = mappedRow['sku_code'] || mappedRow['tracked_sku_id'];
+            if (targetSku) {
+                const skuStr = String(targetSku).trim().toLowerCase();
+                // 1. 过滤包含 'total', '合计', '总计', '汇总' 的行
+                if (['total', '合计', '总计', '汇总', 'grand total'].some(k => skuStr.includes(k))) {
+                    skippedRows++;
+                    return null;
+                }
+                // 2. 过滤纯符号（不包含任何字母或数字）的 SKU (如 '-', '.')
+                if (!/[a-zA-Z0-9]/.test(skuStr)) {
+                    skippedRows++;
+                    return null;
+                }
+            }
+
             // 3. 必填字段校验
             const isInvalid = requiredKeys.some(key => {
                 const val = mappedRow[key];
@@ -347,11 +363,11 @@ export const App = () => {
         }).filter((item): item is any => item !== null);
 
         if (enrichedData.length === 0) {
-             throw new Error(`未检测到有效数据。请检查：1.日期列格式是否正确；2.是否包含 SKU 或 商品ID 列。`);
+             throw new Error(`未检测到有效数据。请检查：1.日期列格式是否正确；2.是否包含 SKU 或 商品ID 列；3.是否全是“合计”行。`);
         }
         
         if (skippedRows > 0) {
-            console.warn(`[Data Import] Automatically skipped ${skippedRows} rows due to missing required fields (${requiredKeys.join(', ')}).`);
+            console.warn(`[Data Import] Automatically skipped ${skippedRows} rows (invalid/summary rows).`);
         }
 
         // 写入数据库 (Supabase Upsert 会自动处理 duplicate key update)

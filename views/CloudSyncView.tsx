@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle, RefreshCw, FileJson, ChevronDown, ChevronRight, Eye, EyeOff, Database } from 'lucide-react';
+import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle, RefreshCw, FileJson, ChevronDown, ChevronRight, Eye, EyeOff, Database, Trash2 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
 import { FieldDefinition } from '../lib/types';
@@ -10,31 +10,32 @@ const DEFAULT_KEY = "sb_publishable_m4yyJRlDY107a3Nkx6Pybw_6Mdvxazn";
 
 // 常用 SQL 脚本组件
 const CommonSqlSection = ({ addToast }: { addToast: any }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(true); // Default open for better visibility
 
-    const CLEAN_DATA_SCRIPT = `
--- 🔥 危险操作：清空所有业务事实表
--- 此操作会删除所有已上传的商智、广告和客服数据
--- 但会保留：SKU资产、店铺名录、系统配置
+    const CLEAN_FACT_DATA_SCRIPT = `
+-- 🗑️ 1. 清理商智&广告数据库 (Facts Only)
+-- 此操作会删除所有已上传的商智和广告事实数据
+-- 保留：SKU资产、店铺名录、系统配置
 
 TRUNCATE TABLE fact_shangzhi RESTART IDENTITY;
 TRUNCATE TABLE fact_jingzhuntong RESTART IDENTITY;
-TRUNCATE TABLE fact_customer_service RESTART IDENTITY;
 
--- 可选：若要连同SKU资产一起清空，请取消下一行的注释
--- TRUNCATE TABLE dim_skus RESTART IDENTITY;
+-- 如需清理客服数据，请取消下行注释：
+-- TRUNCATE TABLE fact_customer_service RESTART IDENTITY;
 `;
 
     return (
         <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col mt-6">
             <div 
-                className="flex items-center justify-between cursor-pointer" 
+                className="flex items-center justify-between cursor-pointer mb-2" 
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 <div className="flex items-center gap-3 text-slate-800">
-                    <Database size={20} className="text-blue-500" />
+                    <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-500 border border-red-100">
+                        <Database size={18} />
+                    </div>
                     <div className="flex flex-col">
-                        <h4 className="text-sm font-black uppercase tracking-wider">常用 SQL 脚本库</h4>
+                        <h4 className="text-sm font-black uppercase tracking-wider text-red-500">常用 SQL 脚本库</h4>
                         <p className="text-[9px] text-slate-400 font-bold">Quick SQL Snippets</p>
                     </div>
                 </div>
@@ -44,21 +45,22 @@ TRUNCATE TABLE fact_customer_service RESTART IDENTITY;
             </div>
 
             {isExpanded && (
-                <div className="mt-6 animate-fadeIn space-y-4">
-                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-2">
-                                <Trash2 size={12} className="text-rose-500"/> 清理现有数据 (Re-upload Prep)
+                <div className="animate-fadeIn space-y-4 pt-4 border-t border-slate-50">
+                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 relative group">
+                        <div className="flex justify-between items-center mb-3">
+                            <span className="text-xs font-black text-slate-700 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> 
+                                1. 清理商智 & 广告数据库
                             </span>
                             <button 
-                                onClick={() => { navigator.clipboard.writeText(CLEAN_DATA_SCRIPT.trim()); addToast('success', '已复制', '清理脚本已复制到剪贴板'); }} 
-                                className="text-[9px] font-black text-brand hover:underline cursor-pointer flex items-center gap-1"
+                                onClick={() => { navigator.clipboard.writeText(CLEAN_FACT_DATA_SCRIPT.trim()); addToast('success', '已复制', '脚本已复制到剪贴板'); }} 
+                                className="text-[9px] font-black text-white bg-slate-900 px-3 py-1.5 rounded-lg hover:bg-black transition-all flex items-center gap-1 shadow-md active:scale-95"
                             >
                                 <Copy size={10} /> 复制脚本
                             </button>
                         </div>
-                        <pre className="bg-slate-900 p-4 rounded-xl text-[10px] font-mono text-slate-300 overflow-x-auto leading-relaxed border border-slate-800 custom-scrollbar">
-                            {CLEAN_DATA_SCRIPT.trim()}
+                        <pre className="bg-white p-4 rounded-xl text-[10px] font-mono text-slate-500 overflow-x-auto leading-relaxed border border-slate-200 custom-scrollbar select-all">
+                            {CLEAN_FACT_DATA_SCRIPT.trim()}
                         </pre>
                     </div>
                 </div>
@@ -66,8 +68,6 @@ TRUNCATE TABLE fact_customer_service RESTART IDENTITY;
         </div>
     );
 };
-
-import { Trash2 } from 'lucide-react'; // Import needed for the sub-component
 
 export const CloudSyncView = ({ addToast }: any) => {
     const [supabaseUrl, setSupabaseUrl] = useState('');
