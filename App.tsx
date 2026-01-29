@@ -415,9 +415,9 @@ export const App = () => {
     const renderView = () => {
         if (isAppLoading) return (
             <div className="flex flex-col h-full items-center justify-center bg-white">
-                <div className="relative">
-                    <div className="absolute inset-0 bg-brand/20 rounded-full blur-2xl animate-pulse transform scale-125"></div>
-                    <SyncIcon size={56} className="relative z-10 text-brand animate-spin" strokeWidth={1.5} />
+                <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 bg-brand/10 rounded-full blur-2xl animate-pulse w-32 h-32"></div>
+                    <span className="relative z-10 text-brand font-black text-lg animate-pulse tracking-[0.3em]">加载中</span>
                 </div>
             </div>
         );
