@@ -6,7 +6,7 @@ import {
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
-    History, Store, Truck, Wifi, Clock
+    History, Store, Truck, Wifi, Clock, CalendarDays
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -229,12 +229,13 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
 export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
-    // Default to '7d'
+    // Default to '7d' to auto-snap to anchor
     const [rangeType, setRangeType] = useState<RangeType>('7d');
     
     // Data Anchors & Status
     const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [isDataStale, setIsDataStale] = useState(false);
+    const [viewRangeDisplay, setViewRangeDisplay] = useState('');
 
     const [customRange, setCustomRange] = useState({
         start: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
@@ -259,7 +260,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
-            // Trust the data source. Even if data is in the future (e.g. 2026), assume it's correct for the view.
+            // EXPERT MODE: Trust the data source strictly.
+            // If latest data is 2026-01-28, set that as anchor.
             setDataAnchorDate(factStats.shangzhi.latestDate);
         }
     }, [factStats]);
@@ -283,37 +285,38 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
         setIsLoading(true);
         setIsDataStale(false);
 
-        const todayObj = new Date();
-        const todayStr = todayObj.toISOString().split('T')[0];
-        const yesterdayObj = new Date(todayObj);
-        yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-        const yesterdayStr = yesterdayObj.toISOString().split('T')[0];
-
+        // EXPERT MODE: All relative dates are relative to dataAnchorDate, NOT System Time.
+        // This solves the issue where data is in 2026 but system is 2025.
+        
         let start = "";
         let end = "";
-
-        // Anchor logic refinement:
-        // Use `dataAnchorDate` as the reference "Today" for relative calculations (7d, 30d).
-        // This supports viewing historical or future projected data sets seamlessly.
         
+        const anchor = new Date(dataAnchorDate);
+        const anchorStr = dataAnchorDate; // 2026-01-28
+
         if (rangeType === 'realtime') {
-            // Realtime forces check against actual system time
-            start = end = todayStr;
-            if (dataAnchorDate < todayStr) setIsDataStale(true);
+            // "Realtime" in this context means "Latest Available Data"
+            start = end = anchorStr;
+            const systemToday = new Date().toISOString().split('T')[0];
+            if (dataAnchorDate < systemToday) setIsDataStale(true);
         } else if (rangeType === 'yesterday') {
-            start = end = yesterdayStr;
-            if (dataAnchorDate < yesterdayStr) setIsDataStale(true);
+            // "Yesterday" relative to latest data
+            const y = new Date(anchor);
+            y.setDate(y.getDate() - 1);
+            start = end = y.toISOString().split('T')[0];
         } else if (rangeType === 'custom') {
             start = customRange.start;
             end = customRange.end;
         } else {
-            // 7d, 30d: Backtrack from the ANCHOR date (latest available data)
+            // 7d, 30d
             const daysMap: Record<string, number> = { '7d': 6, '30d': 29 };
             const days = daysMap[rangeType] || 6;
-            const refTime = new Date(dataAnchorDate).getTime();
-            end = dataAnchorDate;
+            const refTime = anchor.getTime();
+            end = anchorStr;
             start = new Date(refTime - days * 86400000).toISOString().split('T')[0];
         }
+        
+        setViewRangeDisplay(`${start} ~ ${end}`);
 
         const diff = Math.ceil(Math.abs(new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
         const prevEnd = new Date(new Date(start).getTime() - 86400000).toISOString().split('T')[0];
@@ -324,9 +327,9 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
             // The cachedData comes from App.tsx which fetches relative to the *same* anchor logic
             let currSz = [], currJzt = [], prevSz = [], prevJzt = [];
             
-            // Check if the requested range is within what App.tsx likely cached (Anchor - 60d to Anchor)
-            // Since we sync App.tsx logic to use the same latestDate, this cache hit rate should be high
-            const isRangeCached = (rangeType === '7d' || rangeType === '30d' || rangeType === 'yesterday' || rangeType === 'realtime') && cachedData && cachedData.shangzhi.length > 0;
+            // App.tsx ensures cachedData covers [Anchor - 90d, Anchor]
+            // So for standard ranges relative to Anchor, cache should hit.
+            const isRangeCached = (rangeType !== 'custom') && cachedData && cachedData.shangzhi.length > 0;
 
             if (isRangeCached && cachedData) {
                 // Filter from memory cache
@@ -434,22 +437,6 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 });
             }
             
-            // Disabled Low ROI Diagnostic as requested by user
-            /*
-            const lowRoiSkus = Array.from(currSkusSet).filter(code => {
-                const spend = currJzt.filter(j => getSkuIdentifier(j) === code).reduce((s, j) => s + (Number(j.cost) || 0), 0);
-                const gmv = currSz.filter(z => getSkuIdentifier(z) === code).reduce((s, z) => s + (Number(z.paid_amount) || 0), 0);
-                return spend > 500 && (gmv / spend) < 1.2;
-            });
-            if (lowRoiSkus.length > 0) {
-                diag.push({ 
-                    id: 'low_roi', severity: 'warning', type: 'low_roi', title: '投放能效赤字', 
-                    desc: `检测到 ${lowRoiSkus.length} 个 SKU 广告投入产出比极低。`, 
-                    details: { '重点负向SKU': lowRoiSkus.map(c => getSkuInfoStr(c!)).join('\n') } 
-                });
-            }
-            */
-            
             setDiagnoses(diag);
             setDiagOffset(0);
         } finally { setIsLoading(false); }
@@ -485,6 +472,13 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                                 </span>
                             </div>
                         )}
+                        {/* EXPERT MODE DEBUG INFO */}
+                        <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
+                            <CalendarDays size={10} className="text-blue-500" />
+                            <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest leading-none">
+                                View Range: {viewRangeDisplay}
+                            </span>
+                        </div>
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略指挥控制台</h1>
                     <p className="text-slate-400 font-bold text-sm tracking-wide">Strategic Performance Intelligence & AI Dashboard</p>

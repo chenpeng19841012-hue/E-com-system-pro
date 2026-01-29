@@ -94,8 +94,8 @@ export const App = () => {
             }
             
             const endDateStr = anchorDate.toISOString().split('T')[0];
-            // 向前追溯 60 天
-            const startDate = new Date(anchorDate.getTime() - 60 * 24 * 60 * 60 * 1000);
+            // 专家模式：向前追溯 90 天 (原 60 天)，应对更大幅度的时间跨度
+            const startDate = new Date(anchorDate.getTime() - 90 * 24 * 60 * 60 * 1000);
             const startDateStr = startDate.toISOString().split('T')[0];
 
             setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
