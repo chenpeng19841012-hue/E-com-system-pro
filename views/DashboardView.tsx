@@ -12,7 +12,7 @@ import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
 
-type RangeType = '7d' | '30d' | 'custom';
+type RangeType = '7d' | '30d' | '60d' | 'custom';
 type MetricKey = 'gmv' | 'ca' | 'spend' | 'roi';
 
 interface MetricPoint { current: number; previous: number; }
@@ -156,7 +156,7 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
                 ))}
 
                 {data.map((d, i) => (
-                    <text key={i} x={getX(i)} y={height - 10} textAnchor="middle" fontSize="9" fill={hoverIndex === i ? "#020617" : "#94a3b8"} fontWeight="900" className="transition-colors uppercase font-black">
+                    <text key={i} x={getX(i)} y={height - 10} textAnchor="middle" fontSize="9" fill={hoverIndex === i ? "#020617" : "#94a3b8"} fontWeight="900" className="transition-colors uppercase font-black" style={{ opacity: data.length > 20 && i % 3 !== 0 && i !== data.length-1 ? 0 : 1 }}>
                         {d.date.split('-').slice(1).join('/')}
                     </text>
                 ))}
@@ -197,7 +197,8 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
 export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
-    const [rangeType, setRangeType] = useState<RangeType>('7d');
+    // Default to '60d' to ensure data visibility
+    const [rangeType, setRangeType] = useState<RangeType>('60d');
     
     // 智能回溯数据日期
     const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -264,9 +265,11 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
         setIsLoading(true);
         const refTime = new Date(dataAnchorDate).getTime();
         
+        const daysMap: Record<string, number> = { '7d': 6, '30d': 29, '60d': 59 };
+        
         let start = rangeType === 'custom' 
             ? customRange.start 
-            : new Date(refTime - (rangeType === '7d' ? 6 : 29) * 86400000).toISOString().split('T')[0];
+            : new Date(refTime - (daysMap[rangeType] || 59) * 86400000).toISOString().split('T')[0];
             
         let end = rangeType === 'custom' 
             ? customRange.end 
@@ -434,8 +437,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                 
                 <div className="flex items-center gap-4">
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
-                        {[{id:'7d',l:'近7天'},{id:'30d',l:'近30天'},{id:'custom',l:'自定义'}].map(i => (
-                            <button key={i.id} onClick={() => setRangeType(i.id as RangeType)} className={`px-8 py-3 rounded-xl text-xs font-black transition-all ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}>{i.l}</button>
+                        {[{id:'7d',l:'近7天'},{id:'30d',l:'近30天'},{id:'60d',l:'近60天'},{id:'custom',l:'自定义'}].map(i => (
+                            <button key={i.id} onClick={() => setRangeType(i.id as RangeType)} className={`px-6 py-3 rounded-xl text-xs font-black transition-all ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}>{i.l}</button>
                         ))}
                     </div>
                 </div>
