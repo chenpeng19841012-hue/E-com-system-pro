@@ -3,13 +3,13 @@ import { FieldDefinition } from './types';
 
 export const INITIAL_SHANGZHI_SCHEMA: FieldDefinition[] = [
     { key: 'date', label: '日期', type: 'TIMESTAMP', required: true, tags: ['时间'] },
+    { key: 'shop_name', label: '店铺名称', type: 'STRING', required: false, tags: ['店铺'] },
     { key: 'product_name', label: '商品名称', type: 'STRING', required: false },
     { key: 'sku_code', label: 'SKU', type: 'STRING', required: true, tags: ['SKU编码'] },
     { key: 'brand', label: '品牌', type: 'STRING', required: false },
     { key: 'category_l1', label: '一级类目', type: 'STRING', required: false },
     { key: 'category_l2', label: '二级类目', type: 'STRING', required: false },
     { key: 'category_l3', label: '三级类目', type: 'STRING', required: false },
-    { key: 'shop_name', label: '店铺名称', type: 'STRING', required: false }, // 改为 false
     { key: 'business_mode', label: '经营模式', type: 'STRING', required: false },
     { key: 'pv', label: '浏览量', type: 'INTEGER', required: false },
     { key: 'uv', label: '访客数', type: 'INTEGER', required: false },
@@ -50,6 +50,7 @@ export const INITIAL_SHANGZHI_SCHEMA: FieldDefinition[] = [
 
 export const INITIAL_JINGZHUNTONG_SCHEMA: FieldDefinition[] = [
     { key: 'date', label: '日期', type: 'TIMESTAMP', required: true, tags: ['时间'] },
+    { key: 'shop_name', label: '店铺名称', type: 'STRING', required: false, tags: ['店铺'] }, // 新增
     { key: 'account_nickname', label: '账户昵称', type: 'STRING', required: false, tags: ['账户'] },
     { key: 'tracked_sku_id', label: '跟单SKU ID', type: 'STRING', required: false },
     { key: 'tracked_sku_name', label: '跟单SKU名称', type: 'STRING', required: false },
@@ -77,6 +78,7 @@ export const INITIAL_JINGZHUNTONG_SCHEMA: FieldDefinition[] = [
 
 export const INITIAL_CUSTOMER_SERVICE_SCHEMA: FieldDefinition[] = [
     { key: 'date', label: '日期', type: 'TIMESTAMP', required: true, tags: ['时间'] },
+    { key: 'shop_name', label: '店铺名称', type: 'STRING', required: false, tags: ['店铺'] }, // 新增
     { key: 'agent_account', label: '客服', type: 'STRING', required: true, tags: ['客服账号'] },
     { key: 'inquiries', label: '咨询量', type: 'INTEGER', required: false },
     { key: 'chats', label: '接待量', type: 'INTEGER', required: true },

@@ -186,7 +186,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [selectedRowIds, setSelectedRowIds] = useState<Set<any>>(new Set());
 
-    // Load initial data on mount (recent 20 rows) to show something
+    // Load initial data on mount (recent 10 rows) to show something
     useEffect(() => {
         handleExecuteSearch(); 
     }, [tableTypeSearch]);
@@ -215,7 +215,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                 endDate: endDate || undefined,
                 sku: skuSearch || undefined,
                 shopName: shopSearch || undefined
-            }, 100); // Limit to 100 rows for performance
+            }, 10); // Limit to 10 rows for performance
             setTableData(data);
             if (data.length === 0) {
                 addToast('info', '检索完成', '未找到匹配的物理记录。');
@@ -452,7 +452,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                             <div className="p-8 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between shrink-0 relative z-10">
                                 <div className="flex items-center gap-6">
                                     <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-4">
-                                        <span>当前展示 {tableData.length} 行记录 (已截断前 100 行以优化性能)</span>
+                                        <span>当前展示 {tableData.length} 行记录 (已截断前 10 行以优化性能)</span>
                                         {tableData.length > 0 && <span className="text-brand/50 font-black italic">提示: 字段较多时可按住 Shift 配合滚轮或拖动底部条横向滑动</span>}
                                     </div>
                                     {selectedRowIds.size > 0 && (

@@ -131,13 +131,6 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
   const [batchShopId, setBatchShopId] = useState('');
   const [isBatchUpdating, setIsBatchUpdating] = useState(false);
 
-  const [modalState, setModalState] = useState<{
-    isOpen: boolean;
-    detectedType: TableType | null;
-    selectedType: TableType | null;
-    onConfirm: () => void;
-  }>({ isOpen: false, detectedType: null, selectedType: null, onConfirm: () => {} });
-
   const CHUNK_SIZE = 5000; // 自动切片阈值
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,10 +150,13 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
 
                 // 智能检测类型
                 const detectedType = detectTableType(headers, schemas);
+                let effectiveType = activeImportTab; // 默认为当前
+
                 if (detectedType && detectedType !== activeImportTab) {
-                    // 如果检测到类型不匹配，提示用户
+                    // 如果检测到类型不匹配，提示用户并切换
                     addToast('warning', '类型智能修正', `检测到文件特征为 [${getTableName(detectedType)}]，建议切换类型。`);
                     setActiveImportTab(detectedType);
+                    effectiveType = detectedType; // 立即使用检测到的类型
                 }
 
                 // 自动切片逻辑
@@ -173,7 +169,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                     fileName: file.name,
                     totalRows: data.length,
                     chunks: chunks,
-                    targetType: activeImportTab // 初始为当前选中的，后续可能会变
+                    targetType: effectiveType // 使用本地变量，避免闭包陷阱
                 });
 
                 if (data.length > CHUNK_SIZE) {

@@ -106,7 +106,7 @@ export const CloudSyncView = ({ addToast }: any) => {
             }).filter(Boolean).join('\n');
         };
 
-        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v6.2.0 (Strict-Mode)
+        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v6.3.0 (Strict-Mode)
 -- 🚀 自动根据前端 schemas.ts 生成，确保 100% 字段覆盖
 -- 🛡️ 强制更新去重规则：
 --    商智: date + sku_code
