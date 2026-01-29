@@ -154,8 +154,8 @@ export const DB = {
 
     let conflictKey = undefined;
     if (tableName === 'fact_shangzhi') conflictKey = 'date,sku_code';
-    // [Updated] Jingzhuntong now uses triple key: date + account + sku
-    else if (tableName === 'fact_jingzhuntong') conflictKey = 'date,account_nickname,tracked_sku_id';
+    // [Updated] Jingzhuntong now uses quadruple key: date + account + sku + cost
+    else if (tableName === 'fact_jingzhuntong') conflictKey = 'date,account_nickname,tracked_sku_id,cost';
     else if (tableName === 'fact_customer_service') conflictKey = 'date,agent_account';
     else if (tableName === 'app_config') conflictKey = 'key';
     else if (tableName === 'dim_skus') conflictKey = 'id';

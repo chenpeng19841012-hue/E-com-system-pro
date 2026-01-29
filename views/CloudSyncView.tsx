@@ -102,11 +102,11 @@ export const CloudSyncView = ({ addToast }: any) => {
             }).filter(Boolean).join('\n');
         };
 
-        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v5.9.0
+        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v6.0.0 (Strict-Mode)
 -- 🚀 自动根据前端 schemas.ts 生成，确保 100% 字段覆盖
 -- 🛡️ 强制更新去重规则：
 --    商智: date + sku_code
---    广告: date + account_nickname + tracked_sku_id
+--    广告: date + account_nickname + tracked_sku_id + cost (四维唯一键)
 
 -- 1. [核心] 安装缓存刷新函数 (RPC)
 CREATE OR REPLACE FUNCTION reload_schema_cache()
@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS fact_jingzhuntong (
   date DATE NOT NULL,
   tracked_sku_id TEXT NOT NULL,
   account_nickname TEXT, -- 提前确保存在，用于索引
+  cost NUMERIC,          -- 提前确保存在，用于索引
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -177,12 +178,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_shangzhi_unique ON fact_shangzhi (date, sk
 ALTER TABLE fact_shangzhi DROP CONSTRAINT IF EXISTS idx_shangzhi_unique;
 ALTER TABLE fact_shangzhi ADD CONSTRAINT fact_shangzhi_date_sku_code_key UNIQUE USING INDEX idx_shangzhi_unique;
 
--- 广告: Date + Account + SKU (防止多店铺SKU混淆)
+-- 广告: Date + Account + SKU + Cost (四维唯一，解决合并丢失问题)
 ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS fact_jingzhuntong_date_tracked_sku_id_key; -- 删除旧约束
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jzt_unique ON fact_jingzhuntong (date, account_nickname, tracked_sku_id);
+ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS unique_jzt_key; -- 删除旧自定义约束
+DROP INDEX IF EXISTS idx_jzt_unique;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jzt_unique_v2 ON fact_jingzhuntong (date, account_nickname, tracked_sku_id, cost);
 -- 绑定为约束
-ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS idx_jzt_unique;
-ALTER TABLE fact_jingzhuntong ADD CONSTRAINT unique_jzt_key UNIQUE USING INDEX idx_jzt_unique;
+ALTER TABLE fact_jingzhuntong ADD CONSTRAINT unique_jzt_key_v2 UNIQUE USING INDEX idx_jzt_unique_v2;
 
 -- 客服: Date + Account
 ALTER TABLE fact_customer_service DROP CONSTRAINT IF EXISTS fact_customer_service_date_agent_account_key;
@@ -317,7 +320,7 @@ NOTIFY pgrst, 'reload schema';
                                 <Terminal size={20} className="text-slate-400" />
                                 <div className="flex flex-col">
                                     <h4 className="text-sm font-black uppercase tracking-wider">智能架构同步脚本 (Auto-Sync)</h4>
-                                    <p className="text-[9px] text-slate-400 font-bold">已更新广告表去重规则 (时间+账户+SKU)</p>
+                                    <p className="text-[9px] text-slate-400 font-bold">已更新广告表去重规则 (时间+账户+SKU+花费)</p>
                                 </div>
                             </div>
                             <button 
@@ -334,7 +337,7 @@ NOTIFY pgrst, 'reload schema';
                             <FileJson size={18} className="text-green-600 shrink-0" />
                             <div className="space-y-1">
                                 <p className="text-[11px] text-green-800 font-bold leading-relaxed">
-                                    此脚本会删除旧的唯一约束，并应用新的去重规则。
+                                    此脚本会删除旧的唯一约束，并应用新的去重规则（Date + Account + SKU + Cost）。
                                 </p>
                                 <p className="text-[10px] text-green-700 font-medium ml-1">
                                     请复制并在 Supabase SQL Editor 执行一次，以解决上传报错和数据覆盖问题。
