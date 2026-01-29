@@ -229,21 +229,24 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             // Strict Filter Logic - NOW RELAXED for Explicit Search
             const filter = (row: any) => {
-                const code = getSkuIdentifier(row); 
-                if (!row.date || !code) return false;
+                const codeRaw = getSkuIdentifier(row); 
+                if (!row.date || !codeRaw) return false;
+                const code = String(codeRaw).trim();
 
                 // 优先处理：精确搜索 (Force Penetration Mode)
                 if (isExplicitSearch) {
-                    // 如果指定了 SKU，只匹配这些 SKU
+                    // 如果指定了 SKU，只匹配这些 SKU。使用 trim() 确保匹配
                     if (!parsedSkus.includes(code)) return false;
+                    
                     // 在精确搜索模式下，无视“是否已录入资产/是否启用统计”
-                    // 但如果选了店铺，我们仍需尝试匹配店铺（如果有 metadata 辅助，或者 raw data 有 shop_name）
+                    // 但如果选了店铺，我们仍需尝试匹配店铺
                     if (selectedShopId !== 'all') {
-                        const asset = enabledSkusMap.get(code); // Try to get asset info
+                        const asset = enabledSkusMap.get(code); 
                         if (asset) {
+                            // 如果有资产记录，用资产的归属店铺ID匹配
                             if (asset.shopId !== selectedShopId) return false;
                         } else if (row.shop_name) {
-                            // Try to match via raw string name if asset missing
+                            // 如果是纯物理数据，尝试用 shop_name 字符串匹配
                             const targetShopName = shopMap.get(selectedShopId)?.name;
                             if (targetShopName && row.shop_name !== targetShopName) return false;
                         }
@@ -266,21 +269,29 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             const processData = (sz: any[], jzt: any[]) => {
                 const merged = new Map<string, any>();
                 const proc = (row: any) => {
-                    const code = getSkuIdentifier(row)!;
+                    const code = String(getSkuIdentifier(row)).trim();
                     // Try to get asset, but don't fail if missing (for Raw Search)
                     const asset = enabledSkusMap.get(code);
                     
-                    const d = new Date(row.date);
-                    let key = row.date;
-                    if (timeDimension === 'month') key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-                    else if (timeDimension === 'week') { d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1); key = d.toISOString().split('T')[0]; }
+                    // 核心修正：严格使用字符串日期，禁止 new Date() 时区转换
+                    // The 'date' field from DB is typically YYYY-MM-DD string.
+                    // We split by 'T' just in case it's a full ISO string.
+                    let key = String(row.date).split('T')[0]; 
+                    
+                    if (timeDimension === 'month') {
+                        // Only for Month aggregation do we perform substring parsing
+                        key = key.substring(0, 7); // YYYY-MM
+                    } else if (timeDimension === 'week') {
+                        // Only for Week aggregation do we use Date object math
+                        const d = new Date(key);
+                        d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1);
+                        key = d.toISOString().split('T')[0];
+                    }
                     
                     const aggKey = key;
                     
                     if (!merged.has(aggKey)) {
                         // Display label logic
-                        let displayCode = parsedSkus.length === 1 ? parsedSkus[0] : '聚合数据';
-                        
                         let shopName = '多店铺/多SKU';
                         if (selectedShopId !== 'all') shopName = shopMap.get(selectedShopId)?.name || '未知';
                         
@@ -295,8 +306,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         }
 
                         merged.set(aggKey, { 
-                            date: row.date, 
-                            aggDate: key, 
+                            date: key, // Use the computed key (YYYY-MM-DD) for display
+                            aggDate: aggKey, 
                             sku_code: 'AGGREGATED', 
                             sku_shop: { 
                                 code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
@@ -384,19 +395,51 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     </div>
                 </div>
 
-                {/* 配置面板 - COMPACTED (~40% reduced height) */}
+                {/* 配置面板 - Grid Layout Fix for Alignment */}
                 <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative z-10">
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">时间跨度</label><div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all"><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 py-2 outline-none" /><span className="text-slate-300 font-black">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 py-2 outline-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label><div className="relative"><select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="day">按天 (Daily)</option><option value="week">按周 (Weekly)</option><option value="month">按月 (Monthly)</option></select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label><div className="relative"><select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="all">全域探测</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label><button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-slate-700 flex items-center justify-between hover:bg-slate-100 transition-all shadow-sm"><span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span><Filter size={14} className="text-slate-400" /></button></div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">时间跨度</label>
+                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all h-11 bg-white">
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
+                                <span className="text-slate-300 font-black">-</span>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label>
+                            <div className="relative">
+                                <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                    <option value="day">按天 (Daily)</option>
+                                    <option value="week">按周 (Weekly)</option>
+                                    <option value="month">按月 (Monthly)</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label>
+                            <div className="relative">
+                                <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                    <option value="all">全域探测</option>
+                                    {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label>
+                            <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 h-11 text-slate-700 flex items-center justify-between hover:bg-white transition-all shadow-sm">
+                                <span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span>
+                                <Filter size={14} className="text-slate-400" />
+                            </button>
+                        </div>
                     </div>
                     
-                    {/* Fixed Alignment Row */}
-                    <div className="flex items-end gap-4 relative z-10 pt-4 border-t border-slate-50">
-                        <div className="flex-1 space-y-2">
+                    {/* Fixed Alignment Row - Refactored to Grid for better vertical alignment */}
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end pt-6 border-t border-slate-50 relative z-10">
+                        <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索 (支持逗号分隔)</label>
                             <input 
                                 placeholder="输入 SKU 编码，物理穿透模式将无视资产建档状态..." 
@@ -445,7 +488,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             return (
                                 <div key={key} 
                                     onClick={() => setChartMetrics(p => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n; })} 
-                                    className={`p-3 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
+                                    className={`p-3 rounded-3xl transition-all cursor-pointer border relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
                                     style={{ borderColor: isSelected ? color : 'transparent' }}>
                                     
                                     <div className="space-y-0.5">
