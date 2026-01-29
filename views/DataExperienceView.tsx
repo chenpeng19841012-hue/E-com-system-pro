@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck, CopyMinus } from 'lucide-react';
+import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck, CopyMinus, Eraser } from 'lucide-react';
 import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
@@ -302,7 +302,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
             <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} mode={deleteProgress?.mode} />
             
-            <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setTableData([]); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
+            <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setTableData([]); addToast('success', '清空完成', '目标表数据已全部格式化。'); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>正在执行物理层移除指令：<strong className="font-black text-slate-900">[{getTableName(tableTypeSearch)}]</strong></p>
                 <p className="mt-2 text-rose-500 font-bold opacity-80">此操作将物理性抹除全量记录，无法撤销。确认继续？</p>
             </ConfirmModal>
@@ -444,10 +444,13 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                                     {selectedRowIds.size > 0 && <div className="px-5 py-3.5 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3"><Trash2 size={14} className="text-rose-500"/><span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">已锁定物理行: {selectedRowIds.size.toLocaleString()}</span></div>}
                                 </div>
                                 <div className="flex gap-3">
+                                    <button onClick={() => setIsClearModalOpen(true)} className="px-8 py-4 rounded-[22px] bg-rose-50 border border-rose-100 text-rose-500 font-black text-xs hover:bg-rose-100 transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                        <Eraser size={14} /> 格式化全表
+                                    </button>
                                     <button onClick={() => setIsDedupeModalOpen(true)} className="px-8 py-4 rounded-[22px] bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 hover:text-brand hover:border-brand transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
                                         <CopyMinus size={14} /> 执行去重
                                     </button>
-                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
+                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置筛选</button>
                                     <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-12 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
                                         {isLoadingData ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16}/>}
                                         {isLoadingData ? '穿透中...' : '执行云端探测'}
