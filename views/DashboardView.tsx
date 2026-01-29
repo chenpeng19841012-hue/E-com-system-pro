@@ -5,7 +5,8 @@ import {
     ArrowUp, ArrowDown, Sparkles, Bot as BotIcon, ChevronRight, 
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
-    AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud
+    AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
+    History // Added missing import here
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -31,24 +32,24 @@ const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.
 
 // 诊断卡片组件 - 适配垂直轮播与弹窗列表
 const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list' }> = ({ d, mode = 'carousel' }) => (
-    <div className={`transition-all duration-700 w-full h-full flex flex-col ${mode === 'carousel' ? 'justify-center' : 'p-8 rounded-[32px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
-        <div className="flex items-center gap-4 mb-4">
-            <div className={`p-2.5 rounded-2xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
-                {d.type === 'new_sku' ? <PackageSearch size={24}/> :
-                 d.type === 'stock_severe' ? <AlertTriangle size={24}/> :
-                 d.type === 'low_roi' ? <TrendingDown size={24}/> :
-                 d.type === 'high_potential' ? <Zap size={24}/> :
-                 d.type === 'stale_inventory' ? <Layers size={24}/> :
-                 d.severity === 'critical' ? <ShieldAlert size={24}/> : 
-                 <Flame size={24}/>}
+    <div className={`transition-all duration-700 w-full h-full flex flex-col ${mode === 'carousel' ? 'justify-center' : 'p-6 rounded-[24px] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl'}`}>
+        <div className="flex items-center gap-3 mb-3">
+            <div className={`p-2 rounded-xl ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
+                {d.type === 'new_sku' ? <PackageSearch size={18}/> :
+                 d.type === 'stock_severe' ? <AlertTriangle size={18}/> :
+                 d.type === 'low_roi' ? <TrendingDown size={18}/> :
+                 d.type === 'high_potential' ? <Zap size={18}/> :
+                 d.type === 'stale_inventory' ? <Layers size={18}/> :
+                 d.severity === 'critical' ? <ShieldAlert size={18}/> : 
+                 <Flame size={18}/>}
             </div>
-            <h4 className={`text-lg font-black uppercase tracking-tight ${d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? 'text-amber-600' : 'text-slate-800'}`}>{d.title}</h4>
+            <h4 className={`text-base font-black uppercase tracking-tight truncate ${d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? 'text-amber-600' : 'text-slate-800'}`}>{d.title}</h4>
         </div>
-        <p className="text-xs font-bold text-slate-500 leading-relaxed mb-6">{d.desc}</p>
-        <div className="bg-white/70 rounded-2xl p-5 border border-white/40 space-y-3 shadow-inner max-h-[180px] overflow-y-auto no-scrollbar">
+        <p className="text-[11px] font-bold text-slate-500 leading-relaxed mb-4 line-clamp-2">{d.desc}</p>
+        <div className="bg-white/70 rounded-xl p-4 border border-white/40 space-y-2 shadow-inner max-h-[120px] overflow-y-auto no-scrollbar">
             {Object.entries(d.details).map(([k,v]) => (
-                <div key={k} className="flex flex-col gap-1 text-[10px] font-black uppercase">
-                    <span className="text-slate-400 tracking-widest border-b border-slate-100 pb-1">{k}</span>
+                <div key={k} className="flex flex-col gap-0.5 text-[9px] font-black uppercase">
+                    <span className="text-slate-400 tracking-widest border-b border-slate-100 pb-0.5">{k}</span>
                     <span className="text-slate-900 leading-relaxed break-all font-mono whitespace-pre-wrap">{v}</span>
                 </div>
             ))}
@@ -74,37 +75,34 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
     const isGood = (chg >= 0 && isHigherBetter) || (chg < 0 && !isHigherBetter);
 
     return (
-        <button onClick={onClick} className={`bg-white rounded-[40px] border-2 text-left transition-all duration-500 flex flex-col overflow-hidden relative active:scale-95 ${isActive ? 'border-brand shadow-2xl scale-[1.03] ring-8 ring-brand/5' : 'border-slate-100 shadow-sm hover:shadow-xl hover:border-slate-200'}`}>
-            <div className="p-8 flex-1 space-y-8">
+        <button onClick={onClick} className={`bg-white rounded-[32px] border-2 text-left transition-all duration-500 flex flex-col overflow-hidden relative active:scale-95 ${isActive ? 'border-brand shadow-xl scale-[1.02] ring-4 ring-brand/5' : 'border-slate-100 shadow-sm hover:shadow-lg hover:border-slate-200'}`}>
+            {/* 上半部分：高度压缩 */}
+            <div className="p-6 flex-1 space-y-4">
                 <div className="flex justify-between items-start">
-                    <div className={`w-16 h-16 ${bg} rounded-[24px] flex items-center justify-center ${color} shadow-inner`}>{icon}</div>
+                    <div className={`w-12 h-12 ${bg} rounded-[18px] flex items-center justify-center ${color} shadow-inner`}>{icon}</div>
                     <div className="text-right">
-                        {/* 指标标签 16px (text-base) */}
-                        <h3 className="text-base font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{title}</h3>
-                        {/* 涨跌幅气泡 14px (text-sm) */}
-                        <div className={`px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 ${isGood ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
-                            {chg >= 0 ? <ArrowUp size={12} strokeWidth={4}/> : <ArrowDown size={12} strokeWidth={4}/>}
-                            <span className="text-sm font-black tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
+                        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{title}</h3>
+                        <div className={`px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${isGood ? 'bg-green-50 text-green-600' : 'bg-rose-50 text-rose-600'}`}>
+                            {chg >= 0 ? <ArrowUp size={10} strokeWidth={4}/> : <ArrowDown size={10} strokeWidth={4}/>}
+                            <span className="text-[10px] font-black tabular-nums">{Math.abs(chg).toFixed(1)}%</span>
                         </div>
                     </div>
                 </div>
-                <p className="text-6xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
+                <p className="text-5xl font-black text-slate-900 tabular-nums tracking-tighter">{prefix}{formatVal(value.total.current, isFloat)}</p>
             </div>
-            {/* 底部明细栏：字号升级 */}
-            <div className={`px-8 py-8 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
+            {/* 底部明细栏：高度压缩 */}
+            <div className={`px-6 py-5 border-t grid grid-cols-2 gap-4 ${isActive ? 'bg-brand/5 border-brand/10' : 'bg-slate-50 border-slate-50'}`}>
                 <div>
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                        {/* 数值 16px (text-base) */}
-                        <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.self.current, isFloat)}</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">自营</span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-sm font-black text-slate-700">{prefix}{formatVal(value.self.current, isFloat)}</span>
                         <SubValueTrend current={value.self.current} previous={value.self.previous} isHigherBetter={isHigherBetter} />
                     </div>
                 </div>
                 <div className="border-l border-slate-200 pl-4">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">POP</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                        {/* 数值 16px (text-base) */}
-                        <span className="text-base font-black text-slate-700">{prefix}{formatVal(value.pop.current, isFloat)}</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">POP</span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-sm font-black text-slate-700">{prefix}{formatVal(value.pop.current, isFloat)}</span>
                         <SubValueTrend current={value.pop.current} previous={value.pop.previous} isHigherBetter={isHigherBetter} />
                     </div>
                 </div>
@@ -116,7 +114,8 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
 const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: MetricKey }) => {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
-    const width = 1000; const height = 320; const padding = { top: 40, right: 40, bottom: 60, left: 60 };
+    // 高度缩减 30%: 320 -> 220
+    const width = 1000; const height = 220; const padding = { top: 30, right: 30, bottom: 40, left: 50 };
     const maxVal = Math.max(...data.map(d => Math.max(d.self, d.pop)), 0.1) * 1.2;
     
     const getX = (i: number) => padding.left + (i / (data.length - 1)) * (width - padding.left - padding.right);
@@ -146,36 +145,36 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
                 ))}
 
                 {data.map((d, i) => (
-                    <text key={i} x={getX(i)} y={height - 20} textAnchor="middle" fontSize="9" fill={hoverIndex === i ? "#020617" : "#94a3b8"} fontWeight="900" className="transition-colors uppercase font-black">
+                    <text key={i} x={getX(i)} y={height - 10} textAnchor="middle" fontSize="9" fill={hoverIndex === i ? "#020617" : "#94a3b8"} fontWeight="900" className="transition-colors uppercase font-black">
                         {d.date.split('-').slice(1).join('/')}
                     </text>
                 ))}
 
                 <path d={`M ${getX(0)},${height-padding.bottom} L ${selfPoints} L ${getX(data.length-1)},${height-padding.bottom} Z`} fill="url(#gSelf)" className="transition-all duration-500" />
                 <path d={`M ${getX(0)},${height-padding.bottom} L ${popPoints} L ${getX(data.length-1)},${height-padding.bottom} Z`} fill="url(#gPop)" className="transition-all duration-500" />
-                <path d={`M ${selfPoints}`} fill="none" stroke="#70AD47" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d={`M ${popPoints}`} fill="none" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={`M ${selfPoints}`} fill="none" stroke="#70AD47" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={`M ${popPoints}`} fill="none" stroke="#3B82F6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
                 {hoverIndex !== null && (
                     <g className="animate-fadeIn">
                         <line x1={getX(hoverIndex)} y1={padding.top} x2={getX(hoverIndex)} y2={height-padding.bottom} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="6 4" />
-                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].self)} r="6" fill="#70AD47" stroke="white" strokeWidth="2.5" className="shadow-lg" />
-                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].pop)} r="6" fill="#3B82F6" stroke="white" strokeWidth="2.5" className="shadow-lg" />
+                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].self)} r="5" fill="#70AD47" stroke="white" strokeWidth="2" className="shadow-lg" />
+                        <circle cx={getX(hoverIndex)} cy={getY(data[hoverIndex].pop)} r="5" fill="#3B82F6" stroke="white" strokeWidth="2" className="shadow-lg" />
                     </g>
                 )}
             </svg>
 
             {hoverIndex !== null && (
-                <div className="absolute bg-slate-900/95 backdrop-blur text-white p-5 rounded-2xl shadow-2xl z-[100] pointer-events-none transition-all duration-200 border border-white/10" style={{ left: `${(getX(hoverIndex)/width)*100}%`, top: '30%', transform: `translate(${hoverIndex > data.length/2 ? '-110%' : '10%'}, -50%)` }}>
-                    <p className="text-[10px] font-black text-slate-400 mb-3 border-b border-white/10 pb-2 uppercase tracking-widest">{data[hoverIndex].date}</p>
-                    <div className="space-y-2.5">
-                        <div className="flex justify-between gap-12 items-center">
-                            <span className="text-[10px] font-bold text-slate-300 uppercase flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营资产</span>
-                            <span className="text-xs font-black tabular-nums">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].self, metricKey==='roi')}</span>
+                <div className="absolute bg-slate-900/95 backdrop-blur text-white p-4 rounded-2xl shadow-2xl z-[100] pointer-events-none transition-all duration-200 border border-white/10" style={{ left: `${(getX(hoverIndex)/width)*100}%`, top: '30%', transform: `translate(${hoverIndex > data.length/2 ? '-110%' : '10%'}, -50%)` }}>
+                    <p className="text-[9px] font-black text-slate-400 mb-2 border-b border-white/10 pb-1.5 uppercase tracking-widest">{data[hoverIndex].date}</p>
+                    <div className="space-y-2">
+                        <div className="flex justify-between gap-10 items-center">
+                            <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-brand"></div>自营</span>
+                            <span className="text-[10px] font-black tabular-nums">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].self, metricKey==='roi')}</span>
                         </div>
-                        <div className="flex justify-between gap-12 items-center">
-                            <span className="text-[10px] font-bold text-slate-300 uppercase flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP资产</span>
-                            <span className="text-xs font-black tabular-nums">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].pop, metricKey==='roi')}</span>
+                        <div className="flex justify-between gap-10 items-center">
+                            <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>POP</span>
+                            <span className="text-[10px] font-black tabular-nums">{metricKey==='gmv'||metricKey==='spend'?'¥':''}{formatVal(data[hoverIndex].pop, metricKey==='roi')}</span>
                         </div>
                     </div>
                 </div>
@@ -188,6 +187,10 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
+    
+    // 智能回溯数据日期
+    const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
     const [customRange, setCustomRange] = useState({
         start: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
@@ -209,6 +212,22 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
     const totalRows = (factStats?.shangzhi?.count || 0) + (factStats?.jingzhuntong?.count || 0) + (factStats?.customer_service?.count || 0);
     const systemVersion = `v6.0.${totalRows.toLocaleString().replace(/,/g, '')}`;
 
+    // 智能锚定最新数据日期：如果 factStats 中有 latestDate 且不是今天，则使用该日期作为“今天”
+    useEffect(() => {
+        if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
+            const latest = factStats.shangzhi.latestDate;
+            const today = new Date().toISOString().split('T')[0];
+            // 只有当最新数据早于今天时，才锚定到该历史日期，确保 dashboard 展示有效数据
+            if (latest < today) {
+                setDataAnchorDate(latest);
+                // 同步更新 Custom Range 的 End Date
+                setCustomRange(prev => ({ ...prev, end: latest }));
+            } else {
+                setDataAnchorDate(today);
+            }
+        }
+    }, [factStats]);
+
     const enabledSkusMap = useMemo(() => {
         const map = new Map<string, ProductSKU>();
         skus.forEach(s => { if (s.isStatisticsEnabled) map.set(s.code, s); });
@@ -227,8 +246,17 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
 
     const fetchData = async () => {
         setIsLoading(true);
-        let start = rangeType === 'custom' ? customRange.start : new Date(Date.now() - (rangeType === '7d' ? 6 : 29) * 86400000).toISOString().split('T')[0];
-        let end = rangeType === 'custom' ? customRange.end : new Date().toISOString().split('T')[0];
+        
+        // 使用锚定日期作为基准 (Ref Time)
+        const refTime = new Date(dataAnchorDate).getTime();
+        
+        let start = rangeType === 'custom' 
+            ? customRange.start 
+            : new Date(refTime - (rangeType === '7d' ? 6 : 29) * 86400000).toISOString().split('T')[0];
+            
+        let end = rangeType === 'custom' 
+            ? customRange.end 
+            : dataAnchorDate;
 
         const diff = Math.ceil(Math.abs(new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
         const prevEnd = new Date(new Date(start).getTime() - 86400000).toISOString().split('T')[0];
@@ -346,12 +374,12 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode]);
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate]); // Add dataAnchorDate dependency
 
     return (
-        <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
+        <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
             {/* Command Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-10">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-8">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
@@ -362,6 +390,14 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                 </div>
                 
                 <div className="flex items-center gap-4">
+                    {dataAnchorDate < new Date().toISOString().split('T')[0] && (
+                        <div className="bg-amber-50 px-4 py-2 rounded-xl border border-amber-100 flex items-center gap-2">
+                            <History size={12} className="text-amber-500" />
+                            <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
+                                智能回溯: 已锚定至 {dataAnchorDate}
+                            </span>
+                        </div>
+                    )}
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
                         {[{id:'7d',l:'近7天'},{id:'30d',l:'近30天'},{id:'custom',l:'自定义'}].map(i => (
                             <button key={i.id} onClick={() => setRangeType(i.id as RangeType)} className={`px-8 py-3 rounded-xl text-xs font-black transition-all ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}>{i.l}</button>
@@ -370,30 +406,30 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                 </div>
             </div>
 
-            {/* KPI Matrix */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
-                <KPICard isActive={activeMetric === 'gmv'} onClick={() => setActiveMetric('gmv')} title="GMV" value={data.gmv} prefix="¥" icon={<ShoppingBag size={22}/>} color="text-brand" bg="bg-brand/5" />
-                <KPICard isActive={activeMetric === 'ca'} onClick={() => setActiveMetric('ca')} title="CA" value={data.ca} icon={<Activity size={22}/>} color="text-blue-600" bg="bg-blue-50" />
-                <KPICard isActive={activeMetric === 'spend'} onClick={() => setActiveMetric('spend')} title="广告消耗" value={data.spend} prefix="¥" icon={<CreditCard size={22}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" />
-                <KPICard isActive={activeMetric === 'roi'} onClick={() => setActiveMetric('roi')} title="ROI" value={data.roi} isFloat icon={<Target size={22}/>} color="text-purple-600" bg="bg-purple-50" />
+            {/* KPI Matrix - 20% Height Reduction via Padding & Spacing */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <KPICard isActive={activeMetric === 'gmv'} onClick={() => setActiveMetric('gmv')} title="GMV" value={data.gmv} prefix="¥" icon={<ShoppingBag size={20}/>} color="text-brand" bg="bg-brand/5" />
+                <KPICard isActive={activeMetric === 'ca'} onClick={() => setActiveMetric('ca')} title="CA" value={data.ca} icon={<Activity size={20}/>} color="text-blue-600" bg="bg-blue-50" />
+                <KPICard isActive={activeMetric === 'spend'} onClick={() => setActiveMetric('spend')} title="广告消耗" value={data.spend} prefix="¥" icon={<CreditCard size={20}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" />
+                <KPICard isActive={activeMetric === 'roi'} onClick={() => setActiveMetric('roi')} title="ROI" value={data.roi} isFloat icon={<Target size={20}/>} color="text-purple-600" bg="bg-purple-50" />
             </div>
 
-            {/* Main Section */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-                <div className="xl:col-span-8 bg-white rounded-[56px] p-12 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group/chart min-h-[500px]">
-                    <div className="flex items-center justify-between mb-12">
-                        <div className="flex items-center gap-5">
-                            <div className="w-16 h-16 rounded-[24px] bg-slate-50 flex items-center justify-center text-brand border border-slate-100 shadow-inner group-hover/chart:rotate-6 transition-transform">
-                                <TrendingUp size={32} />
+            {/* Main Section - 30% Height Reduction */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                <div className="xl:col-span-8 bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden group/chart min-h-[350px]">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-[18px] bg-slate-50 flex items-center justify-center text-brand border border-slate-100 shadow-inner group-hover/chart:rotate-6 transition-transform">
+                                <TrendingUp size={24} />
                             </div>
                             <div>
-                                <h3 className="text-2xl font-black text-slate-800 tracking-tight uppercase">{activeMetric} 增长拓扑流</h3>
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">Physical Performance Temporal Stream</p>
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">{activeMetric} 增长拓扑流</h3>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5">Physical Performance Stream</p>
                             </div>
                         </div>
-                        <div className="flex gap-8">
-                            <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-full bg-brand shadow-lg shadow-brand/20"></div><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">自营店铺</span></div>
-                            <div className="flex items-center gap-3"><div className="w-4 h-4 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20"></div><span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">POP 店铺</span></div>
+                        <div className="flex gap-6">
+                            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-brand shadow-lg shadow-brand/20"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">自营资产</span></div>
+                            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500 shadow-lg shadow-blue-500/20"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">POP 店铺</span></div>
                         </div>
                     </div>
                     <div className="flex-1">
@@ -401,22 +437,22 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                     </div>
                 </div>
 
-                <div className="xl:col-span-4 bg-white rounded-[48px] p-12 shadow-xl border border-slate-100 flex flex-col relative overflow-hidden group/diag">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-brand/5 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/3"></div>
-                    <div className="flex items-center gap-5 mb-10 relative z-10">
-                        <div className="w-16 h-16 rounded-[24px] bg-brand flex items-center justify-center shadow-2xl shadow-brand/30 border border-white/20 group-hover/diag:scale-110 transition-transform duration-500"><BotIcon size={32} className="text-white" /></div>
+                <div className="xl:col-span-4 bg-white rounded-[40px] p-8 shadow-xl border border-slate-100 flex flex-col relative overflow-hidden group/diag min-h-[350px]">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-[80px] -translate-y-1/3 translate-x-1/3"></div>
+                    <div className="flex items-center gap-4 mb-6 relative z-10">
+                        <div className="w-12 h-12 rounded-[18px] bg-brand flex items-center justify-center shadow-2xl shadow-brand/30 border border-white/20 group-hover/diag:scale-110 transition-transform duration-500"><BotIcon size={24} className="text-white" /></div>
                         <div>
-                            <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">AI 战略诊断室 <Sparkles size={20} className="text-brand animate-pulse" /></h3>
-                            <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest leading-none">Neural Decision Intelligence</p>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">AI 战略诊断室 <Sparkles size={16} className="text-brand animate-pulse" /></h3>
+                            <p className="text-[10px] text-slate-400 font-black uppercase mt-0.5 tracking-widest leading-none">Neural Decision Intelligence</p>
                         </div>
                     </div>
                     
-                    {/* 优化的上下垂直轮播容器：单条显示，5秒切换 */}
-                    <div className="h-[360px] relative mb-10 overflow-hidden">
+                    {/* 垂直轮播容器：高度从 360px 缩减至 220px */}
+                    <div className="h-[220px] relative mb-6 overflow-hidden">
                         {diagnoses.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[40px] border border-dashed border-slate-200 p-10 text-center opacity-40">
-                                <DatabaseZap size={48} className="text-slate-300 mb-6" />
-                                <p className="text-sm font-black text-slate-400 uppercase tracking-widest">物理链路平稳，系统暂无风险</p>
+                            <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[32px] border border-dashed border-slate-200 p-8 text-center opacity-40">
+                                <DatabaseZap size={40} className="text-slate-300 mb-4" />
+                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">物理链路平稳，系统暂无风险</p>
                             </div>
                         ) : (
                             <>
@@ -439,13 +475,13 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                                         );
                                     })}
                                 </div>
-                                {/* 轮播指示器点 */}
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">
+                                {/* 轮播指示器 */}
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-20">
                                     {diagnoses.map((_, idx) => (
                                         <button 
                                             key={idx} 
                                             onClick={() => setActiveDiagIndex(idx)}
-                                            className={`w-1.5 rounded-full transition-all duration-500 ${idx === activeDiagIndex ? 'h-8 bg-brand' : 'h-1.5 bg-slate-200 hover:bg-slate-300'}`}
+                                            className={`w-1 rounded-full transition-all duration-500 ${idx === activeDiagIndex ? 'h-6 bg-brand' : 'h-1 bg-slate-200 hover:bg-slate-300'}`}
                                         />
                                     ))}
                                 </div>
@@ -453,7 +489,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
                         )}
                     </div>
                     
-                    <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="w-full relative z-10 py-6 bg-slate-900 text-white rounded-[28px] font-black text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-2xl active:scale-95 uppercase tracking-[0.2em] mt-auto">查看全量审计矩阵 <ChevronRight size={18} /></button>
+                    <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="w-full relative z-10 py-4 bg-slate-900 text-white rounded-[20px] font-black text-xs hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 uppercase tracking-[0.2em] mt-auto">查看全量审计矩阵 <ChevronRight size={14} /></button>
                 </div>
             </div>
 

@@ -594,22 +594,36 @@ export const SKUManagementView = ({
     };
 
     const handleBulkExport = (type: 'sku' | 'shop' | 'agent') => {
-        let headers: string[] = [], data: any[][] = [], fn = ''; const d = new Date().toISOString().split('T')[0];
-        if (type === 'sku') {
-            const sm = new Map(shops.map(s => [s.id, s.name]));
-            headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', '小型号', 'MTM', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告', '统计'];
-            data = sortedAndFilteredSkus.map(s => [s.code, s.name, sm.get(s.shopId) || '未知', s.brand, s.category, s.model, s.subModel, s.mtm, s.configuration, s.costPrice, s.sellingPrice, s.promoPrice, s.jdCommission, s.warehouseStock, s.factoryStock, s.mode, s.status, s.advertisingStatus, s.isStatisticsEnabled ? '是' : '否']);
-            fn = `SKU_Assets_${d}.xlsx`;
-        } else if (type === 'shop') {
-             headers = ['店铺名称', '店铺ID', '经营模式'];
-             data = shops.map(s => [s.name, s.platformId, s.mode]); fn = `Shops_Assets_${d}.xlsx`;
-        } else {
-             const sm = new Map(shops.map(s => [s.id, s.name]));
-             headers = ['姓名', '客服账号', '关联店铺'];
-             data = agents.map(a => [a.name, a.account, a.shopIds.map(id => sm.get(id)).filter(Boolean).join(', ')]); fn = `Agents_Assets_${d}.xlsx`;
+        try {
+            let headers: string[] = [], data: any[][] = [], fn = ''; 
+            const d = new Date().toISOString().split('T')[0];
+            
+            if (type === 'sku') {
+                const sm = new Map(shops.map(s => [s.id, s.name]));
+                headers = ['SKU编码', '商品名称', '店铺名称', '品牌', '类目', '型号', '小型号', 'MTM', '配置', '成本价', '前台价', '促销价', '京东点位%', '入仓库存', '厂直库存', '模式', '状态', '广告', '统计'];
+                data = sortedAndFilteredSkus.map(s => [s.code, s.name, sm.get(s.shopId) || '未知', s.brand, s.category, s.model, s.subModel, s.mtm, s.configuration, s.costPrice, s.sellingPrice, s.promoPrice, s.jdCommission, s.warehouseStock, s.factoryStock, s.mode, s.status, s.advertisingStatus, s.isStatisticsEnabled ? '是' : '否']);
+                fn = `SKU_Assets_${d}.xlsx`;
+            } else if (type === 'shop') {
+                 headers = ['店铺名称', '店铺ID', '经营模式'];
+                 data = shops.map(s => [s.name, s.platformId, s.mode]); 
+                 fn = `Shops_Assets_${d}.xlsx`;
+            } else {
+                 const sm = new Map(shops.map(s => [s.id, s.name]));
+                 headers = ['姓名', '客服账号', '关联店铺'];
+                 data = agents.map(a => [a.name, a.account, a.shopIds.map(id => sm.get(id)).filter(Boolean).join(', ')]); 
+                 fn = `Agents_Assets_${d}.xlsx`;
+            }
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+            XLSX.utils.book_append_sheet(wb, ws, "Export");
+            XLSX.writeFile(wb, fn);
+            
+            addToast('success', '导出完成', `已将 ${data.length} 条资产打包输出。`);
+        } catch (e: any) {
+            console.error("Export failed:", e);
+            addToast('error', '导出失败', `生成文件时发生错误: ${e.message}`);
         }
-        XLSX.writeFile(XLSX.utils.book_append_sheet(XLSX.utils.book_new(), XLSX.utils.aoa_to_sheet([headers, ...data]), "Export"), fn);
-        addToast('success', '导出完成', `已将 ${data.length} 条资产打包输出。`);
     };
 
     return (
