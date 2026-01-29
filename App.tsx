@@ -139,22 +139,68 @@ export const App = () => {
                     const { data } = parseExcelFile(e.target?.result);
                     if (data.length === 0) throw new Error("文件内容为空或格式无法识别");
 
-                    // 数据增强：注入店铺ID和日期
+                    // 1. 构建映射表 (Excel Header -> DB Column)
+                    const headerMap: Record<string, string> = {};
+                    const currentSchema = schemas[type];
+                    
+                    if (currentSchema && Array.isArray(currentSchema)) {
+                        currentSchema.forEach((field: any) => {
+                            // 映射 Label (e.g., 'CA') -> Key (e.g., 'paid_items')
+                            headerMap[field.label] = field.key;
+                            headerMap[field.label.trim()] = field.key;
+                            
+                            // 映射 Tags (e.g., '成交商品件数') -> Key
+                            if (field.tags) {
+                                field.tags.forEach((tag: string) => headerMap[tag] = field.key);
+                            }
+                            // 映射自身 Key (以防 Excel 表头已经是 DB 字段名)
+                            headerMap[field.key] = field.key;
+                        });
+                    }
+
+                    // 2. 数据增强与映射
                     const enrichedData = data.map(row => {
-                        // 尝试智能修正日期格式
-                        if (row['日期'] && typeof row['日期'] === 'number') {
-                             const date = new Date((row['日期'] - 25569) * 86400 * 1000);
-                             row['date'] = date.toISOString().split('T')[0];
-                        } else if (row['日期']) {
-                             row['date'] = row['日期'];
-                        }
+                        const mappedRow: any = {};
                         
+                        // 标准化日期 (优先处理)
+                        let normalizedDate = null;
+                        if (row['日期']) {
+                             if (typeof row['日期'] === 'number') {
+                                 const date = new Date((row['日期'] - 25569) * 86400 * 1000);
+                                 normalizedDate = date.toISOString().split('T')[0];
+                             } else {
+                                 normalizedDate = row['日期'];
+                             }
+                        } else if (row['date']) {
+                            normalizedDate = row['date'];
+                        }
+                        if (normalizedDate) mappedRow['date'] = normalizedDate;
+
                         // 注入 shopId (如果用户在下拉菜单选了)
                         if (shopId) {
                             const shop = shops.find(s => s.id === shopId);
-                            if (shop) row['shop_name'] = shop.name;
+                            if (shop) mappedRow['shop_name'] = shop.name;
+                        } else if (row['店铺名称'] || row['shop_name']) {
+                            mappedRow['shop_name'] = row['店铺名称'] || row['shop_name'];
                         }
-                        return row;
+
+                        // 核心映射逻辑
+                        Object.keys(row).forEach(excelKey => {
+                            const cleanKey = excelKey.trim();
+                            const dbKey = headerMap[cleanKey] || headerMap[cleanKey.toUpperCase()];
+                            
+                            if (dbKey) {
+                                // 防止覆盖已处理的 date/shop_name，除非新值非空
+                                if ((dbKey === 'date' || dbKey === 'shop_name') && mappedRow[dbKey]) return;
+                                mappedRow[dbKey] = row[excelKey];
+                            } else {
+                                // 如果没有映射，保留原样? 
+                                // Supabase 会报错 "Column not found" 如果包含无效列。
+                                // 策略：仅保留映射成功的列，以及 date/shop_name。
+                            }
+                        });
+
+                        return mappedRow;
                     });
 
                     // 写入数据库 (Direct Cloud Upload)
