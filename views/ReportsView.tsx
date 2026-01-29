@@ -1,8 +1,10 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Bot, FileText, Printer, Download, LoaderCircle, ChevronDown, Activity, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Sparkles, DatabaseZap, Search, Filter, Store, CreditCard, ShoppingBag, MousePointer2, Target } from 'lucide-react';
 import { callQwen } from '../lib/ai';
 import { ProductSKU, Shop } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
+import { DB } from '../lib/db';
 
 interface MetricPoint { current: number; previous: number; }
 interface ReportMetrics {
@@ -26,7 +28,7 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [isCalculating, setIsCalculating] = useState(false);
 
-    // 计算指标核心逻辑
+    // 计算指标核心逻辑 (云端穿透版)
     const calculateMetrics = async () => {
         setIsCalculating(true);
         setAiCommentary('');
@@ -41,6 +43,15 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
             
             const ps = prevStart.toISOString().split('T')[0];
             const pe = prevEnd.toISOString().split('T')[0];
+
+            // 1. 并行抓取当前周期与环比周期的数据 (On-Demand Fetching)
+            // 无论时间多早，都直接从云端获取，保证数据完整性
+            const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
+                DB.getRange('fact_shangzhi', startDate, endDate),
+                DB.getRange('fact_jingzhuntong', startDate, endDate),
+                DB.getRange('fact_shangzhi', ps, pe),
+                DB.getRange('fact_jingzhuntong', ps, pe)
+            ]);
 
             // 过滤函数
             const filterByShop = (row: any) => {
@@ -65,10 +76,8 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
                 return res;
             };
 
-            const curr = process(factTables.shangzhi.filter((r:any) => r.date >= startDate && r.date <= endDate), 
-                               factTables.jingzhuntong.filter((r:any) => r.date >= startDate && r.date <= endDate));
-            const prev = process(factTables.shangzhi.filter((r:any) => r.date >= ps && r.date <= pe), 
-                               factTables.jingzhuntong.filter((r:any) => r.date >= ps && r.date <= pe));
+            const curr = process(currSz, currJzt);
+            const prev = process(prevSz, prevJzt);
 
             const finalMetrics: ReportMetrics = {
                 gmv: { current: curr.gmv, previous: prev.gmv },
@@ -84,7 +93,7 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
             setReportMetrics(finalMetrics);
             handleAiAudit(finalMetrics);
         } catch (e) {
-            addToast('error', '计算失败', '物理事实表解析异常。');
+            addToast('error', '计算失败', '云端数据链路连接超时。');
         } finally {
             setIsCalculating(false);
         }
@@ -149,7 +158,7 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
                 </div>
 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">审计周期</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">审计周期 (支持任意历史)</label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1 shadow-inner">
                         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent border-none text-[11px] font-black text-slate-700 px-3 py-2 outline-none" />
                         <span className="text-slate-300 font-black">-</span>
@@ -163,7 +172,7 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
                     className="bg-brand text-white px-12 py-4 rounded-[22px] font-black text-sm shadow-2xl shadow-brand/20 hover:bg-[#5da035] transition-all flex items-center gap-3 uppercase tracking-widest active:scale-95 disabled:opacity-50"
                 >
                     {isCalculating ? <LoaderCircle size={18} className="animate-spin" /> : <DatabaseZap size={18} />}
-                    生成审计报表
+                    生成云端审计报表
                 </button>
             </div>
 

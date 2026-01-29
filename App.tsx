@@ -57,7 +57,7 @@ export const App = () => {
         customer_service: { count: 0, latestDate: 'N/A' }
     });
     
-    // 仍然保留 factTables 结构以兼容旧代码，但初始化为空，不再自动填充
+    // 热数据缓存 (最近 60 天)
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
 
     // Competitor Monitoring Data
@@ -72,8 +72,17 @@ export const App = () => {
 
     const loadMetadata = useCallback(async () => {
         try {
-            // 1. 加载配置数据
-            const [s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups] = await Promise.all([
+            // 计算热数据时间窗口 (最近 60 天)
+            const today = new Date();
+            const sixtyDaysAgo = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const todayStr = today.toISOString().split('T')[0];
+
+            // 1. 并行加载：配置 + 统计 + 热数据
+            const [
+                s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups,
+                statSz, statJzt, statCs,
+                recentSz, recentJzt, recentCs
+            ] = await Promise.all([
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
                 DB.loadConfig('dim_agents', []),
@@ -85,14 +94,15 @@ export const App = () => {
                 DB.loadConfig('schema_jingzhuntong', INITIAL_JINGZHUNTONG_SCHEMA),
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA),
                 DB.loadConfig('comp_shops', []),
-                DB.loadConfig('comp_groups', [])
-            ]);
-            
-            // 2. 加载事实表统计信息 (轻量级)
-            const [statSz, statJzt, statCs] = await Promise.all([
+                DB.loadConfig('comp_groups', []),
+                // 获取总行数统计 (全量)
                 DB.getTableSummary('fact_shangzhi'),
                 DB.getTableSummary('fact_jingzhuntong'),
-                DB.getTableSummary('fact_customer_service')
+                DB.getTableSummary('fact_customer_service'),
+                // 获取最近 60 天热数据 (部分)
+                DB.getRange('fact_shangzhi', sixtyDaysAgo, todayStr),
+                DB.getRange('fact_jingzhuntong', sixtyDaysAgo, todayStr),
+                DB.getRange('fact_customer_service', sixtyDaysAgo, todayStr)
             ]);
 
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
@@ -100,11 +110,18 @@ export const App = () => {
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             setCompShops(s_compShops); setCompGroups(s_compGroups);
             
-            // 更新统计状态
+            // 更新统计状态 (显示云端真实总数)
             setFactStats({
                 shangzhi: statSz,
                 jingzhuntong: statJzt,
                 customer_service: statCs
+            });
+
+            // 注入热数据缓存 (供补货、首页等直接使用)
+            setFactTables({
+                shangzhi: recentSz,
+                jingzhuntong: recentJzt,
+                customer_service: recentCs
             });
 
         } catch (e) {
@@ -260,7 +277,7 @@ export const App = () => {
                     setUploadHistory(updatedHistory);
                     await DB.saveConfig('upload_history', updatedHistory);
 
-                    // 刷新视图 (统计信息)
+                    // 刷新视图 (统计信息 + 热数据)
                     await loadMetadata();
                     addToast('success', '云端写入完成', `已成功将 ${data.length} 条数据注入 Supabase 数据库。`);
                     resolve();
@@ -288,7 +305,7 @@ export const App = () => {
             <div className="flex flex-col h-full items-center justify-center text-slate-400 font-black bg-white">
                 <SyncIcon size={48} className="mb-4 text-brand animate-spin" />
                 <p className="tracking-[0.4em] uppercase text-xs font-black">连接云端资产库...</p>
-                <p className="text-[10px] mt-2 opacity-50">Connecting to Supabase Master Node</p>
+                <p className="text-[10px] mt-2 opacity-50">Syncing Hot Data (Last 60 Days)</p>
             </div>
         );
         

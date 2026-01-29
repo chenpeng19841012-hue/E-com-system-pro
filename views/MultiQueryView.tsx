@@ -1,11 +1,13 @@
+
 import React, { useState, useMemo, useRef } from 'react';
-import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
+import { DB } from '../lib/db';
 
 interface MultiQueryViewProps {
-    shangzhiData: any[];
-    jingzhuntongData: any[];
+    shangzhiData: any[]; // Deprecated, kept for interface compat but unused in logic
+    jingzhuntongData: any[]; // Deprecated
     skus: ProductSKU[];
     shops: Shop[];
     schemas: {
@@ -182,7 +184,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
     );
 };
 
-export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, schemas, addToast }: MultiQueryViewProps) => {
+export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryViewProps) => {
     const [startDate, setStartDate] = useState(new Date(Date.now() - 6*86400000).toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [timeDimension, setTimeDimension] = useState('day');
@@ -201,23 +203,32 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
     
     const ROWS_PER_PAGE = 20;
 
-    const handleQuery = () => {
-        setIsLoading(true); setQueryResult([]); setVisualisationData(null); setCurrentPage(1);
-        setTimeout(() => {
+    const handleQuery = async () => {
+        setIsLoading(true); 
+        setQueryResult([]); 
+        setVisualisationData(null); 
+        setCurrentPage(1);
+
+        try {
             const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
             const skuCodeToInfoMap = new Map(skus.map(s => [s.code, s]));
             const currentSelectedShop = selectedShopId !== 'all' ? shops.find(s => s.id === selectedShopId) : null;
-            const getData = (start: string, end: string) => {
-                const filter = (row: any) => {
-                    const code = getSkuIdentifier(row); if (!row.date || !code) return false;
-                    if (start && row.date < start) return false; if (end && row.date > end) return false;
-                    if (parsedSkus.length > 0 && !parsedSkus.includes(code)) return false;
-                    if (currentSelectedShop) {
-                        const assetShopId = skuCodeToInfoMap.get(code)?.shopId;
-                        if (assetShopId !== currentSelectedShop.id && row.shop_name !== currentSelectedShop.name) return false;
-                    }
-                    return true;
-                };
+
+            // 1. Fetch Cloud Data On-Demand (Covers ANY range)
+            const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
+            const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
+
+            const filter = (row: any) => {
+                const code = getSkuIdentifier(row); if (!row.date || !code) return false;
+                if (parsedSkus.length > 0 && !parsedSkus.includes(code)) return false;
+                if (currentSelectedShop) {
+                    const assetShopId = skuCodeToInfoMap.get(code)?.shopId;
+                    if (assetShopId !== currentSelectedShop.id && row.shop_name !== currentSelectedShop.name) return false;
+                }
+                return true;
+            };
+
+            const processData = (sz: any[], jzt: any[]) => {
                 const merged = new Map<string, any>();
                 const proc = (row: any) => {
                     const code = getSkuIdentifier(row)!;
@@ -233,21 +244,31 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                         else ent[m] = (ent[m] || 0) + (Number(row[m]) || 0);
                     });
                 };
-                shangzhiData.filter(filter).forEach(proc); jingzhuntongData.filter(filter).forEach(proc);
+                sz.filter(filter).forEach(proc);
+                jzt.filter(filter).forEach(proc);
                 return Array.from(merged.values());
             };
-            const mainData = getData(startDate, endDate);
+
+            const mainData = processData(rowsSz, rowsJzt);
+
+            // Fetch Comparison Data
             const mainStart = new Date(startDate); const mainEnd = new Date(endDate);
             const diff = (mainEnd.getTime() - mainStart.getTime());
             let cS: Date, cE: Date;
             if (comparisonType === 'period') { cE = new Date(mainStart); cE.setDate(cE.getDate()-1); cS = new Date(cE.getTime() - diff); }
             else { cS = new Date(mainStart); cS.setFullYear(cS.getFullYear()-1); cE = new Date(mainEnd); cE.setFullYear(cE.getFullYear()-1); }
-            const compData = getData(cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
-            const calc = (d: any[]) => {
+            
+            const compRowsSz = await DB.getRange('fact_shangzhi', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
+            const compRowsJzt = await DB.getRange('fact_jingzhuntong', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
+            const compData = processData(compRowsSz, compRowsJzt);
+
+            // Calculate Totals & Charts
+            const calcTotals = (d: any[]) => {
                 const t = d.reduce((acc, row) => { [...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount'].forEach(k => acc[k] = (acc[k] || 0) + (Number(row[k]) || 0)); return acc; }, {} as any);
                 t.cpc = t.clicks ? t.cost / t.clicks : 0; t.roi = t.cost ? (t.total_order_amount || t.paid_amount || 0) / t.cost : 0; t.paid_conversion_rate = t.uv ? t.paid_users / t.uv : 0;
                 return t;
             };
+
             const dMap = new Map<string, any>();
             mainData.forEach(r => {
                 if (!dMap.has(r.aggDate)) dMap.set(r.aggDate, { date: r.aggDate });
@@ -256,10 +277,16 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
             });
             const dData = Array.from(dMap.values()).sort((a,b) => a.date.localeCompare(b.date));
             dData.forEach(d => { d.cpc = d.clicks ? d.cost / d.clicks : 0; d.roi = d.cost ? (d.total_order_amount || d.paid_amount || 0) / d.cost : 0; d.paid_conversion_rate = d.uv ? d.paid_users / d.uv : 0; });
-            setVisualisationData({ mainTotals: calc(mainData), compTotals: calc(compData), dailyData: dData });
-            setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date))); setIsLoading(false);
+
+            setVisualisationData({ mainTotals: calcTotals(mainData), compTotals: calcTotals(compData), dailyData: dData });
+            setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date)));
+            
             addToast('success', '计算完成', `已聚合 ${mainData.length} 条物理记录。`);
-        }, 600);
+        } catch (e: any) {
+            addToast('error', '检索失败', e.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const { allMetricsMap } = useMemo(() => {
@@ -299,7 +326,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                     </div>
                     <div className="flex items-end gap-6 relative z-10 pt-6 border-t border-slate-50">
                         <div className="flex-1 space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索</label><textarea placeholder="输入 SKU 编码，以回车或逗号分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="w-full h-24 bg-slate-50 border border-slate-200 rounded-[28px] px-6 py-4 text-xs font-black text-slate-700 outline-none focus:border-brand resize-none shadow-inner no-scrollbar font-mono" /></div>
-                        <div className="flex gap-3 pb-2"><button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="w-14 h-14 rounded-3xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 transition-all active:scale-90 flex items-center justify-center"><RefreshCcw size={20}/></button><button onClick={handleQuery} disabled={isLoading} className="px-12 py-5 rounded-[28px] bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-2xl shadow-brand/20 flex items-center gap-3 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">{isLoading ? <Activity className="animate-spin" size={18} /> : <Zap size={18} className="fill-white" />} 执行聚合透视</button></div>
+                        <div className="flex gap-3 pb-2"><button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="w-14 h-14 rounded-3xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 transition-all active:scale-90 flex items-center justify-center"><RefreshCcw size={20}/></button><button onClick={handleQuery} disabled={isLoading} className="px-12 py-5 rounded-[28px] bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-2xl shadow-brand/20 flex items-center gap-3 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">{isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Zap size={18} className="fill-white" />} 执行聚合透视</button></div>
                     </div>
                 </div>
 
@@ -382,7 +409,7 @@ export const MultiQueryView = ({ shangzhiData, jingzhuntongData, skus, shops, sc
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
-                                    {isLoading ? (<tr><td colSpan={resultHeaders.length} className="py-40 text-center"><div className="flex flex-col items-center gap-4 text-slate-300 animate-pulse"><Activity size={48} /><p className="font-black uppercase tracking-[0.4em] text-xs">Penetrating Records...</p></div></td></tr>) : queryResult.length === 0 ? (<tr><td colSpan={resultHeaders.length} className="py-48 text-center text-slate-300 font-black text-sm uppercase tracking-widest opacity-20">Awaiting Search Execution</td></tr>) : (
+                                    {isLoading ? (<tr><td colSpan={resultHeaders.length} className="py-40 text-center"><div className="flex flex-col items-center gap-4 text-slate-300 animate-pulse"><LoaderCircle size={48} className="animate-spin" /><p className="font-black uppercase tracking-[0.4em] text-xs">Penetrating Cloud Records...</p></div></td></tr>) : queryResult.length === 0 ? (<tr><td colSpan={resultHeaders.length} className="py-48 text-center text-slate-300 font-black text-sm uppercase tracking-widest opacity-20">Awaiting Search Execution</td></tr>) : (
                                         paginatedResult.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50/80 transition-colors group">
                                                 {resultHeaders.map(key => (
