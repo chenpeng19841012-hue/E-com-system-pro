@@ -34,7 +34,7 @@ const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.
 // ----------------------------------------------------------------------
 // DATA INSPECTOR (DEBUGGER)
 // ----------------------------------------------------------------------
-const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: any) => {
+const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate, activeMetric }: any) => {
     if (!isOpen) return null;
 
     const { enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap } = filters;
@@ -42,36 +42,36 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
     
     // --- Metric Breakdown Logic (Same strict logic as main dashboard) ---
     const calculateBreakdown = () => {
-        const skuAgg: Record<string, { code: string, name: string, shop: string, ca: number, gmv: number }> = {};
-        const dateAgg: Record<string, { date: string, ca: number, gmv: number }> = {};
+        const skuAgg: Record<string, { code: string, name: string, shop: string, val: number }> = {};
+        const dateAgg: Record<string, { date: string, val: number }> = {};
         let validRowsCount = 0;
         let droppedRowsCount = 0;
+        let totalVal = 0;
 
         szData.forEach((r: any) => {
             const code = getSkuIdentifier(r)?.trim();
             if (!code) return;
 
-            // Strict Filter Check
+            // 1. Strict SKU Filter: If explicitly disabled, skip immediately
             if (disabledSkuCodes.has(code)) {
                 droppedRowsCount++;
                 return;
             }
 
-            let mode = '自营';
             let shouldCount = false;
             let shopName = r.shop_name || '未知';
 
             const skuConfig = enabledSkusMap.get(code);
 
             if (skuConfig) {
-                // Known SKU
+                // Case A: Known Enabled SKU -> Check if its Shop is in the configured list
                 const shopMode = shopIdToMode.get(skuConfig.shopId);
                 if (shopMode) {
                     shouldCount = true;
                     shopName = shopMap.get(skuConfig.shopId)?.name || shopName;
                 }
             } else if (r.shop_name) {
-                // Unknown SKU, check shop whitelist
+                // Case B: Unknown SKU -> Check shop whitelist based on row data
                 const matchedMode = shopNameToMode.get(r.shop_name.trim());
                 if (matchedMode) {
                     shouldCount = true;
@@ -84,8 +84,14 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
             }
 
             validRowsCount++;
-            const ca = Number(r.paid_items) || 0;
-            const gmv = Number(r.paid_amount) || 0;
+            
+            // Determine Value based on Active Metric
+            let val = 0;
+            if (activeMetric === 'ca') val = Number(r.paid_items) || 0;
+            else if (activeMetric === 'gmv') val = Number(r.paid_amount) || 0;
+            else if (activeMetric === 'spend') val = 0; // Spend is in Jzt table, handled simply here for SZ context
+            
+            totalVal += val;
 
             // SKU Aggregation
             if (!skuAgg[code]) {
@@ -93,25 +99,22 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                     code, 
                     name: skuConfig?.name || r.product_name || '未知商品', 
                     shop: shopName,
-                    ca: 0, 
-                    gmv: 0 
+                    val: 0 
                 };
             }
-            skuAgg[code].ca += ca;
-            skuAgg[code].gmv += gmv;
+            skuAgg[code].val += val;
 
             // Date Aggregation
             if (!dateAgg[r.date]) {
-                dateAgg[r.date] = { date: r.date, ca: 0, gmv: 0 };
+                dateAgg[r.date] = { date: r.date, val: 0 };
             }
-            dateAgg[r.date].ca += ca;
-            dateAgg[r.date].gmv += gmv;
+            dateAgg[r.date].val += val;
         });
 
-        const sortedSkus = Object.values(skuAgg).sort((a,b) => b.ca - a.ca).slice(0, 50);
+        const sortedSkus = Object.values(skuAgg).sort((a,b) => b.val - a.val).slice(0, 50);
         const sortedDates = Object.values(dateAgg).sort((a,b) => a.date.localeCompare(b.date));
         
-        return { sortedSkus, sortedDates, validRowsCount, droppedRowsCount };
+        return { sortedSkus, sortedDates, validRowsCount, droppedRowsCount, totalVal };
     };
 
     const stats = calculateBreakdown();
@@ -126,7 +129,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                         </div>
                         <div>
                             <h3 className="text-lg font-black text-white tracking-tight uppercase">数据透视显微镜</h3>
-                            <p className="text-[10px] text-slate-500 font-mono">Metric Breakdown & Attribution</p>
+                            <p className="text-[10px] text-slate-500 font-mono">Metric Breakdown: {activeMetric.toUpperCase()}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={24}/></button>
@@ -136,8 +139,8 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                     {/* Summary Stats */}
                     <div className="grid grid-cols-4 gap-4">
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">当前锚点日期</p>
-                            <p className="text-lg font-black text-brand mt-1">{anchorDate}</p>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">当前聚合总量 ({activeMetric.toUpperCase()})</p>
+                            <p className="text-2xl font-black text-brand mt-1 tabular-nums">{formatVal(stats.totalVal)}</p>
                         </div>
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
                             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">周期内原始行数</p>
@@ -148,7 +151,7 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                             <p className="text-lg font-black text-emerald-400 mt-1">{stats.validRowsCount.toLocaleString()}</p>
                         </div>
                         <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">已过滤行数 (Ignored)</p>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">被过滤行数 (Ignored)</p>
                             <p className="text-lg font-black text-rose-400 mt-1">{stats.droppedRowsCount.toLocaleString()}</p>
                             <p className="text-[8px] text-slate-600 mt-1">因店铺不在名录或 SKU 被禁用</p>
                         </div>
@@ -158,15 +161,14 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                         {/* Top SKUs Breakdown */}
                         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col h-[400px]">
                             <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <ListFilter size={14} /> CA (销量) 贡献 Top SKU
+                                <ListFilter size={14} /> 贡献 Top SKU ({activeMetric.toUpperCase()})
                             </h4>
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 <table className="w-full text-left text-[10px]">
                                     <thead className="sticky top-0 bg-slate-900 z-10 text-slate-500 uppercase font-black">
                                         <tr>
                                             <th className="pb-2 pl-2">SKU / 名称</th>
-                                            <th className="pb-2 text-right">CA (件)</th>
-                                            <th className="pb-2 text-right pr-2">GMV</th>
+                                            <th className="pb-2 text-right pr-4">贡献值</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/50 text-slate-300">
@@ -174,11 +176,12 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                                             <tr key={sku.code} className="hover:bg-white/5">
                                                 <td className="py-2 pl-2">
                                                     <div className="font-mono text-xs font-bold text-white">{sku.code}</div>
-                                                    <div className="truncate w-40 text-slate-500" title={sku.name}>{sku.name}</div>
+                                                    <div className="truncate w-64 text-slate-500" title={sku.name}>{sku.name}</div>
                                                     <div className="text-[9px] text-slate-600">{sku.shop}</div>
                                                 </td>
-                                                <td className="py-2 text-right font-mono font-bold text-brand">{sku.ca}</td>
-                                                <td className="py-2 text-right pr-2 font-mono text-slate-400">¥{sku.gmv.toLocaleString()}</td>
+                                                <td className="py-2 text-right pr-4 font-mono font-bold text-brand text-xs">
+                                                    {formatVal(sku.val)}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -196,20 +199,20 @@ const DataInspectorModal = ({ isOpen, onClose, rawData, filters, anchorDate }: a
                                     <thead className="sticky top-0 bg-slate-900 z-10 text-slate-500 uppercase font-black">
                                         <tr>
                                             <th className="pb-2 pl-2">日期</th>
-                                            <th className="pb-2 text-right">总销量 (CA)</th>
-                                            <th className="pb-2 text-right pr-2">总流水 (GMV)</th>
+                                            <th className="pb-2 text-right pr-4">当日总值 ({activeMetric.toUpperCase()})</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800/50 text-slate-300">
                                         {stats.sortedDates.map((d) => (
                                             <tr key={d.date} className="hover:bg-white/5">
                                                 <td className="py-3 pl-2 font-mono font-bold">{d.date}</td>
-                                                <td className="py-3 text-right font-mono font-bold text-brand">{d.ca}</td>
-                                                <td className="py-3 text-right pr-2 font-mono text-slate-400">¥{d.gmv.toLocaleString()}</td>
+                                                <td className="py-3 text-right pr-4 font-mono font-bold text-brand text-xs">
+                                                    {formatVal(d.val)}
+                                                </td>
                                             </tr>
                                         ))}
                                         {stats.sortedDates.length === 0 && (
-                                            <tr><td colSpan={3} className="py-10 text-center text-slate-600">无有效数据</td></tr>
+                                            <tr><td colSpan={2} className="py-10 text-center text-slate-600">无有效数据</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -783,7 +786,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 factStats={factStats} 
                 filters={{ enabledSkusMap, disabledSkuCodes, shopIdToMode, shopNameToMode, shopMap }}
                 anchorDate={dataAnchorDate} 
-                currentRange={{ start: viewRangeDisplay.split('~')[0]?.trim(), end: viewRangeDisplay.split('~')[1]?.trim() }}
+                activeMetric={activeMetric}
             />
 
             {/* Command Header */}
