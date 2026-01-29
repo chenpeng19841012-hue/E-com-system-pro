@@ -226,7 +226,7 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
     );
 };
 
-export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any }) => {
+export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     // Default to '7d'
@@ -321,12 +321,26 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
         const prevStart = new Date(new Date(prevEnd).getTime() - (diff - 1) * 86400000).toISOString().split('T')[0];
 
         try {
-            const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
-                DB.getRange('fact_shangzhi', start, end),
-                DB.getRange('fact_jingzhuntong', start, end),
-                DB.getRange('fact_shangzhi', prevStart, prevEnd),
-                DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
-            ]);
+            // Optimize: Check if cachedData (last 60 days) covers the requested range
+            // The cachedData comes from App.tsx which fetches [now-60d, now]
+            let currSz = [], currJzt = [], prevSz = [], prevJzt = [];
+            const isRangeCached = (rangeType === '7d' || rangeType === '30d' || rangeType === 'yesterday' || rangeType === 'realtime') && cachedData && cachedData.shangzhi.length > 0;
+
+            if (isRangeCached && cachedData) {
+                // Filter from memory cache
+                currSz = cachedData.shangzhi.filter(r => r.date >= start && r.date <= end);
+                currJzt = cachedData.jingzhuntong.filter(r => r.date >= start && r.date <= end);
+                prevSz = cachedData.shangzhi.filter(r => r.date >= prevStart && r.date <= prevEnd);
+                prevJzt = cachedData.jingzhuntong.filter(r => r.date >= prevStart && r.date <= prevEnd);
+            } else {
+                // Fetch from Cloud (Fallback for custom ranges or if cache is empty)
+                [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
+                    DB.getRange('fact_shangzhi', start, end),
+                    DB.getRange('fact_jingzhuntong', start, end),
+                    DB.getRange('fact_shangzhi', prevStart, prevEnd),
+                    DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
+                ]);
+            }
 
             const processStats = (sz: any[], jzt: any[]) => {
                 const stats = { gmv: { total: 0, self: 0, pop: 0 }, ca: { total: 0, self: 0, pop: 0 }, spend: { total: 0, self: 0, pop: 0 } };
@@ -441,7 +455,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate]);
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData]); // Added cachedData dependency
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
@@ -496,7 +510,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-2">
                 <KPICard isActive={activeMetric === 'gmv'} onClick={() => setActiveMetric('gmv')} title="GMV" value={data.gmv} prefix="¥" icon={<ShoppingBag size={18}/>} color="text-brand" bg="bg-brand/5" />
                 <KPICard isActive={activeMetric === 'ca'} onClick={() => setActiveMetric('ca')} title="CA" value={data.ca} icon={<Activity size={18}/>} color="text-blue-600" bg="bg-blue-50" />
-                <KPICard isActive={activeMetric === 'spend'} onClick={() => setActiveMetric('spend')} title="广告消耗" value={data.spend} prefix="¥" icon={<CreditCard size={18}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" />
+                <KPICard isActive={activeMetric === 'spend'} onClick={() => setActiveMetric('spend')} title="SPEND" value={data.spend} prefix="¥" icon={<CreditCard size={18}/>} isHigherBetter={false} color="text-amber-600" bg="bg-amber-50" />
                 <KPICard isActive={activeMetric === 'roi'} onClick={() => setActiveMetric('roi')} title="ROI" value={data.roi} isFloat icon={<Target size={18}/>} color="text-purple-600" bg="bg-purple-50" />
             </div>
 

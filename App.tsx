@@ -353,7 +353,7 @@ export const App = () => {
         
         const commonProps = { skus, shops, agents, schemas, addToast };
         switch (currentView) {
-            case 'dashboard': return <DashboardView {...commonProps} factStats={factStats} />;
+            case 'dashboard': return <DashboardView {...commonProps} factStats={factStats} cachedData={factTables} />;
             case 'multiquery': return <MultiQueryView {...commonProps} shangzhiData={factTables.shangzhi} jingzhuntongData={factTables.jingzhuntong} />;
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id:any) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
             // 传递 handleRawDataImport 给 DataCenterView
@@ -432,7 +432,7 @@ export const App = () => {
                     addToast={addToast} 
                 />
             );
-            default: return <DashboardView {...commonProps} />;
+            default: return <DashboardView {...commonProps} factStats={factStats} cachedData={factTables} />;
         }
     };
 
