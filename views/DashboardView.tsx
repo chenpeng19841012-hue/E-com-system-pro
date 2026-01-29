@@ -494,9 +494,13 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     const skuConfig = enabledSkusMap.get(code);
 
                     if (skuConfig) {
-                        // Case A: Known Enabled SKU -> Count
-                        mode = shopIdToMode.get(skuConfig.shopId) || '自营';
-                        shouldCount = true;
+                        // Case A: Known Enabled SKU -> Check if its Shop is in the configured list
+                        const shopMode = shopIdToMode.get(skuConfig.shopId);
+                        if (shopMode) {
+                            mode = shopMode;
+                            shouldCount = true;
+                        }
+                        // If shop not found in shopIdToMode (e.g. deleted shop), shouldCount remains false.
                     } else {
                         // Case B: Unknown SKU (Not in assets DB)
                         // Must check if it belongs to a configured Shop
@@ -539,8 +543,12 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                     let shouldCount = false;
 
                     if (skuConfig) {
-                        mode = shopIdToMode.get(skuConfig.shopId) || '自营';
-                        shouldCount = true;
+                        // FIX HERE: Strict Shop Check for Ads too
+                        const shopMode = shopIdToMode.get(skuConfig.shopId);
+                        if (shopMode) {
+                            mode = shopMode;
+                            shouldCount = true;
+                        }
                     } else if (r.shop_name) {
                         const matchedMode = shopNameToMode.get(r.shop_name.trim());
                         if (matchedMode) {
@@ -582,8 +590,12 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
                 let shouldCount = false;
 
                 if (skuConfig) {
-                    mode = shopIdToMode.get(skuConfig.shopId) || '自营';
-                    shouldCount = true;
+                    // FIX HERE: Strict Shop Check for Trend Chart
+                    const shopMode = shopIdToMode.get(skuConfig.shopId);
+                    if (shopMode) {
+                        mode = shopMode;
+                        shouldCount = true;
+                    }
                 } else if (r.shop_name) {
                     const matchedMode = shopNameToMode.get(r.shop_name.trim());
                     if (matchedMode) {
