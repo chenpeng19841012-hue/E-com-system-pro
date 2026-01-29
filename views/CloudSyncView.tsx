@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle, RefreshCw, FileJson } from 'lucide-react';
+import { Settings2, Activity, Copy, Zap, Lock, Stethoscope, CheckCircle, AlertTriangle, XCircle, Terminal, PlayCircle, RefreshCw, FileJson, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { DB } from '../lib/db';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
 import { FieldDefinition } from '../lib/types';
@@ -12,6 +12,9 @@ export const CloudSyncView = ({ addToast }: any) => {
     const [supabaseUrl, setSupabaseUrl] = useState('');
     const [supabaseKey, setSupabaseKey] = useState('');
     const [isUsingEnv, setIsUsingEnv] = useState(false);
+    
+    // 界面状态
+    const [isSettingsVisible, setIsSettingsVisible] = useState(false);
     
     // 诊断状态
     const [diagSteps, setDiagSteps] = useState<{ step: string; status: 'pending' | 'ok' | 'fail' | 'warn'; msg: string }[]>([]);
@@ -37,6 +40,7 @@ export const CloudSyncView = ({ addToast }: any) => {
     const saveSettings = async () => {
         await DB.saveConfig('cloud_sync_config', { url: supabaseUrl.trim(), key: supabaseKey.trim() });
         addToast('success', '配置已更新', '连接池已重置。');
+        setIsSettingsVisible(false); // 保存后自动折叠
         runDeepDiagnosis();
     };
 
@@ -102,11 +106,11 @@ export const CloudSyncView = ({ addToast }: any) => {
             }).filter(Boolean).join('\n');
         };
 
-        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v6.0.0 (Strict-Mode)
+        return `-- 云舟 (Yunzhou) 动态全量同步脚本 v6.2.0 (Strict-Mode)
 -- 🚀 自动根据前端 schemas.ts 生成，确保 100% 字段覆盖
 -- 🛡️ 强制更新去重规则：
 --    商智: date + sku_code
---    广告: date + account_nickname + tracked_sku_id + cost (四维唯一键)
+--    广告: date + account_nickname + tracked_sku_id + cost (四维唯一键，防止合并丢失)
 
 -- 1. [核心] 安装缓存刷新函数 (RPC)
 CREATE OR REPLACE FUNCTION reload_schema_cache()
@@ -182,10 +186,12 @@ ALTER TABLE fact_shangzhi ADD CONSTRAINT fact_shangzhi_date_sku_code_key UNIQUE 
 ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS fact_jingzhuntong_date_tracked_sku_id_key; -- 删除旧约束
 ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS unique_jzt_key; -- 删除旧自定义约束
 DROP INDEX IF EXISTS idx_jzt_unique;
+DROP INDEX IF EXISTS idx_jzt_unique_v2;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jzt_unique_v2 ON fact_jingzhuntong (date, account_nickname, tracked_sku_id, cost);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jzt_unique_v3 ON fact_jingzhuntong (date, account_nickname, tracked_sku_id, cost);
 -- 绑定为约束
-ALTER TABLE fact_jingzhuntong ADD CONSTRAINT unique_jzt_key_v2 UNIQUE USING INDEX idx_jzt_unique_v2;
+ALTER TABLE fact_jingzhuntong DROP CONSTRAINT IF EXISTS unique_jzt_key_v2;
+ALTER TABLE fact_jingzhuntong ADD CONSTRAINT unique_jzt_key_v3 UNIQUE USING INDEX idx_jzt_unique_v3;
 
 -- 客服: Date + Account
 ALTER TABLE fact_customer_service DROP CONSTRAINT IF EXISTS fact_customer_service_date_agent_account_key;
@@ -242,34 +248,52 @@ NOTIFY pgrst, 'reload schema';
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div className="lg:col-span-5 space-y-6">
-                    {/* Settings */}
+                    {/* Settings (Hidden by default) */}
                     <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm space-y-6">
                         <div className="flex items-center justify-between">
                             <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
                                 <Settings2 size={20} className="text-[#70AD47]" />
                                 连接参数
                             </h3>
-                            {isUsingEnv && (
-                                <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1">
-                                    <Lock size={10}/> 环境变量托管
-                                </span>
-                            )}
+                            <button 
+                                onClick={() => setIsSettingsVisible(!isSettingsVisible)} 
+                                className="bg-slate-50 text-slate-400 p-2 rounded-xl hover:text-brand hover:bg-brand/5 transition-all"
+                                title={isSettingsVisible ? "隐藏参数" : "修改参数"}
+                            >
+                                {isSettingsVisible ? <EyeOff size={16} /> : <Settings2 size={16} />}
+                            </button>
                         </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Supabase API URL</label>
-                                <input type="text" value={supabaseUrl} disabled={isUsingEnv} onChange={e => setSupabaseUrl(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-[#70AD47] ${isUsingEnv ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                        
+                        {isSettingsVisible ? (
+                            <div className="space-y-4 animate-fadeIn">
+                                {isUsingEnv && (
+                                    <div className="bg-blue-50 text-blue-600 px-4 py-3 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 border border-blue-100">
+                                        <Lock size={12}/> 当前使用环境变量托管 (只读)
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Supabase API URL</label>
+                                    <input type="text" value={supabaseUrl} disabled={isUsingEnv} onChange={e => setSupabaseUrl(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-[#70AD47] ${isUsingEnv ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Service Role / Anon Key</label>
+                                    <input type="password" value={supabaseKey} disabled={isUsingEnv} onChange={e => setSupabaseKey(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-[#70AD47] ${isUsingEnv ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                                </div>
+                                {!isUsingEnv && (
+                                    <button onClick={saveSettings} className="w-full py-3 rounded-xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
+                                        <Zap size={14} /> 保存并隐藏
+                                    </button>
+                                )}
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Service Role / Anon Key</label>
-                                <input type="password" value={supabaseKey} disabled={isUsingEnv} onChange={e => setSupabaseKey(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-[#70AD47] ${isUsingEnv ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                        ) : (
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center">
+                                <div className="flex items-center justify-center gap-2 text-slate-400 mb-1">
+                                    <Lock size={16} />
+                                    <span className="text-xs font-black uppercase tracking-widest">参数已锁定</span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 opacity-60">防止误操作，核心连接参数已隐藏。</p>
                             </div>
-                            {!isUsingEnv && (
-                                <button onClick={saveSettings} className="w-full py-3 rounded-xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
-                                    <Zap size={14} /> 保存配置
-                                </button>
-                            )}
-                        </div>
+                        )}
                     </div>
 
                     {/* Diagnostics */}

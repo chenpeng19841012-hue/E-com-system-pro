@@ -457,7 +457,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                     <div className="space-y-1">
                                         <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">数据去重提示</p>
                                         <p className="text-xs font-bold text-amber-600 leading-relaxed">
-                                            如果上传的行数 ({stagedAnalysis.totalRows}) 大于实际新增行数，说明部分数据因【{stagedAnalysis.targetType === 'jingzhuntong' ? '日期+账户+SKU' : '日期+SKU'}】重复被自动合并更新。
+                                            如果上传的行数 ({stagedAnalysis.totalRows}) 大于实际新增行数，说明部分数据因【{stagedAnalysis.targetType === 'jingzhuntong' ? '日期+账户+SKU+花费' : '日期+SKU'}】重复被自动合并更新。
                                         </p>
                                     </div>
                                 </div>
