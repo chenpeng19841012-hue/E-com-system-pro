@@ -308,7 +308,8 @@ export const App = () => {
 
             // --- 智能字段互通与兜底策略 (Start) ---
             const rawSku = normalizeIdString(row['SKU'] || row['sku'] || row['SKU编码']);
-            const rawPid = normalizeIdString(row['商品ID'] || row['商品id'] || row['product_id']);
+            // Add '商品 ID' with space for robustness
+            const rawPid = normalizeIdString(row['商品ID'] || row['商品id'] || row['product_id'] || row['商品 ID']);
             const rawTrackedId = normalizeIdString(row['跟单SKU ID'] || row['跟单SKU'] || row['tracked_sku_id']);
 
             // 1. 商智 (fact_shangzhi) -> 目标: sku_code
@@ -321,6 +322,15 @@ export const App = () => {
                  else if (rawPid) {
                      mappedRow['sku_code'] = rawPid; // 将商品ID作为 SKU 存储
                      mappedRow['product_id'] = rawPid; // 同时存入 product_id
+                 }
+
+                 // [新增逻辑] 若有商品ID但无店铺名称，默认归属"联想商用办公旗舰店"
+                 // Check for valid Product ID (either mapped or raw) AND missing shop name (including empty string)
+                 const hasPid = mappedRow['product_id'] || rawPid;
+                 const hasShopName = mappedRow['shop_name'] && String(mappedRow['shop_name']).trim() !== '';
+                 
+                 if (hasPid && !hasShopName) {
+                     mappedRow['shop_name'] = '联想商用办公旗舰店';
                  }
             }
             
