@@ -6,7 +6,7 @@ import {
     ShieldAlert, PackageSearch, Flame, DatabaseZap, 
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
-    History // Added missing import here
+    History
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop } from '../lib/types';
@@ -381,23 +381,25 @@ export const DashboardView = ({ skus, shops, factStats, addToast }: { skus: Prod
             {/* Command Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-8">
                 <div className="space-y-1">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
-                        <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">系统版本：{systemVersion}</span>
+                    <div className="flex items-center gap-4 mb-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
+                            <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">系统版本：{systemVersion}</span>
+                        </div>
+                        {dataAnchorDate < new Date().toISOString().split('T')[0] && (
+                            <div className="flex items-center gap-2 px-2 py-1 bg-amber-50 rounded-lg border border-amber-100">
+                                <History size={10} className="text-amber-500" />
+                                <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest leading-none">
+                                    智能回溯: {dataAnchorDate}
+                                </span>
+                            </div>
+                        )}
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略指挥控制台</h1>
                     <p className="text-slate-400 font-bold text-sm tracking-wide">Strategic Performance Intelligence & AI Dashboard</p>
                 </div>
                 
                 <div className="flex items-center gap-4">
-                    {dataAnchorDate < new Date().toISOString().split('T')[0] && (
-                        <div className="bg-amber-50 px-4 py-2 rounded-xl border border-amber-100 flex items-center gap-2">
-                            <History size={12} className="text-amber-500" />
-                            <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
-                                智能回溯: 已锚定至 {dataAnchorDate}
-                            </span>
-                        </div>
-                    )}
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
                         {[{id:'7d',l:'近7天'},{id:'30d',l:'近30天'},{id:'custom',l:'自定义'}].map(i => (
                             <button key={i.id} onClick={() => setRangeType(i.id as RangeType)} className={`px-8 py-3 rounded-xl text-xs font-black transition-all ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}>{i.l}</button>
