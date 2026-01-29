@@ -41,19 +41,19 @@ const getChange = (current: number, previous: number) => {
     return ((current - previous) / previous) * 100;
 };
 
-// 微型趋势图组件
+// 微型趋势图组件 - Height Reduced
 const MiniSparkline = ({ data, color }: { data: number[], color: string }) => {
-    if (!data || data.length < 2) return <div className="h-8" />;
+    if (!data || data.length < 2) return <div className="h-6" />;
     const max = Math.max(...data, 0.0001);
     const min = Math.min(...data);
     const range = max - min || 1;
     const width = 120;
-    const height = 32;
+    const height = 24; // Reduced height
     const pts = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(' L ');
     
     return (
-        <svg width="100%" height="32" viewBox={`0 0 ${width} ${height}`} className="overflow-visible opacity-40 group-hover/kpi:opacity-100 transition-opacity">
-            <path d={`M ${pts}`} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <svg width="100%" height="24" viewBox={`0 0 ${width} ${height}`} className="overflow-visible opacity-40 group-hover/kpi:opacity-100 transition-opacity">
+            <path d={`M ${pts}`} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
 };
@@ -259,15 +259,29 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     if (timeDimension === 'month') key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
                     else if (timeDimension === 'week') { d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1); key = d.toISOString().split('T')[0]; }
                     
-                    const aggKey = `${key}-${code}`;
+                    // UPDATED LOGIC: Aggregate by Date only (Sum of all filtered SKUs)
+                    // Old: const aggKey = `${key}-${code}`;
+                    const aggKey = key;
                     
                     if (!merged.has(aggKey)) {
-                        const shopName = shopMap.get(asset.shopId)?.name || '未知店铺';
+                        // Display label logic
+                        let displayCode = parsedSkus.length === 1 ? parsedSkus[0] : '聚合数据';
+                        let shopName = selectedShopId !== 'all' ? shopMap.get(selectedShopId)?.name : '多店铺/多SKU';
+                        if (parsedSkus.length === 1) {
+                             const singleSku = enabledSkusMap.get(parsedSkus[0]);
+                             if(singleSku) {
+                                 shopName = shopMap.get(singleSku.shopId)?.name || '未知';
+                             }
+                        }
+
                         merged.set(aggKey, { 
                             date: row.date, 
                             aggDate: key, 
-                            sku_code: code, 
-                            sku_shop: { code, shopName } 
+                            sku_code: 'AGGREGATED', 
+                            sku_shop: { 
+                                code: parsedSkus.length === 1 ? parsedSkus[0] : '当日汇总', 
+                                shopName: shopName 
+                            } 
                         });
                     }
                     
@@ -350,37 +364,37 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     </div>
                 </div>
 
-                {/* 配置面板 */}
-                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-10 space-y-10 relative overflow-hidden">
+                {/* 配置面板 - COMPACTED (~40% reduced height) */}
+                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-6 space-y-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative z-10">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative z-10">
                         <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">时间跨度</label><div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all"><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 py-2 outline-none" /><span className="text-slate-300 font-black">-</span><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 py-2 outline-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label><div className="relative"><select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="day">按天 (Daily)</option><option value="week">按周 (Weekly)</option><option value="month">按月 (Monthly)</option></select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label><div className="relative"><select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="all">全域探测</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
-                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label><button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 text-slate-700 flex items-center justify-between hover:bg-slate-100 transition-all shadow-sm"><span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span><Filter size={14} className="text-slate-400" /></button></div>
+                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label><div className="relative"><select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="day">按天 (Daily)</option><option value="week">按周 (Weekly)</option><option value="month">按月 (Monthly)</option></select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
+                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label><div className="relative"><select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm"><option value="all">全域探测</option>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" /></div></div>
+                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label><button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-2 text-slate-700 flex items-center justify-between hover:bg-slate-100 transition-all shadow-sm"><span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span><Filter size={14} className="text-slate-400" /></button></div>
                     </div>
-                    <div className="flex items-end gap-6 relative z-10 pt-6 border-t border-slate-50">
-                        <div className="flex-1 space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索</label><textarea placeholder="输入 SKU 编码，以回车或逗号分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="w-full h-24 bg-slate-50 border border-slate-200 rounded-[28px] px-6 py-4 text-xs font-black text-slate-700 outline-none focus:border-brand resize-none shadow-inner no-scrollbar font-mono" /></div>
-                        <div className="flex gap-3 pb-2"><button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="w-14 h-14 rounded-3xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 transition-all active:scale-90 flex items-center justify-center"><RefreshCcw size={20}/></button><button onClick={handleQuery} disabled={isLoading} className="px-12 py-5 rounded-[28px] bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-2xl shadow-brand/20 flex items-center gap-3 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">{isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Zap size={18} className="fill-white" />} 执行聚合透视</button></div>
+                    <div className="flex items-end gap-6 relative z-10 pt-4 border-t border-slate-50">
+                        <div className="flex-1 space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索</label><textarea placeholder="输入 SKU 编码，以回车或逗号分隔..." value={skuInput} onChange={e => setSkuInput(e.target.value)} className="w-full h-14 bg-slate-50 border border-slate-200 rounded-[28px] px-6 py-2 text-xs font-black text-slate-700 outline-none focus:border-brand resize-none shadow-inner no-scrollbar font-mono" /></div>
+                        <div className="flex gap-3 pb-2"><button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-300 hover:text-slate-500 transition-all active:scale-90 flex items-center justify-center"><RefreshCcw size={16}/></button><button onClick={handleQuery} disabled={isLoading} className="px-10 py-2.5 rounded-[20px] bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-2xl shadow-brand/20 flex items-center gap-3 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest">{isLoading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} className="text-white" />} 搜索</button></div>
                     </div>
                 </div>
 
                 {/* 看板区域 */}
                 <div className="bg-white rounded-[48px] p-10 text-slate-900 shadow-sm border border-slate-100 relative overflow-hidden group/board">
                     <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.03),transparent_70%)] pointer-events-none"></div>
-                    <div className="flex justify-between items-center mb-12 relative z-10">
+                    <div className="flex justify-between items-center mb-6 relative z-10">
                         <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 group-hover/board:rotate-6 transition-transform duration-500"><TrendingUp size={28} className="text-white" /></div><div><h3 className="text-xl font-black tracking-tight uppercase">核心业务透视看板</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Physical Performance Insight Board</p></div></div>
                         <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner"><button onClick={() => setComparisonType('period')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'period' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>环比前一周期</button><button onClick={() => setComparisonType('year')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'year' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>同比去年同期</button></div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-12 relative z-10">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6 relative z-10">
                         {VISUAL_METRICS.map(key => {
                             const label = allMetricsMap.get(key)?.label || key;
                             const color = METRIC_COLORS[key];
                             const isSelected = chartMetrics.has(key);
                             
                             if (!visualisationData) return (
-                                <div key={key} className="p-5 rounded-3xl bg-slate-50 border border-slate-100 h-44 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-400 uppercase">{label}</p><p className="text-2xl font-black text-slate-300 mt-2">-</p></div>
+                                <div key={key} className="p-4 rounded-3xl bg-slate-50 border border-slate-100 h-28 flex flex-col justify-center items-center opacity-30"><p className="text-[9px] font-black text-slate-400 uppercase">{label}</p><p className="text-2xl font-black text-slate-300 mt-2">-</p></div>
                             );
 
                             const main = visualisationData.mainTotals[key] || 0;
@@ -394,27 +408,26 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             return (
                                 <div key={key} 
                                     onClick={() => setChartMetrics(p => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n; })} 
-                                    className={`p-5 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-44 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
+                                    className={`p-3 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
                                     style={{ borderColor: isSelected ? color : 'transparent' }}>
                                     
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            {isSelected ? <CheckSquare size={14} style={{ color }} /> : <Square size={14} className="text-slate-300" />}
-                                            <span className={`text-[9px] font-black uppercase truncate ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span>
+                                    <div className="space-y-0.5">
+                                        <div className="flex items-center gap-1.5">
+                                            {isSelected ? <CheckSquare size={12} style={{ color }} /> : <Square size={12} className="text-slate-300" />}
+                                            <span className={`text-[8px] font-black uppercase truncate ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span>
                                         </div>
-                                        <p className="text-xl font-black text-slate-900 tabular-nums tracking-tighter mt-1">{formatMetricValue(main, key).replace('¥', '')}</p>
+                                        <p className="text-lg font-black text-slate-900 tabular-nums tracking-tighter">{formatMetricValue(main, key).replace('¥', '')}</p>
                                     </div>
 
-                                    <div className="my-2">
+                                    <div className="my-1">
                                         <MiniSparkline data={sparkData} color={color} />
                                     </div>
 
-                                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                                        <span className={`${txtC} text-[10px] font-black flex items-center gap-0.5`}>
+                                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                                        <span className={`${txtC} text-[9px] font-black flex items-center gap-0.5`}>
                                             {isG ? <ArrowUp size={8} strokeWidth={4} /> : <ArrowDown size={8} strokeWidth={4} />}
                                             {Math.abs(chg).toFixed(0)}%
                                         </span>
-                                        <span className="text-[8px] text-slate-300 font-bold uppercase tracking-widest">Trend</span>
                                     </div>
                                 </div>
                             );
