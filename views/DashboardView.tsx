@@ -42,103 +42,78 @@ const getDateKey = (d: string | Date) => {
 const DataInspectorModal = ({ 
     isOpen, 
     onClose, 
-    rawData, 
-    enabledSkusMap, 
-    shopIdToMode,
-    activeMetric,
+    rawData,
     dateRange
 }: { 
     isOpen: boolean, 
     onClose: () => void, 
     rawData: { shangzhi: any[], jingzhuntong: any[] },
-    enabledSkusMap: Map<string, ProductSKU>,
-    shopIdToMode: Map<string, string | undefined>,
-    activeMetric: MetricKey,
     dateRange: { start: string, end: string }
 }) => {
     if (!isOpen) return null;
 
-    const [activeTab, setActiveTab] = useState<'trace' | 'raw'>('trace');
-    const [traceSearch, setTraceSearch] = useState('');
+    const sourceData = useMemo(() => {
+        const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, spend: number, source: string[] }>();
+        const getKey = (date: string, sku: string) => `${date}-${sku}`;
 
-    const calculationTrace = useMemo(() => {
-        const includedRows: any[] = [];
-        const excludedRows: any[] = [];
-        let totalVal = 0, selfVal = 0, popVal = 0;
-        let sourceData: any[], valueField: string, filterReason: string;
+        rawData.shangzhi.forEach(r => {
+            const date = getDateKey(r.date);
+            if (date < dateRange.start || date > dateRange.end) return;
+            
+            const sku = getSkuIdentifier(r);
+            if (!sku) return;
 
-        switch(activeMetric) {
-            case 'ca':
-                sourceData = rawData.shangzhi;
-                valueField = 'paid_items';
-                filterReason = "SKU 未开启统计或不在资产库";
-                break;
-            case 'gmv':
-                sourceData = rawData.shangzhi;
-                valueField = 'paid_amount';
-                filterReason = "SKU 未开启统计或不在资产库";
-                break;
-            case 'spend':
-                 sourceData = rawData.jingzhuntong;
-                 valueField = 'cost';
-                 filterReason = "SKU 未开启统计或不在资产库";
-                 break;
-            default: // roi
-                return null;
-        }
-
-        sourceData.forEach(r => {
-            const code = getSkuIdentifier(r)?.trim();
-            if (code && enabledSkusMap.has(code)) {
-                const skuConfig = enabledSkusMap.get(code)!;
-                const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
-                const val = Number(r[valueField]) || 0;
-                
-                includedRows.push({ ...r, _shopMode: shopMode, _val: val });
-                totalVal += val;
-                if (['自营', '入仓'].includes(shopMode)) {
-                    selfVal += val;
-                } else {
-                    popVal += val;
-                }
-            } else {
-                excludedRows.push({ ...r, _reason: filterReason });
-            }
+            const key = getKey(date, sku);
+            const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
+            
+            entry.gmv += Number(r.paid_amount) || 0;
+            entry.ca += Number(r.paid_items) || 0;
+            if (!entry.source.includes('商智')) entry.source.push('商智');
+            
+            dataMap.set(key, entry);
         });
 
-        const filteredIncluded = traceSearch ? includedRows.filter(r => JSON.stringify(r).toLowerCase().includes(traceSearch.toLowerCase())) : includedRows;
-        const filteredExcluded = traceSearch ? excludedRows.filter(r => JSON.stringify(r).toLowerCase().includes(traceSearch.toLowerCase())) : excludedRows;
-        
-        return {
-            sourceTable: activeMetric === 'spend' ? 'fact_jingzhuntong' : 'fact_shangzhi',
-            valueField,
-            includedRows: filteredIncluded,
-            excludedRows: filteredExcluded,
-            totalVal,
-            selfVal,
-            popVal,
-            totalIncluded: includedRows.length,
-            totalExcluded: excludedRows.length
-        };
-    }, [rawData, enabledSkusMap, shopIdToMode, activeMetric, traceSearch]);
+        rawData.jingzhuntong.forEach(r => {
+            const date = getDateKey(r.date);
+            if (date < dateRange.start || date > dateRange.end) return;
+            
+            const sku = getSkuIdentifier(r);
+            if (!sku) return;
 
-    const TraceRow = ({ row, fields }: { row: any, fields: string[] }) => (
-        <tr className="hover:bg-slate-100 transition-colors text-xs">
-            {fields.map(f => <td key={f} className="p-2 border-b border-slate-100 font-mono truncate max-w-[150px]">{row[f]}</td>)}
-        </tr>
-    );
+            const key = getKey(date, sku);
+            const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
+            
+            entry.spend += Number(r.cost) || 0;
+            if (!entry.source.includes('广告')) entry.source.push('广告');
+
+            dataMap.set(key, entry);
+        });
+
+        return Array.from(dataMap.values())
+            .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0)
+            .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku));
+    }, [rawData, dateRange]);
+
+    const formulas = [
+        { metric: 'GMV (成交金额)', formula: 'SUM(商智事实表[paid_amount])', description: '周期内，所有被统计SKU的“成交金额”之和。' },
+        { metric: 'CA (成交件数)', formula: 'SUM(商智事实表[paid_items])', description: '周期内，所有被统计SKU的“成交件数”之和。' },
+        { metric: 'SPEND (广告花费)', formula: 'SUM(广告事实表[cost])', description: '周期内，所有被统计SKU的“花费”之和。' },
+        { metric: 'ROI (投产比)', formula: 'GMV / SPEND', description: '总成交金额除以总广告花费。' },
+        { metric: 'CVR (转化率)', formula: 'SUM(paid_users) / SUM(uv)', description: '总成交人数除以总访客数。' },
+        { metric: 'CPC (平均点击成本)', formula: 'SUM(cost) / SUM(clicks)', description: '总广告花费除以总点击数。' },
+    ];
 
     return (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
             <div 
-                className="bg-white rounded-[40px] shadow-2xl w-full max-w-6xl p-10 m-4 max-h-[90vh] flex flex-col border border-slate-200" 
+                className="bg-white rounded-[40px] shadow-2xl w-full max-w-5xl p-10 m-4 max-h-[90vh] flex flex-col border border-slate-200" 
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex justify-between items-center mb-6 shrink-0 border-b border-slate-100 pb-6">
+                <div className="flex justify-between items-center mb-8 shrink-0 border-b border-slate-100 pb-6">
                     <div>
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                            <SearchCode className="text-brand" size={24} /> 物理数据链路探测器
+                            <SearchCode className="text-brand" size={24} /> 链路探测器 · 昊天镜
                         </h3>
                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
                             Physical Data Trace & Calculation Inspector
@@ -146,81 +121,61 @@ const DataInspectorModal = ({
                     </div>
                     <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all shadow-sm"><X size={24} /></button>
                 </div>
-
-                {/* Tabs */}
-                <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl mb-6 shrink-0">
-                    <button onClick={() => setActiveTab('trace')} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'trace' ? 'bg-white shadow' : 'text-slate-500'}`}>计算链路 (Trace)</button>
-                    <button onClick={() => setActiveTab('raw')} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'raw' ? 'bg-white shadow' : 'text-slate-500'}`}>原始数据 (Raw)</button>
-                </div>
                 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto no-scrollbar pr-2 -mr-4">
-                    {activeTab === 'trace' && (
-                        <div>
-                             {calculationTrace ? (
-                                <div className="space-y-6">
-                                    <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                                        <h4 className="text-sm font-black text-slate-800 uppercase mb-4">当前指标: {activeMetric.toUpperCase()} ({dateRange.start} ~ {dateRange.end})</h4>
-                                        <p className="text-xs font-mono">数据源: <code className="bg-slate-200 px-2 py-1 rounded">{calculationTrace.sourceTable}</code></p>
-                                        <p className="text-xs font-mono mt-2">求和字段: <code className="bg-slate-200 px-2 py-1 rounded">{calculationTrace.valueField}</code></p>
-                                        <div className="mt-4 pt-4 border-t border-slate-200">
-                                            <p className="text-base font-bold">最终计算结果: <span className="text-3xl font-black text-brand ml-2">{formatVal(calculationTrace.totalVal, activeMetric === 'roi')}</span></p>
-                                            <p className="text-xs font-bold text-slate-400 mt-1">自营: {formatVal(calculationTrace.selfVal, activeMetric === 'roi')}, POP: {formatVal(calculationTrace.popVal, activeMetric === 'roi')}</p>
-                                        </div>
-                                    </div>
-                                    <div className="relative">
-                                        <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input value={traceSearch} onChange={e => setTraceSearch(e.target.value)} placeholder="在追踪结果中搜索 SKU 或数值..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div>
-                                            <h5 className="font-black text-green-600 mb-2">✅ Included Rows ({calculationTrace.totalIncluded})</h5>
-                                            <div className="text-[10px] bg-green-50/50 p-3 rounded-xl border border-green-100 max-h-80 overflow-auto no-scrollbar">
-                                                <table className="w-full table-auto">
-                                                    <thead><tr className="text-left text-green-800 font-bold">
-                                                        <th className="p-2">SKU</th><th className="p-2">Date</th><th className="p-2">{calculationTrace.valueField}</th><th className="p-2">Mode</th>
-                                                    </tr></thead>
-                                                    <tbody>{calculationTrace.includedRows.map((r, i) => <TraceRow key={i} row={r} fields={['sku_code', 'date', '_val', '_shopMode']} />)}</tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h5 className="font-black text-rose-600 mb-2">❌ Excluded Rows ({calculationTrace.totalExcluded})</h5>
-                                            <div className="text-[10px] bg-rose-50/50 p-3 rounded-xl border border-rose-100 max-h-80 overflow-auto no-scrollbar">
-                                                 <table className="w-full table-auto">
-                                                     <thead><tr className="text-left text-rose-800 font-bold">
-                                                         <th className="p-2">SKU</th><th className="p-2">Date</th><th className="p-2">Reason</th>
-                                                     </tr></thead>
-                                                     <tbody>{calculationTrace.excludedRows.map((r, i) => <TraceRow key={i} row={r} fields={['sku_code', 'date', '_reason']} />)}</tbody>
-                                                 </table>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                             ) : (
-                                <div className="text-center p-12 bg-slate-50 rounded-2xl text-slate-400">
-                                    <p className="font-bold">指标 {activeMetric.toUpperCase()} 的计算链路较为复杂，暂不支持可视化追踪。</p>
-                                    <p className="text-xs mt-2">通常 ROI = GMV / Spend。</p>
-                                </div>
-                             )}
+                <div className="flex-1 overflow-y-auto no-scrollbar pr-2 -mr-4 space-y-8">
+                    {/* Upper Part: Source Data */}
+                    <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner flex flex-col">
+                        <h4 className="text-sm font-black text-slate-800 uppercase mb-4 flex items-center gap-2"><Database size={16} className="text-brand"/> 源数据物理快照 ({dateRange.start} ~ {dateRange.end})</h4>
+                        <div className="overflow-y-auto max-h-72 custom-scrollbar pr-4 -mr-4 rounded-xl">
+                            <table className="w-full text-xs table-auto">
+                                <thead className="sticky top-0 bg-slate-50/80 backdrop-blur-sm">
+                                    <tr className="text-slate-400 font-black uppercase tracking-widest text-left">
+                                        <th className="p-3">Date</th>
+                                        <th className="p-3">SKU</th>
+                                        <th className="p-3 text-right">GMV</th>
+                                        <th className="p-3 text-right">CA</th>
+                                        <th className="p-3 text-right">SPEND</th>
+                                        <th className="p-3 text-center">Source</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {sourceData.length > 0 ? sourceData.map((row, i) => (
+                                        <tr key={i} className="hover:bg-slate-100/50 transition-colors font-mono">
+                                            <td className="p-3 font-bold text-slate-600">{row.date}</td>
+                                            <td className="p-3 font-bold text-slate-800 truncate max-w-[200px]">{row.sku}</td>
+                                            <td className="p-3 text-right text-slate-600">¥{row.gmv.toFixed(2)}</td>
+                                            <td className="p-3 text-right text-slate-600">{row.ca}</td>
+                                            <td className="p-3 text-right text-slate-600">¥{row.spend.toFixed(2)}</td>
+                                            <td className="p-3 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {row.source.map(s => (
+                                                        <span key={s} className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${s === '商智' ? 'bg-brand/10 text-brand' : 'bg-blue-100 text-blue-600'}`}>{s}</span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan={6} className="text-center p-10 text-slate-400 font-bold">周期内无物理数据记录</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
-                    )}
-                    {activeTab === 'raw' && (
-                         <div className="space-y-6">
-                            <div>
-                                <h5 className="font-bold text-slate-700 mb-2">商智原始数据 (fact_shangzhi) - {rawData.shangzhi.length} rows</h5>
-                                <pre className="text-[10px] bg-slate-50 p-4 rounded-2xl max-h-80 overflow-auto font-mono custom-scrollbar border border-slate-100">
-                                    {JSON.stringify(rawData.shangzhi, null, 2)}
-                                </pre>
-                            </div>
-                             <div>
-                                <h5 className="font-bold text-slate-700 mb-2">广告原始数据 (fact_jingzhuntong) - {rawData.jingzhuntong.length} rows</h5>
-                                <pre className="text-[10px] bg-slate-50 p-4 rounded-2xl max-h-80 overflow-auto font-mono custom-scrollbar border border-slate-100">
-                                    {JSON.stringify(rawData.jingzhuntong, null, 2)}
-                                </pre>
-                            </div>
-                         </div>
-                    )}
+                    </div>
+
+                    {/* Lower Part: Formulas */}
+                    <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner">
+                        <h4 className="text-sm font-black text-slate-800 uppercase mb-6 flex items-center gap-2"><Calculator size={16} className="text-brand"/> 指标计算公式</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {formulas.map(f => (
+                                <div key={f.metric} className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm group hover:border-brand/20 transition-all">
+                                    <p className="text-xs font-black text-slate-900 mb-2">{f.metric}</p>
+                                    <code className="text-[11px] font-mono font-black bg-slate-100 text-brand px-3 py-1.5 rounded-lg inline-block">{f.formula}</code>
+                                    <p className="text-[10px] text-slate-400 mt-3 font-bold leading-relaxed">{f.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -704,19 +659,11 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                             </div>
                         )}
                         {!isDataStale && (
-                             <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200">
-                                    <History size={10} className="text-slate-500" />
-                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">
-                                        智能回溯: {dataAnchorDate}
-                                    </span>
-                                </div>
-                                <button onClick={() => setIsDebugOpen(true)} className="flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-lg border border-slate-200 hover:bg-slate-200 transition-colors">
-                                    <SearchCode size={10} className="text-slate-500" />
-                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">
-                                        链路探测器
-                                    </span>
-                                </button>
+                             <div className="flex items-center gap-2 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200">
+                                <History size={10} className="text-slate-500" />
+                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">
+                                    智能回溯: {dataAnchorDate}
+                                </span>
                             </div>
                         )}
                     </div>
@@ -725,6 +672,10 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 </div>
                 
                 <div className="flex items-center gap-4">
+                     <button onClick={() => setIsDebugOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
+                        <SearchCode size={14} />
+                        <span className="text-xs font-black uppercase tracking-widest">链路探测器</span>
+                    </button>
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
                         {[
                             {id:'realtime', l:'实时', icon: Wifi}, 
@@ -806,9 +757,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 isOpen={isDebugOpen} 
                 onClose={() => setIsDebugOpen(false)} 
                 rawData={debugRawData} 
-                enabledSkusMap={enabledSkusMap}
-                shopIdToMode={shopIdToMode}
-                activeMetric={activeMetric}
                 dateRange={viewRange}
             />
         </div>
