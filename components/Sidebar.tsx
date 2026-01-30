@@ -113,7 +113,7 @@ export const Sidebar = ({ currentView, setCurrentView, isSidebarCollapsed, setIs
             <div className="flex-1 px-4 py-2 overflow-y-auto no-scrollbar">
                 <SectionLabel label="战略指挥" collapsed={isSidebarCollapsed} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<LayoutGrid size={18} />} label="AI 仪表盘" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-                <SidebarItem collapsed={isSidebarCollapsed} icon={<Search size={18} />} label="多维透视" active={currentView === 'multiquery'} onClick={() => setCurrentView('multiquery')} />
+                <SidebarItem collapsed={isSidebarCollapsed} icon={<Search size={18} />} label="战略沙盘" active={currentView === 'multiquery'} onClick={() => setCurrentView('multiquery')} />
                 <SidebarItem collapsed={isSidebarCollapsed} icon={<FileText size={18} />} label="运营报表" active={currentView === 'reports'} onClick={() => setCurrentView('reports')} />
 
                 <SectionLabel label="智慧运营" collapsed={isSidebarCollapsed} />

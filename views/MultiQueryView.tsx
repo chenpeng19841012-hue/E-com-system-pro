@@ -327,7 +327,9 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const calcTotals = (d: any[]) => {
                 const t = d.reduce((acc, row) => { [...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount'].forEach(k => acc[k] = (acc[k] || 0) + (Number(row[k]) || 0)); return acc; }, {} as any);
-                t.cpc = t.clicks ? t.cost / t.clicks : 0; t.roi = t.cost ? (t.total_order_amount || t.paid_amount || 0) / t.cost : 0; t.paid_conversion_rate = t.uv ? t.paid_users / t.uv : 0;
+                t.cpc = t.clicks ? (t.cost || 0) / t.clicks : 0;
+                t.roi = t.cost ? (t.total_order_amount || t.paid_amount || 0) / t.cost : 0;
+                t.paid_conversion_rate = t.uv ? (t.paid_users || 0) / t.uv : 0;
                 return t;
             };
 
@@ -340,7 +342,12 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 });
             });
             const dData = Array.from(dMap.values()).sort((a,b) => a.date.localeCompare(b.date));
-            dData.forEach(d => { d.cpc = d.clicks ? d.cost / d.clicks : 0; d.roi = d.cost ? d.paid_amount / d.cost : 0; d.paid_conversion_rate = d.uv ? d.paid_users / d.uv : 0; });
+            
+            dData.forEach(d => { 
+                d.cpc = d.clicks ? (d.cost || 0) / d.clicks : 0; 
+                d.roi = d.cost ? (d.paid_amount || 0) / d.cost : 0; 
+                d.paid_conversion_rate = d.uv ? (d.paid_users || 0) / d.uv : 0; 
+            });
 
             setVisualisationData({ mainTotals: calcTotals(mainData), compTotals: calcTotals(compData), dailyData: dData });
             setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date)));
@@ -372,20 +379,20 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     <div className="space-y-1">
                         <div className="flex items-center gap-3 mb-2">
                             <div className="w-2 h-2 rounded-full bg-brand animate-pulse"></div>
-                            <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">物理层多维透视中</span>
+                            <span className="text-[10px] font-black text-brand uppercase tracking-widest leading-none">战略沙盘</span>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">多维数据透视中心</h1>
-                        <p className="text-slate-400 font-bold text-sm tracking-wide">Physical Dimensional Intelligence Hub & Record Penetration</p>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略沙盘</h1>
+                        <p className="text-slate-400 font-bold text-sm tracking-wide">Strategic Sandbox & Intelligence Hub</p>
                     </div>
                 </div>
 
                 {/* 配置面板 */}
-                <div className="bg-white rounded-[40px] shadow-sm border-2 border-slate-100 p-6 space-y-5 relative overflow-hidden">
+                <div className="bg-white rounded-[32px] shadow-sm border-2 border-slate-100 p-5 space-y-4 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 relative z-10">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">时间跨度</label>
-                            <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all h-12 bg-white">
+                            <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-200 rounded-2xl p-1 shadow-inner focus-within:border-brand transition-all h-10 bg-white">
                                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
                                 <span className="text-slate-300 font-black">-</span>
                                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-transparent border-none text-[11px] font-black text-slate-700 px-3 h-full outline-none" />
@@ -394,7 +401,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">聚合粒度</label>
                             <div className="relative">
-                                <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                <select value={timeDimension} onChange={e => setTimeDimension(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-10 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
                                     <option value="day">按天 (Daily)</option>
                                     <option value="week">按周 (Weekly)</option>
                                     <option value="month">按月 (Monthly)</option>
@@ -405,7 +412,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">归属店铺</label>
                             <div className="relative">
-                                <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
+                                <select value={selectedShopId} onChange={e => setSelectedShopId(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-10 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm transition-all hover:bg-white">
                                     <option value="all">全域探测</option>
                                     {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 </select>
@@ -414,28 +421,28 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">算力因子</label>
-                            <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-12 text-slate-700 flex items-center justify-between hover:bg-white transition-all shadow-sm">
+                            <button onClick={() => setIsMetricModalOpen(true)} className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 h-10 text-slate-700 flex items-center justify-between hover:bg-white transition-all shadow-sm">
                                 <span className="font-black text-xs">{selectedMetrics.length} 项因子已就绪</span>
                                 <Filter size={14} className="text-slate-400" />
                             </button>
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end pt-6 border-t border-slate-50 relative z-10">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end pt-4 border-t border-slate-50 relative z-10">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索 (支持逗号分隔)</label>
                             <input 
-                                placeholder="输入 SKU 编码，物理穿透模式将无视资产建档状态..." 
+                                placeholder="输入单个或多个 SKU (以逗号或换行分隔)，精准洞察..." 
                                 value={skuInput} 
                                 onChange={e => setSkuInput(e.target.value)} 
                                 onKeyDown={e => e.key === 'Enter' && handleQuery()}
-                                className="w-full h-14 bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
+                                className="w-full h-12 bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
                             />
                         </div>
-                        <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-14 w-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
+                        <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-12 w-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
                             <RefreshCcw size={20}/>
                         </button>
-                        <button onClick={handleQuery} disabled={isLoading} className="h-14 px-10 rounded-2xl bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-xl shadow-brand/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest border-2 border-transparent">
+                        <button onClick={handleQuery} disabled={isLoading} className="h-12 px-10 rounded-2xl bg-brand text-white font-black text-sm hover:bg-[#5da035] shadow-xl shadow-brand/20 flex items-center gap-2 transition-all active:scale-95 disabled:bg-slate-200 uppercase tracking-widest border-2 border-transparent">
                             {isLoading ? <LoaderCircle className="animate-spin" size={20} /> : <Search size={20} className="text-white" />} 
                             执行搜索
                         </button>
@@ -508,7 +515,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 {/* 明细表区域 */}
                 <div className="bg-white rounded-[48px] shadow-sm border-2 border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
                     <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                        <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">物理透视穿透明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Aggregated Physical Penetration Set</p></div></div>
+                        <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">沙盘推演明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Sandbox Simulation Result Set</p></div></div>
                         <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 shadow-xl shadow-slate-200 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出维度明细</button>
                     </div>
                     <div className="flex-1 p-8 flex flex-col">

@@ -274,8 +274,7 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
     const [diagOffset, setDiagOffset] = useState(0);
 
-    const totalRows = (factStats?.shangzhi?.count || 0) + (factStats?.jingzhuntong?.count || 0) + (factStats?.customer_service?.count || 0);
-    const systemVersion = `v6.0.${totalRows.toLocaleString().replace(/,/g, '')}`;
+    const systemVersion = 'v6.0.18887';
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
