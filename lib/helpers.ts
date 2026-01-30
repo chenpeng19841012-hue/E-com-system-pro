@@ -1,3 +1,4 @@
+
 import { TableType, FieldDefinition } from './types';
 
 export const getTableName = (type: TableType) => {
@@ -20,9 +21,6 @@ export const normalizeDate = (dateInput: any): string | null => {
         return `${year}-${month}-${day}`;
     }
 
-    // Differentiate Excel serial numbers from YYYYMMDD numbers.
-    // Excel serials for modern dates are much smaller than YYYYMMDD numbers.
-    // A reasonable upper bound (e.g., for year 2300) is around 150000.
     if (typeof dateInput === 'number' && dateInput > 25569 && dateInput < 150000) {
         const utcMilliseconds = (dateInput - 25569) * 86400 * 1000;
         const date = new Date(utcMilliseconds);
@@ -34,7 +32,6 @@ export const normalizeDate = (dateInput: any): string | null => {
     
     const dateStr = String(dateInput).trim();
 
-    // Regex for YYYY-MM-DD or YYYY/MM/DD
     const match = dateStr.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
     if (match) {
         const year = parseInt(match[1], 10);
@@ -45,12 +42,10 @@ export const normalizeDate = (dateInput: any): string | null => {
         }
     }
     
-    // Regex for YYYYMMDD (as a string or number)
     if (/^\d{8}$/.test(dateStr) && parseInt(dateStr.substring(0, 4), 10) > 1980) {
         return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
     }
 
-    // Fallback for other string formats
     try {
         const d = new Date(dateStr);
         if (!isNaN(d.getTime()) && d.getFullYear() > 1980) {
@@ -104,9 +99,29 @@ export const detectTableType = (headers: string[], schemas: any): TableType | nu
     return bestMatch;
 };
 
+// 🛡️ 核心修复：强力 SKU 识别器
+// 能够处理：纯数字、科学计数法字符串 ("1.00212E+11")、带空格字符串
 export const getSkuIdentifier = (row: any): string | null => {
     if (!row) return null;
-    // Prioritize sku_code, then fall back to product_id or tracked_sku_id
-    const identifier = row.sku_code || row.product_id || row.tracked_sku_id;
-    return identifier ? String(identifier) : null;
+    
+    // 优先取 sku_code，其次 product_id，再次 tracked_sku_id
+    const rawVal = row.sku_code || row.product_id || row.tracked_sku_id;
+    if (rawVal === undefined || rawVal === null) return null;
+
+    // 1. 如果是数字，强制转为非科学计数法的字符串
+    if (typeof rawVal === 'number') {
+        return rawVal.toLocaleString('fullwide', { useGrouping: false });
+    }
+
+    const strVal = String(rawVal).trim();
+
+    // 2. 如果是科学计数法字符串 (e.g. "1.00212482468E11")，尝试还原
+    if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+        const num = Number(strVal);
+        if (!isNaN(num)) {
+            return num.toLocaleString('fullwide', { useGrouping: false });
+        }
+    }
+
+    return strVal;
 };

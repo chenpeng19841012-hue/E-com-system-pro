@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Bot, FileText, Printer, Download, LoaderCircle, ChevronDown, Activity, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Sparkles, DatabaseZap, Search, Filter, Store, CreditCard, ShoppingBag, MousePointer2, Target } from 'lucide-react';
 import { callQwen } from '../lib/ai';
@@ -45,7 +44,6 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
             const pe = prevEnd.toISOString().split('T')[0];
 
             // 1. 并行抓取当前周期与环比周期的数据 (On-Demand Fetching)
-            // 无论时间多早，都直接从云端获取，保证数据完整性
             const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
                 DB.getRange('fact_shangzhi', startDate, endDate),
                 DB.getRange('fact_jingzhuntong', startDate, endDate),
@@ -53,26 +51,46 @@ export const ReportsView = ({ factTables, skus, shops, addToast }: any) => {
                 DB.getRange('fact_jingzhuntong', ps, pe)
             ]);
 
-            // 过滤函数
-            const filterByShop = (row: any) => {
-                if (selectedShopId === 'all') return true;
-                const shop = shops.find((s: Shop) => s.id === selectedShopId);
-                return row.shop_name === shop?.name;
-            };
+            const skuMap = new Map(skus.map((s: ProductSKU) => [s.code, s]));
 
             const process = (dataSz: any[], dataJzt: any[]) => {
                 const res = { gmv: 0, ca: 0, uv: 0, spend: 0, orders: 0, clicks: 0, paidUsers: 0 };
-                dataSz.filter(filterByShop).forEach(r => {
+                
+                dataSz.forEach(r => {
+                    const skuCode = getSkuIdentifier(r);
+                    if (!skuCode) return;
+
+                    if (selectedShopId !== 'all') {
+                        // FIX: Explicitly cast the result from the map to ensure type safety.
+                        const skuAsset = skuMap.get(skuCode) as ProductSKU | undefined;
+                        if (!skuAsset || skuAsset.shopId !== selectedShopId) {
+                            return; // Skip if shop doesn't match
+                        }
+                    }
+                    
                     res.gmv += Number(r.paid_amount) || 0;
                     res.ca += Number(r.paid_items) || 0;
                     res.uv += Number(r.uv) || 0;
                     res.orders += Number(r.paid_orders) || 0;
                     res.paidUsers += Number(r.paid_users) || 0;
                 });
-                dataJzt.filter(filterByShop).forEach(r => {
+
+                dataJzt.forEach(r => {
+                    const skuCode = getSkuIdentifier(r);
+                    if (!skuCode) return;
+
+                    if (selectedShopId !== 'all') {
+                        // FIX: Explicitly cast the result from the map to ensure type safety.
+                        const skuAsset = skuMap.get(skuCode) as ProductSKU | undefined;
+                        if (!skuAsset || skuAsset.shopId !== selectedShopId) {
+                            return; // Skip if shop doesn't match
+                        }
+                    }
+                    
                     res.spend += Number(r.cost) || 0;
                     res.clicks += Number(r.clicks) || 0;
                 });
+                
                 return res;
             };
 

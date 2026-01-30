@@ -6,7 +6,7 @@ import { getSkuIdentifier } from '../lib/helpers';
 import { DB } from '../lib/db';
 
 interface MultiQueryViewProps {
-    shangzhiData: any[]; // Deprecated, kept for interface compat but unused in logic
+    shangzhiData: any[]; // Deprecated
     jingzhuntongData: any[]; // Deprecated
     skus: ProductSKU[];
     shops: Shop[];
@@ -18,21 +18,14 @@ interface MultiQueryViewProps {
 }
 
 const METRIC_COLORS: Record<string, string> = {
-    'pv': '#22C55E',                // 绿色
-    'uv': '#06B6D4',                // 青色
-    'paid_items': '#8B5CF6',         // 紫色
-    'paid_amount': '#10B981',        // 翠绿
-    'paid_conversion_rate': '#F43F5E', // 红色
-    'cost': '#3B82F6',               // 蓝色
-    'cpc': '#6366F1',                // 靛蓝
-    'roi': '#D946EF'                 // 粉紫
-};
-
-// 严格定义指标来源，防止跨表重复计算 (Anti-Duplication Logic)
-const SOURCE_MAP: Record<string, 'sz' | 'jzt' | 'calc'> = {
-    'pv': 'sz', 'uv': 'sz', 'paid_items': 'sz', 'paid_amount': 'sz', 'paid_users': 'sz', 'paid_orders': 'sz',
-    'cost': 'jzt', 'clicks': 'jzt', 'impressions': 'jzt',
-    'cpc': 'calc', 'roi': 'calc', 'paid_conversion_rate': 'calc'
+    'pv': '#22C55E',                
+    'uv': '#06B6D4',                
+    'paid_items': '#8B5CF6',         
+    'paid_amount': '#10B981',        
+    'paid_conversion_rate': '#F43F5E', 
+    'cost': '#3B82F6',               
+    'cpc': '#6366F1',                
+    'roi': '#D946EF'                 
 };
 
 const formatMetricValue = (value: number, key: string) => {
@@ -229,9 +222,11 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const shopMap = new Map(shops.map(s => [s.id, s]));
 
+            // Fetch data
             const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
             const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
 
+            // 🛡️ 核心修复：更智能的 SKU 匹配过滤器
             const filter = (row: any) => {
                 const codeRaw = getSkuIdentifier(row); 
                 if (!row.date || !codeRaw) return false;
@@ -239,6 +234,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
                 if (isExplicitSearch) {
                     if (!parsedSkus.includes(code)) return false;
+                    
+                    // 如果指定了具体 SKU，放宽店铺匹配（如果数据没归档店铺但 SKU 匹配，也放行）
                     if (selectedShopId !== 'all') {
                         const asset = enabledSkusMap.get(code); 
                         if (asset) {
@@ -247,10 +244,12 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             const targetShopName = shopMap.get(selectedShopId)?.name;
                             if (targetShopName && row.shop_name !== targetShopName) return false;
                         }
+                        // Fallback: If searching by SKU, assume user wants to see it even if shop info is missing
                     }
                     return true;
                 }
 
+                // If not searching by SKU, enforce asset check stricter
                 const asset = enabledSkusMap.get(code);
                 if (!asset) return false;
                 if (selectedShopId !== 'all') {
@@ -261,9 +260,9 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const processData = (sz: any[], jzt: any[]) => {
                 const merged = new Map<string, any>();
-                const proc = (row: any, source: 'sz' | 'jzt') => {
-                    const code = String(getSkuIdentifier(row)).trim();
-                    let key = String(row.date).split('T')[0]; 
+                
+                const getOrCreateEntry = (row: any) => {
+                    let key = String(row.date).substring(0, 10);
                     
                     if (timeDimension === 'month') {
                         key = key.substring(0, 7); 
@@ -279,6 +278,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         let shopName = '多店铺/多SKU';
                         if (selectedShopId !== 'all') shopName = shopMap.get(selectedShopId)?.name || '未知';
                         
+                        const code = String(getSkuIdentifier(row)).trim();
                         if (parsedSkus.length === 1) {
                              const asset = enabledSkusMap.get(code);
                              if(asset) {
@@ -286,7 +286,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                              } else if (row.shop_name) {
                                  shopName = row.shop_name + " (Raw)";
                              } else {
-                                 shopName = "未录入资产";
+                                 // 当没有找到资产配置时，使用原始数据
+                                 shopName = "未归档资产";
                              }
                         }
 
@@ -300,34 +301,35 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             } 
                         });
                     }
-                    
-                    const ent = merged.get(aggKey)!;
-                    
-                    if (parsedSkus.length === 1) {
-                        const currentShopName = ent.sku_shop.shopName;
-                        if ((currentShopName === '未录入资产' || !currentShopName) && row.shop_name) {
-                            ent.sku_shop.shopName = row.shop_name + " (Raw)";
-                        }
-                    }
-
-                    // 核心修改：基于数据源严格隔离指标，防止双重计算
-                    [...selectedMetrics, ...VISUAL_METRICS, 'clicks', 'paid_users', 'paid_customers', 'total_order_amount'].forEach(m => {
-                        const sourceRule = SOURCE_MAP[m];
-                        // 规则1：如果指标属于 'sz' (商智)，但当前行是 'jzt'，跳过 (防止广告表有脏数据污染销售额)
-                        if (sourceRule === 'sz' && source === 'jzt') return;
-                        // 规则2：如果指标属于 'jzt' (广告)，但当前行是 'sz'，跳过
-                        if (sourceRule === 'jzt' && source === 'sz') return;
-                        
-                        // 计算型指标 (cpc, roi, rate) 不累加，跳过
-                        if (sourceRule === 'calc') return;
-
-                        if (m === 'paid_users') ent[m] = (ent[m] || 0) + (Number(row.paid_users) || Number(row.paid_customers) || 0);
-                        else ent[m] = (ent[m] || 0) + (Number(row[m]) || 0);
-                    });
+                    return merged.get(aggKey)!;
                 };
+
+                // 1. 只处理商智数据 -> 只累加销售指标
+                const filteredSz = sz.filter(filter);
+                filteredSz.forEach(r => {
+                    const ent = getOrCreateEntry(r);
+                    ent['paid_items'] = (ent['paid_items'] || 0) + (Number(r.paid_items) || 0);
+                    ent['paid_amount'] = (ent['paid_amount'] || 0) + (Number(r.paid_amount) || 0);
+                    ent['paid_users'] = (ent['paid_users'] || 0) + (Number(r.paid_users) || Number(r.paid_customers) || 0);
+                    ent['pv'] = (ent['pv'] || 0) + (Number(r.pv) || 0);
+                    ent['uv'] = (ent['uv'] || 0) + (Number(r.uv) || 0);
+                });
+
+                // 2. 只处理广告数据 -> 只累加消耗指标
+                const filteredJzt = jzt.filter(filter);
+                filteredJzt.forEach(r => {
+                    const ent = getOrCreateEntry(r);
+                    ent['cost'] = (ent['cost'] || 0) + (Number(r.cost) || 0);
+                    ent['clicks'] = (ent['clicks'] || 0) + (Number(r.clicks) || 0);
+                    ent['impressions'] = (ent['impressions'] || 0) + (Number(r.impressions) || 0);
+                });
                 
-                sz.filter(filter).forEach(r => proc(r, 'sz'));
-                jzt.filter(filter).forEach(r => proc(r, 'jzt'));
+                // 3. 计算衍生指标
+                Array.from(merged.values()).forEach((ent: any) => {
+                    ent['cpc'] = ent['clicks'] > 0 ? ent['cost'] / ent['clicks'] : 0;
+                    ent['roi'] = ent['cost'] > 0 ? ent['paid_amount'] / ent['cost'] : 0;
+                    ent['paid_conversion_rate'] = ent['uv'] > 0 ? ent['paid_users'] / ent['uv'] : 0;
+                });
                 
                 return Array.from(merged.values());
             };

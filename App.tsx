@@ -188,11 +188,19 @@ export const App = () => {
     // --- HELPER: Safe ID Normalizer (Handles Scientific Notation) ---
     const normalizeIdString = (val: any) => {
         if (val === undefined || val === null || val === '') return null;
-        // 如果是数字类型，使用 fullwide 避免科学计数法转换 (e.g. 1.02E+13 -> "10200000000000")
+        // 如果是数字类型，使用 fullwide 避免科学计数法转换
         if (typeof val === 'number') {
             return val.toLocaleString('fullwide', { useGrouping: false });
         }
-        return String(val).trim();
+        const strVal = String(val).trim();
+        // 如果是科学计数法字符串，也进行转换
+        if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+            const num = Number(strVal);
+            if (!isNaN(num)) {
+                return num.toLocaleString('fullwide', { useGrouping: false });
+            }
+        }
+        return strVal;
     };
 
     // --- HELPER: Robust Date Parser (Handles YYYYMMDD, YYYY/MM/DD, Excel Serial) ---
@@ -323,15 +331,6 @@ export const App = () => {
                      mappedRow['sku_code'] = rawPid; // 将商品ID作为 SKU 存储
                      mappedRow['product_id'] = rawPid; // 同时存入 product_id
                  }
-
-                 // [新增逻辑] 若有商品ID但无店铺名称，默认归属"联想商用办公旗舰店"
-                 // Check for valid Product ID (either mapped or raw) AND missing shop name (including empty string)
-                 const hasPid = mappedRow['product_id'] || rawPid;
-                 const hasShopName = mappedRow['shop_name'] && String(mappedRow['shop_name']).trim() !== '';
-                 
-                 if (hasPid && !hasShopName) {
-                     mappedRow['shop_name'] = '联想商用办公旗舰店';
-                 }
             }
             
             // 2. 广告 (fact_jingzhuntong) -> 目标: tracked_sku_id
@@ -420,7 +419,7 @@ export const App = () => {
                     <div className="absolute inset-0 bg-brand/30 rounded-full blur-[60px] animate-pulse w-32 h-32 -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2"></div>
                     
                     {/* Logo Container */}
-                    <div className="relative z-10 w-28 h-28 bg-white rounded-[32px] shadow-[0_20px_50px_-12px_rgba(112,173,71,0.3)] flex items-center justify-center border border-white/80 mb-10 backdrop-blur-sm">
+                    <div className="relative z-10 w-28 h-28 bg-white rounded-[32px] shadow-[0_20px_50px_-12px_rgba(112,173,71,0.3)] flex items-center justify-center border border-white/80 backdrop-blur-sm">
                         <div className="text-4xl font-black text-brand tracking-tighter">云舟</div>
                     </div>
 
