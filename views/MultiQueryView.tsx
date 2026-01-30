@@ -27,6 +27,7 @@ const METRIC_COLORS: Record<string, string> = {
 };
 
 const formatMetricValue = (value: number, key: string) => {
+    if (value === null || value === undefined) return '-';
     if (key === 'roi') return (value || 0).toFixed(1);
     if (key === 'cpc') return `¥${(value || 0).toFixed(2)}`;
     if (key === 'paid_conversion_rate') return `${(value * 100).toFixed(2)}%`;
@@ -297,14 +298,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                 code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
                                 shopName: shopName 
                             },
-                            pv: 0,
-                            uv: 0,
-                            paid_items: 0,
-                            paid_amount: 0,
-                            paid_users: 0,
-                            cost: 0,
-                            clicks: 0,
-                            impressions: 0
+                            pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
+                            cost: 0, clicks: 0, impressions: 0
                         });
                     }
                     return merged.get(aggKey)!;
