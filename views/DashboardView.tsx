@@ -30,45 +30,6 @@ interface Diagnosis {
     severity: 'critical' | 'warning' | 'info' | 'success';
 }
 
-const IntelligenceHub = ({ setCurrentView }: { setCurrentView: (view: View) => void }) => {
-    const allItems = [
-      { label: 'AI 仪表盘', view: 'dashboard', icon: LayoutGrid, color: 'text-blue-500', bg: 'bg-blue-100' },
-      { label: '战略沙盘', view: 'multiquery', icon: Search, color: 'text-sky-500', bg: 'bg-sky-100' },
-      { label: '运营报表', view: 'reports', icon: FileText, color: 'text-indigo-500', bg: 'bg-indigo-100' },
-      { label: '盈利分析', view: 'ai-profit-analytics', icon: DollarSign, color: 'text-green-500', bg: 'bg-green-100' },
-      { label: '补货策略', view: 'ai-smart-replenishment', icon: PackagePlus, color: 'text-teal-500', bg: 'bg-teal-100' },
-      { label: '竞品监控', view: 'ai-competitor-monitoring', icon: Binoculars, color: 'text-amber-500', bg: 'bg-amber-100' },
-      { label: '销售预测', view: 'ai-sales-forecast', icon: TrendingUp, color: 'text-lime-500', bg: 'bg-lime-100' },
-      { label: '文案实验', view: 'ai-description', icon: Sparkles, color: 'text-purple-500', bg: 'bg-purple-100' },
-      { label: '视觉创意', view: 'ai-ad-image', icon: ImageIcon, color: 'text-pink-500', bg: 'bg-pink-100' },
-      { label: '智能客服', view: 'ai-cs-assistant', icon: MessageSquare, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100' },
-      { label: '智能报价', view: 'ai-quoting', icon: Calculator, color: 'text-violet-500', bg: 'bg-violet-100' },
-      { label: 'SKU资产', view: 'products', icon: Package, color: 'text-slate-500', bg: 'bg-slate-200' },
-      { label: '底层治理', view: 'data-experience', icon: Layers, color: 'text-gray-500', bg: 'bg-gray-200' },
-      { label: '云端同步', view: 'cloud-sync', icon: CloudSync, color: 'text-stone-500', bg: 'bg-stone-200' },
-      { label: '数据中心', view: 'data-center', icon: Database, color: 'text-neutral-500', bg: 'bg-neutral-200' },
-    ];
-  
-    return (
-      <div className="mb-8">
-          <div className="flex flex-nowrap items-center gap-3 p-3 rounded-[24px] bg-white border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
-              {allItems.map(item => (
-                   <button 
-                      key={item.view} 
-                      onClick={() => setCurrentView(item.view as View)}
-                      title={item.label}
-                      className="p-1 rounded-xl hover:bg-slate-100/50 transition-all group shrink-0"
-                  >
-                      <div className={`w-10 h-10 ${item.bg} ${item.color} rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-110`}>
-                          <item.icon size={20} strokeWidth={2.5} />
-                      </div>
-                  </button>
-              ))}
-          </div>
-      </div>
-    );
-};
-
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
 
 const getDateKey = (d: string | Date) => {
@@ -503,7 +464,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
-            <IntelligenceHub setCurrentView={setCurrentView} />
             
             {/* ... (UI components remain same) ... */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-4">

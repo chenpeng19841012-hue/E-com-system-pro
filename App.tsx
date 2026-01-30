@@ -1,6 +1,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, CloudSync as SyncIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+    Search, ChevronLeft, ChevronRight,
+    LayoutGrid, FileText, DollarSign, PackagePlus, Binoculars, TrendingUp,
+    Sparkles, ImageIcon, MessageSquare, Calculator, Package, Database, CloudSync, Layers
+} from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/Toast';
@@ -33,6 +37,45 @@ const INITIAL_QUOTING_DATA: QuotingData = {
     },
     "settings": { "margin": 1.15 },
     "discounts": [{ "min_qty": 10, "rate": 0.98 }]
+};
+
+const IntelligenceHub = ({ setCurrentView }: { setCurrentView: (view: View) => void }) => {
+    const allItems = [
+      { label: 'AI 仪表盘', view: 'dashboard', icon: LayoutGrid, color: 'text-blue-500', bg: 'bg-blue-100' },
+      { label: '战略沙盘', view: 'multiquery', icon: Search, color: 'text-sky-500', bg: 'bg-sky-100' },
+      { label: '运营报表', view: 'reports', icon: FileText, color: 'text-indigo-500', bg: 'bg-indigo-100' },
+      { label: '盈利分析', view: 'ai-profit-analytics', icon: DollarSign, color: 'text-green-500', bg: 'bg-green-100' },
+      { label: '补货策略', view: 'ai-smart-replenishment', icon: PackagePlus, color: 'text-teal-500', bg: 'bg-teal-100' },
+      { label: '竞品监控', view: 'ai-competitor-monitoring', icon: Binoculars, color: 'text-amber-500', bg: 'bg-amber-100' },
+      { label: '销售预测', view: 'ai-sales-forecast', icon: TrendingUp, color: 'text-lime-500', bg: 'bg-lime-100' },
+      { label: '文案实验', view: 'ai-description', icon: Sparkles, color: 'text-purple-500', bg: 'bg-purple-100' },
+      { label: '视觉创意', view: 'ai-ad-image', icon: ImageIcon, color: 'text-pink-500', bg: 'bg-pink-100' },
+      { label: '智能客服', view: 'ai-cs-assistant', icon: MessageSquare, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100' },
+      { label: '智能报价', view: 'ai-quoting', icon: Calculator, color: 'text-violet-500', bg: 'bg-violet-100' },
+      { label: 'SKU资产', view: 'products', icon: Package, color: 'text-slate-500', bg: 'bg-slate-200' },
+      { label: '底层治理', view: 'data-experience', icon: Layers, color: 'text-gray-500', bg: 'bg-gray-200' },
+      { label: '云端同步', view: 'cloud-sync', icon: CloudSync, color: 'text-stone-500', bg: 'bg-stone-200' },
+      { label: '数据中心', view: 'data-center', icon: Database, color: 'text-neutral-500', bg: 'bg-neutral-200' },
+    ];
+  
+    return (
+        <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar px-4 flex items-center">
+            <div className="flex items-center gap-1.5">
+                {allItems.map(item => (
+                    <button 
+                        key={item.view} 
+                        onClick={() => setCurrentView(item.view as View)}
+                        title={item.label}
+                        className="p-1 rounded-lg hover:bg-slate-200/50 transition-all group shrink-0"
+                    >
+                        <div className={`w-8 h-8 ${item.bg} ${item.color} rounded-md flex items-center justify-center transition-all duration-300 group-hover:scale-110`}>
+                            <item.icon size={16} strokeWidth={2.5} />
+                        </div>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
 };
 
 export const App = () => {
@@ -577,6 +620,7 @@ export const App = () => {
                         <div className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500/50"></div>
                         <div className="w-3 h-3 rounded-full bg-green-400 border border-green-500/50"></div>
                     </div>
+                    <IntelligenceHub setCurrentView={setCurrentView} />
                 </header>
                 <main className="flex-1 overflow-y-auto no-scrollbar relative">
                     {renderView()}
