@@ -391,7 +391,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             date: '汇总',
             aggDate: 'summary-row',
             sku_shop: {
-                code: '全周期汇总',
+                code: '汇总',
                 shopName: 'Total'
             }
         };
