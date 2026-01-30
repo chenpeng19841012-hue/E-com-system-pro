@@ -364,8 +364,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             
             setDebugRawData({ shangzhi: currSz, jingzhuntong: currJzt });
 
-            // 🛡️ 核心修复：更宽容的聚合逻辑
-            // 只要 SKU 存在于 enabledSkusMap 中，或者 DB 中存在该记录（即使未归档店铺），也尝试统计
             const processStats = (sz: any[], jzt: any[]) => {
                 const stats = { gmv: { total: 0, self: 0, pop: 0 }, ca: { total: 0, self: 0, pop: 0 }, spend: { total: 0, self: 0, pop: 0 } };
                 
@@ -373,16 +371,17 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                     const code = getSkuIdentifier(r)?.trim();
                     if (!code) return;
 
-                    // 尝试获取资产配置，如果没有配置，默认视为 POP 模式（兜底策略）
                     const skuConfig = enabledSkusMap.get(code);
-                    const shopMode = skuConfig ? shopIdToMode.get(skuConfig.shopId) : 'POP';
+                    if(!skuConfig) return; // 严格过滤
+                    
+                    const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
 
                     const val = Number(r.paid_amount) || 0;
                     const items = Number(r.paid_items) || 0;
                     stats.gmv.total += val; 
                     stats.ca.total += items;
                     
-                    if (shopMode && ['自营', '入仓'].includes(shopMode)) { 
+                    if (['自营', '入仓'].includes(shopMode)) { 
                         stats.gmv.self += val; 
                         stats.ca.self += items; 
                     } else { 
@@ -396,11 +395,13 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                     if (!code) return;
 
                     const skuConfig = enabledSkusMap.get(code);
-                    const shopMode = skuConfig ? shopIdToMode.get(skuConfig.shopId) : 'POP';
+                    if(!skuConfig) return; // 严格过滤
+                    
+                    const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
 
                     const cost = Number(r.cost) || 0;
                     stats.spend.total += cost;
-                    if (shopMode && ['自营', '入仓'].includes(shopMode)) stats.spend.self += cost; 
+                    if (['自营', '入仓'].includes(shopMode)) stats.spend.self += cost; 
                     else stats.spend.pop += cost;
                 });
                 return stats;
@@ -418,14 +419,15 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             
             factorTable.forEach(r => {
                 const dateKey = getDateKey(r.date);
-                
                 if (!dailyAgg[dateKey]) return; 
                 
                 const code = getSkuIdentifier(r)?.trim();
                 if (!code) return;
                 
                 const skuConfig = enabledSkusMap.get(code);
-                const shopMode = skuConfig ? shopIdToMode.get(skuConfig.shopId) : 'POP';
+                if (!skuConfig) return; // 严格过滤
+
+                const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
 
                 let val = 0;
                 if (activeMetric === 'gmv') val = Number(r.paid_amount);
@@ -433,7 +435,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 else if (activeMetric === 'spend') val = Number(r.cost);
                 else if (activeMetric === 'roi') val = Number(r.paid_amount); 
                 
-                if (shopMode && ['自营', '入仓'].includes(shopMode)) dailyAgg[dateKey].self += val; 
+                if (['自营', '入仓'].includes(shopMode)) dailyAgg[dateKey].self += val; 
                 else dailyAgg[dateKey].pop += val;
                 dailyAgg[dateKey].total += val;
             });
@@ -450,11 +452,87 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             });
             setTrends(Object.values(dailyAgg).sort((a, b) => a.date.localeCompare(b.date)));
 
-            // ... (Diagnostic logic remains same)
+            // --- Start AI Strategic Diagnosis ---
             const diag: Diagnosis[] = [];
-            // ...
+            
+            // SKU-level analysis
+            const skuAnalysisMap = new Map<string, { sku: ProductSKU; sales: number; revenue: number; cost: number; }>();
+            const last7DaysStart = generateDateRange(end, 7)[0];
+
+            currSz.forEach((r: any) => {
+                const code = getSkuIdentifier(r);
+                const skuConfig = code ? enabledSkusMap.get(code) : undefined;
+                if (skuConfig) {
+                    let entry = skuAnalysisMap.get(skuConfig.code) || { sku: skuConfig, sales: 0, revenue: 0, cost: 0 };
+                    if (r.date >= last7DaysStart) {
+                        entry.sales += Number(r.paid_items) || 0;
+                    }
+                    entry.revenue += Number(r.paid_amount) || 0;
+                    skuAnalysisMap.set(skuConfig.code, entry);
+                }
+            });
+            currJzt.forEach((r: any) => {
+                const code = getSkuIdentifier(r);
+                const skuConfig = code ? enabledSkusMap.get(code) : undefined;
+                if (skuConfig && skuAnalysisMap.has(skuConfig.code)) {
+                    let entry = skuAnalysisMap.get(skuConfig.code)!;
+                    entry.cost += Number(r.cost) || 0;
+                }
+            });
+
+            for (const [code, skuData] of skuAnalysisMap.entries()) {
+                const { sku, sales, revenue, cost } = skuData;
+                const totalStock = (sku.warehouseStock || 0) + (sku.factoryStock || 0);
+
+                // 1. Severe Stock Out risk
+                if (sales > 10 && totalStock < sales) {
+                    diag.push({
+                        id: `stock_${code}`, type: 'stock_severe', title: '断货高危预警',
+                        desc: `资产 [${sku.name}] 近7日销量已超过当前总库存。`,
+                        details: {
+                            'SKU': sku.code,
+                            '店铺': shopMap.get(sku.shopId)?.name || 'N/A',
+                            '型号': sku.model || 'N/A',
+                            '配置': sku.configuration || 'N/A',
+                            '周销/库存': `${sales} / ${totalStock}`,
+                        },
+                        severity: 'critical',
+                    });
+                }
+
+                // 2. Low ROI
+                if (cost > 300 && (revenue / cost) < 1.2 && revenue > 0) {
+                    diag.push({
+                        id: `roi_${code}`, type: 'low_roi', title: '广告投放亏损',
+                        desc: `资产 [${sku.name}] 广告投产比过低，可能导致亏损。`,
+                        details: {
+                            'SKU': sku.code,
+                            '花费/产出': `¥${Math.round(cost)} / ¥${Math.round(revenue)}`,
+                            'ROI': (revenue / cost).toFixed(2),
+                            '归属店铺': shopMap.get(sku.shopId)?.name || 'N/A',
+                        },
+                        severity: 'warning',
+                    });
+                }
+
+                // 3. Stale Inventory
+                if (totalStock > 100 && sales < 5 && totalStock > sales * 10) {
+                    diag.push({
+                        id: `stale_${code}`, type: 'stale_inventory', title: '呆滞库存风险',
+                        desc: `资产 [${sku.name}] 库存水平较高但近期销量低迷。`,
+                        details: {
+                            'SKU': sku.code,
+                            '库存/周销': `${totalStock} / ${sales}`,
+                            '店铺': shopMap.get(sku.shopId)?.name || 'N/A',
+                            '建议': '考虑清仓或捆绑销售',
+                        },
+                        severity: 'info',
+                    });
+                }
+            }
             setDiagnoses(diag);
             setDiagOffset(0);
+            // --- End AI Strategic Diagnosis ---
         } finally { setIsLoading(false); }
     };
 
