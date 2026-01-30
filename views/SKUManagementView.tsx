@@ -421,6 +421,38 @@ interface SKUManagementViewProps {
     addToast: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
+// ... (Existing components: BulkActionSelect, BulkActionToolbar)
+const BulkActionSelect = ({ label, options, onApply }: { label:string, options: {value:string, label:string}[], onApply: (value:string) => void }) => (
+    <div className="relative">
+        <select 
+            onChange={e => { if (e.target.value) onApply(e.target.value); e.target.value = ""; }} 
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[10px] font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm cursor-pointer"
+            defaultValue=""
+        >
+            <option value="" disabled>{label}</option>
+            {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </select>
+        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+    </div>
+);
+
+const BulkActionToolbar = ({ selectedCount, onUpdate, onClear }: { selectedCount: number, onUpdate: (field: keyof ProductSKU, value: any) => void, onClear: () => void }) => {
+    return (
+        <div className="w-full bg-blue-50 border-2 border-blue-200 rounded-3xl p-4 flex items-center justify-between animate-fadeIn">
+            <div className="flex items-center gap-4">
+                <span className="text-sm font-black text-blue-800">已选择 {selectedCount} 项资产</span>
+                <button onClick={onClear} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/50 transition-colors"><X size={16}/></button>
+            </div>
+            <div className="flex items-center gap-3">
+                <BulkActionSelect label="修改模式" onApply={value => onUpdate('mode', value)} options={[{label: '入仓', value: '入仓'}, {label: '厂直', value: '厂直'}]} />
+                <BulkActionSelect label="修改状态" onApply={value => onUpdate('status', value)} options={[{label: '在售', value: '在售'}, {label: '待售', value: '待售'}, {label: '下架', value: '下架'}]} />
+                <BulkActionSelect label="修改统计" onApply={value => onUpdate('isStatisticsEnabled', value === 'true')} options={[{label: '参与统计', value: 'true'}, {label: '忽略统计', value: 'false'}]} />
+            </div>
+        </div>
+    );
+};
+
+
 export const SKUManagementView = ({ 
     shops, skus, agents, skuLists,
     onAddNewSKU, onUpdateSKU, onDeleteSKU, onBulkAddSKUs,
@@ -458,6 +490,9 @@ export const SKUManagementView = ({
     const [selectedModel, setSelectedModel] = useState('all');
     const [skuSearchText, setSkuSearchText] = useState('');
     const [appliedSkuSearch, setAppliedSkuSearch] = useState<string[]>([]);
+    
+    // NEW: Selection state for bulk actions
+    const [selectedSkuIds, setSelectedSkuIds] = useState<Set<string>>(new Set());
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
@@ -483,7 +518,7 @@ export const SKUManagementView = ({
             let skuTextMatch = true;
             if (appliedSkuSearch.length > 0) {
                 skuTextMatch = appliedSkuSearch.some(term => 
-                    sku.code.includes(term) || sku.name.includes(term) || (sku.model && sku.model.includes(term))
+                    sku.code.toLowerCase().includes(term) || sku.name.toLowerCase().includes(term) || (sku.model && sku.model.toLowerCase().includes(term))
                 );
             }
             return statsMatch && categoryMatch && shopMatch && statusMatch && adMatch && modeMatch && modelMatch && skuTextMatch;
@@ -502,9 +537,41 @@ export const SKUManagementView = ({
         return sortedAndFilteredSkus.slice(start, start + ROWS_PER_PAGE);
     }, [sortedAndFilteredSkus, currentPage]);
 
-    useEffect(() => setCurrentPage(1), [selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
+    useEffect(() => {
+        setCurrentPage(1);
+        setSelectedSkuIds(new Set()); // Reset selection on filter change
+    }, [selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
 
     // ... (Handlers) ...
+    // NEW: Selection handlers
+    const handleSelectSku = (id: string) => {
+        const newSelection = new Set(selectedSkuIds);
+        if (newSelection.has(id)) newSelection.delete(id);
+        else newSelection.add(id);
+        setSelectedSkuIds(newSelection);
+    };
+
+    const handleSelectAllSkus = () => {
+        if (selectedSkuIds.size === sortedAndFilteredSkus.length) {
+            setSelectedSkuIds(new Set());
+        } else {
+            setSelectedSkuIds(new Set(sortedAndFilteredSkus.map(s => s.id)));
+        }
+    };
+    
+    // NEW: Bulk update handler
+    const handleBulkUpdate = async (field: keyof ProductSKU, value: any) => {
+        if (selectedSkuIds.size === 0) return;
+
+        const skusToUpdate = skus
+            .filter(sku => selectedSkuIds.has(sku.id))
+            .map(sku => ({ ...sku, [field]: value }));
+
+        await onBulkAddSKUs(skusToUpdate);
+        addToast('success', '批量更新成功', `已更新 ${selectedSkuIds.size} 项资产。`);
+        setSelectedSkuIds(new Set());
+    };
+
     const handleSearchClick = () => {
         const terms = skuSearchText.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
         setAppliedSkuSearch(terms);
@@ -650,7 +717,7 @@ export const SKUManagementView = ({
                         <span className="text-[10px] font-black text-brand uppercase tracking-widest">物理层资产链路已建立</span>
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-                        {activeTab === 'sku' ? 'SKU 资产名录' : activeTab === 'shop' ? '核心店铺名录' : activeTab === 'agent' ? '客服席位管控' : '分层清单实验室'}
+                        {activeTab === 'sku' ? '商品资产中心' : activeTab === 'shop' ? '核心店铺名录' : activeTab === 'agent' ? '客服席位管控' : '分层清单实验室'}
                     </h1>
                     <p className="text-slate-500 font-medium text-xs mt-1 opacity-60">Physical Master Data Management & Assets Governance Hub</p>
                 </div>
@@ -683,7 +750,7 @@ export const SKUManagementView = ({
                             <div className="flex gap-6 items-end pt-8 border-t border-slate-200/50">
                                 <div className="flex-1 relative group/search">
                                     <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within/search:text-brand transition-colors" />
-                                    <input placeholder="穿透检索 SKU 编码、资产名称 or 型号规格..." value={skuSearchText} onChange={e => setSkuSearchText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearchClick()} className="w-full bg-white border border-slate-200 rounded-3xl pl-16 pr-8 py-5 text-sm font-bold text-slate-700 outline-none focus:border-brand shadow-sm transition-all" />
+                                    <input placeholder="输入单个或多个 SKU/名称 (以逗号或换行分隔) 进行批量检索..." value={skuSearchText} onChange={e => setSkuSearchText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearchClick()} className="w-full bg-white border border-slate-200 rounded-3xl pl-16 pr-8 py-5 text-sm font-bold text-slate-700 outline-none focus:border-brand shadow-sm transition-all" />
                                 </div>
                                 <div className="flex gap-3 pb-1">
                                     <button onClick={handleResetFilters} className="px-8 py-5 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
@@ -693,27 +760,36 @@ export const SKUManagementView = ({
                         </div>
 
                         {/* Action Bar */}
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                            <div className="flex items-center gap-4">
-                                <div className="p-4 bg-brand/5 rounded-2xl border border-brand/10 flex items-center gap-3">
-                                    <Database size={20} className="text-brand" />
-                                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">已同步资产: <span className="text-slate-900">{sortedAndFilteredSkus.length}</span> / {skus.length}</span>
+                        {selectedSkuIds.size === 0 ? (
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-4 bg-brand/5 rounded-2xl border border-brand/10 flex items-center gap-3">
+                                        <Database size={20} className="text-brand" />
+                                        <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">已同步资产: <span className="text-slate-900">{sortedAndFilteredSkus.length}</span> / {skus.length}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <GhostButton onClick={() => handleDownloadTemplate('sku')} icon={<Download size={14}/>} label="下载模板" />
+                                    <GhostButton onClick={() => skuFileInputRef.current?.click()} icon={<UploadCloud size={14}/>} label="批量导入" />
+                                    <GhostButton onClick={() => handleBulkExport('sku')} icon={<Download size={14}/>} label="批量导出" />
+                                    <button onClick={() => setIsAddSKUModalOpen(true)} className="px-10 py-4 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-2xl shadow-brand/20 transition-all flex items-center gap-3 uppercase tracking-widest active:scale-95"><Plus size={16}/> 新增资产录入</button>
                                 </div>
                             </div>
-                            <div className="flex gap-3">
-                                <GhostButton onClick={() => handleDownloadTemplate('sku')} icon={<Download size={14}/>} label="下载模板" />
-                                <GhostButton onClick={() => skuFileInputRef.current?.click()} icon={<UploadCloud size={14}/>} label="批量导入" />
-                                <GhostButton onClick={() => handleBulkExport('sku')} icon={<Download size={14}/>} label="批量导出" />
-                                <button onClick={() => setIsAddSKUModalOpen(true)} className="px-10 py-4 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-2xl shadow-brand/20 transition-all flex items-center gap-3 uppercase tracking-widest active:scale-95"><Plus size={16}/> 新增资产录入</button>
-                            </div>
-                        </div>
+                        ) : (
+                            <BulkActionToolbar selectedCount={selectedSkuIds.size} onUpdate={handleBulkUpdate} onClear={() => setSelectedSkuIds(new Set())} />
+                        )}
 
                         {/* High-Density Table */}
                         <div className="overflow-x-auto rounded-[40px] border border-slate-100 no-scrollbar shadow-inner bg-white">
-                            <table className="w-full text-sm table-fixed min-w-[1500px]">
+                            <table className="w-full text-sm table-fixed min-w-[1600px]">
                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                     <tr className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] border-b border-slate-100">
-                                        <th className="w-[15%] text-left pl-10 py-6">SKU 物理标识</th>
+                                        <th className="w-[4%] text-center pl-10 py-6">
+                                            <button onClick={handleSelectAllSkus} className="text-slate-300 hover:text-brand transition-colors">
+                                                {selectedSkuIds.size === sortedAndFilteredSkus.length && sortedAndFilteredSkus.length > 0 ? <CheckSquare size={20} className="text-brand" /> : <Square size={20} />}
+                                            </button>
+                                        </th>
+                                        <th className="w-[15%] text-left py-6">SKU 物理标识</th>
                                         <th className="w-[10%] text-center">分类 / 品牌</th>
                                         <th className="w-[18%] text-center">规格配置 / 型号</th>
                                         <th className="w-[12%] text-center">MTM / 小型号</th>
@@ -727,11 +803,16 @@ export const SKUManagementView = ({
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {paginatedSkus.length === 0 ? (
-                                        <tr><td colSpan={10} className="py-40 text-center opacity-30 italic font-black uppercase tracking-widest text-slate-300">No Asset Data Detected</td></tr>
+                                        <tr><td colSpan={11} className="py-40 text-center opacity-30 italic font-black uppercase tracking-widest text-slate-300">No Asset Data Detected</td></tr>
                                     ) : (
                                         paginatedSkus.map(s => (
-                                            <tr key={s.id} className="hover:bg-slate-50/50 transition-all group/row">
-                                                <td className="py-6 pl-10">
+                                            <tr key={s.id} className={`hover:bg-slate-50/50 transition-all group/row ${selectedSkuIds.has(s.id) ? 'bg-blue-50/50' : ''}`}>
+                                                <td className="py-6 pl-10 text-center">
+                                                    <button onClick={() => handleSelectSku(s.id)} className={`${selectedSkuIds.has(s.id) ? 'text-brand' : 'text-slate-200'} hover:text-brand transition-colors`}>
+                                                        {selectedSkuIds.has(s.id) ? <CheckSquare size={20} /> : <Square size={20} />}
+                                                    </button>
+                                                </td>
+                                                <td className="py-6">
                                                     <div className="font-black text-slate-900 text-sm truncate" title={s.code}>{s.code}</div>
                                                     <div className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter opacity-60 flex items-center gap-2"><Store size={10}/> {shopIdToName.get(s.shopId) || '未知'}</div>
                                                 </td>
