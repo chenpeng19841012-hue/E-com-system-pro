@@ -159,7 +159,7 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
                     return (
                         <g key={key} className="transition-all duration-700">
                             <path d={`M ${xScale(0)},${height-padding.bottom} L ${pts} L ${xScale(dailyData.length-1)},${height-padding.bottom} Z`} fill={`url(#g-${key})`} />
-                            <path d={`M ${pts}`} fill="none" stroke={METRIC_COLORS[key]} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d={`M ${pts}`} fill="none" stroke={METRIC_COLORS[key]} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
                         </g>
                     );
                 })}
@@ -296,7 +296,15 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             sku_shop: { 
                                 code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
                                 shopName: shopName 
-                            } 
+                            },
+                            pv: 0,
+                            uv: 0,
+                            paid_items: 0,
+                            paid_amount: 0,
+                            paid_users: 0,
+                            cost: 0,
+                            clicks: 0,
+                            impressions: 0
                         });
                     }
                     return merged.get(aggKey)!;
@@ -306,20 +314,20 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 const filteredSz = sz.filter(filter);
                 filteredSz.forEach(r => {
                     const ent = getOrCreateEntry(r);
-                    ent['paid_items'] = (ent['paid_items'] || 0) + (Number(r.paid_items) || 0);
-                    ent['paid_amount'] = (ent['paid_amount'] || 0) + (Number(r.paid_amount) || 0);
-                    ent['paid_users'] = (ent['paid_users'] || 0) + (Number(r.paid_users) || Number(r.paid_customers) || 0);
-                    ent['pv'] = (ent['pv'] || 0) + (Number(r.pv) || 0);
-                    ent['uv'] = (ent['uv'] || 0) + (Number(r.uv) || 0);
+                    ent['paid_items'] += (Number(r.paid_items) || 0);
+                    ent['paid_amount'] += (Number(r.paid_amount) || 0);
+                    ent['paid_users'] += (Number(r.paid_users) || Number(r.paid_customers) || 0);
+                    ent['pv'] += (Number(r.pv) || 0);
+                    ent['uv'] += (Number(r.uv) || 0);
                 });
 
                 // 2. 只处理广告数据 -> 只累加消耗指标
                 const filteredJzt = jzt.filter(filter);
                 filteredJzt.forEach(r => {
                     const ent = getOrCreateEntry(r);
-                    ent['cost'] = (ent['cost'] || 0) + (Number(r.cost) || 0);
-                    ent['clicks'] = (ent['clicks'] || 0) + (Number(r.clicks) || 0);
-                    ent['impressions'] = (ent['impressions'] || 0) + (Number(r.impressions) || 0);
+                    ent['cost'] += (Number(r.cost) || 0);
+                    ent['clicks'] += (Number(r.clicks) || 0);
+                    ent['impressions'] += (Number(r.impressions) || 0);
                 });
                 
                 // 3. 计算衍生指标
