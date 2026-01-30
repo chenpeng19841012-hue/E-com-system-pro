@@ -84,16 +84,6 @@ export const Sidebar = ({ currentView, setCurrentView, isSidebarCollapsed, setIs
     return (
         <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-navy h-full flex flex-col shrink-0 transition-all duration-300 ease-in-out z-50 relative`}>
             
-            {/* High-Visibility Toggle Switch */}
-            <button 
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="absolute -right-4 top-[2.2rem] w-8 h-8 bg-white text-brand rounded-full flex items-center justify-center shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:scale-110 hover:bg-brand hover:text-white transition-all z-[60] border-[3px] border-white group"
-                title={isSidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
-            >
-                <div className="absolute inset-0 rounded-full border-2 border-brand/10 group-hover:border-white/20 animate-pulse"></div>
-                {isSidebarCollapsed ? <ChevronRight size={14} strokeWidth={4} /> : <ChevronLeft size={14} strokeWidth={4} />}
-            </button>
-
             {/* Logo Area */}
             <div className={`h-24 flex items-center transition-all duration-300 ${isSidebarCollapsed ? 'justify-center' : 'px-6'}`}>
                 <div className="flex items-center gap-3">

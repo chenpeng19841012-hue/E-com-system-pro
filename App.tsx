@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, CloudSync as SyncIcon } from 'lucide-react';
+import { Search, CloudSync as SyncIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/Toast';
@@ -563,6 +563,21 @@ export const App = () => {
         <div className="flex flex-row h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
             <Sidebar currentView={currentView} setCurrentView={setCurrentView} isSidebarCollapsed={isSidebarCollapsed} setIsSidebarCollapsed={setIsSidebarCollapsed} />
             <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative border-l border-slate-200">
+                <header className="h-14 bg-white/80 backdrop-blur-lg border-b border-slate-200 flex items-center px-6 shrink-0 z-20 relative">
+                    <button
+                        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                        className="absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-white text-brand rounded-full flex items-center justify-center shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:scale-110 hover:bg-brand hover:text-white transition-all z-[60] border-[3px] border-white group"
+                        title={isSidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
+                    >
+                        <div className="absolute inset-0 rounded-full border-2 border-brand/10 group-hover:border-white/20 animate-pulse"></div>
+                        {isSidebarCollapsed ? <ChevronRight size={14} strokeWidth={4} /> : <ChevronLeft size={14} strokeWidth={4} />}
+                    </button>
+                    <div className="flex items-center gap-2 ml-6">
+                        <div className="w-3 h-3 rounded-full bg-red-400 border border-red-500/50"></div>
+                        <div className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500/50"></div>
+                        <div className="w-3 h-3 rounded-full bg-green-400 border border-green-500/50"></div>
+                    </div>
+                </header>
                 <main className="flex-1 overflow-y-auto no-scrollbar relative">
                     {renderView()}
                 </main>

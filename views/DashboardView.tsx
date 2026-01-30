@@ -31,68 +31,41 @@ interface Diagnosis {
 }
 
 const IntelligenceHub = ({ setCurrentView }: { setCurrentView: (view: View) => void }) => {
-    const sections = [
-        {
-          title: '战略指挥',
-          items: [
-            { label: 'AI 仪表盘', view: 'dashboard', icon: LayoutGrid },
-            { label: '战略沙盘', view: 'multiquery', icon: Search },
-            { label: '运营报表', view: 'reports', icon: FileText },
-          ],
-        },
-        {
-            title: '智慧运营',
-            items: [
-                { label: '盈利分析', view: 'ai-profit-analytics', icon: DollarSign },
-                { label: '补货策略', view: 'ai-smart-replenishment', icon: PackagePlus },
-                { label: '竞品监控', view: 'ai-competitor-monitoring', icon: Binoculars },
-                { label: '销售预测', view: 'ai-sales-forecast', icon: TrendingUp },
-            ]
-        },
-        {
-            title: '创作工场',
-            items: [
-                { label: '文案实验', view: 'ai-description', icon: Sparkles },
-                { label: '视觉创意', view: 'ai-ad-image', icon: ImageIcon },
-                { label: '智能客服', view: 'ai-cs-assistant', icon: MessageSquare },
-                { label: '智能报价', view: 'ai-quoting', icon: Calculator },
-            ]
-        },
-        {
-            title: '数字底座',
-            items: [
-                { label: 'SKU资产', view: 'products', icon: Package },
-                { label: '底层治理', view: 'data-experience', icon: Layers },
-                { label: '云端同步', view: 'cloud-sync', icon: CloudSync },
-                { label: '数据中心', view: 'data-center', icon: Database },
-            ]
-        }
+    const allItems = [
+      { label: 'AI 仪表盘', view: 'dashboard', icon: LayoutGrid, color: 'text-blue-500', bg: 'bg-blue-100' },
+      { label: '战略沙盘', view: 'multiquery', icon: Search, color: 'text-sky-500', bg: 'bg-sky-100' },
+      { label: '运营报表', view: 'reports', icon: FileText, color: 'text-indigo-500', bg: 'bg-indigo-100' },
+      { label: '盈利分析', view: 'ai-profit-analytics', icon: DollarSign, color: 'text-green-500', bg: 'bg-green-100' },
+      { label: '补货策略', view: 'ai-smart-replenishment', icon: PackagePlus, color: 'text-teal-500', bg: 'bg-teal-100' },
+      { label: '竞品监控', view: 'ai-competitor-monitoring', icon: Binoculars, color: 'text-amber-500', bg: 'bg-amber-100' },
+      { label: '销售预测', view: 'ai-sales-forecast', icon: TrendingUp, color: 'text-lime-500', bg: 'bg-lime-100' },
+      { label: '文案实验', view: 'ai-description', icon: Sparkles, color: 'text-purple-500', bg: 'bg-purple-100' },
+      { label: '视觉创意', view: 'ai-ad-image', icon: ImageIcon, color: 'text-pink-500', bg: 'bg-pink-100' },
+      { label: '智能客服', view: 'ai-cs-assistant', icon: MessageSquare, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100' },
+      { label: '智能报价', view: 'ai-quoting', icon: Calculator, color: 'text-violet-500', bg: 'bg-violet-100' },
+      { label: 'SKU资产', view: 'products', icon: Package, color: 'text-slate-500', bg: 'bg-slate-200' },
+      { label: '底层治理', view: 'data-experience', icon: Layers, color: 'text-gray-500', bg: 'bg-gray-200' },
+      { label: '云端同步', view: 'cloud-sync', icon: CloudSync, color: 'text-stone-500', bg: 'bg-stone-200' },
+      { label: '数据中心', view: 'data-center', icon: Database, color: 'text-neutral-500', bg: 'bg-neutral-200' },
     ];
-
+  
     return (
-        <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 mb-8">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">云舟 Intelligence Hub</h2>
-            <p className="text-sm text-slate-400 font-bold mb-8">搭载 Gemini 3.0 的新一代电商全链路运营系统</p>
-            {sections.map(section => (
-                <div key={section.title} className="mb-8 last:mb-0">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{section.title}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {section.items.map(item => (
-                             <button 
-                                key={item.view} 
-                                onClick={() => setCurrentView(item.view as View)}
-                                className="flex items-center text-left p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg hover:-translate-y-1 transition-all group"
-                            >
-                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mr-4 shadow-sm border border-slate-100 group-hover:bg-brand group-hover:text-white text-slate-500 transition-colors">
-                                    <item.icon size={24} />
-                                </div>
-                                <span className="text-xs font-black text-slate-700">{item.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
+      <div className="mb-8">
+          <div className="flex flex-nowrap items-center gap-3 p-3 rounded-[24px] bg-white border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+              {allItems.map(item => (
+                   <button 
+                      key={item.view} 
+                      onClick={() => setCurrentView(item.view as View)}
+                      title={item.label}
+                      className="p-1 rounded-xl hover:bg-slate-100/50 transition-all group shrink-0"
+                  >
+                      <div className={`w-10 h-10 ${item.bg} ${item.color} rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-110`}>
+                          <item.icon size={20} strokeWidth={2.5} />
+                      </div>
+                  </button>
+              ))}
+          </div>
+      </div>
     );
 };
 
