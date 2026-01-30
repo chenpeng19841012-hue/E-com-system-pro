@@ -8,7 +8,7 @@ import {
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
     History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
     ListFilter, Calculator, Microscope, LayoutGrid, Search, FileText,
-    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync, CheckSquare
+    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync, CheckSquare, ShieldCheck
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop, View } from '../lib/types';
@@ -165,7 +165,7 @@ const DataInspectorModal = ({
                         </div>
                     </div>
 
-                    {/* NEW SECTION: Enabled SKUs */}
+                    {/* Enabled SKUs */}
                     <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner flex flex-col">
                         <h4 className="text-sm font-black text-slate-800 uppercase mb-4 flex items-center gap-2"><CheckSquare size={16} className="text-brand"/> 已纳入统计的物理资产 ({enabledSkus.length})</h4>
                         <div className="overflow-y-auto max-h-48 custom-scrollbar pr-4 -mr-4 rounded-xl">
@@ -182,7 +182,40 @@ const DataInspectorModal = ({
                         </div>
                     </div>
 
-                    {/* Lower Part: Formulas */}
+                    {/* Data Source Convention */}
+                    <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner">
+                        <h4 className="text-sm font-black text-slate-800 uppercase mb-4 flex items-center gap-2">
+                            <ShieldCheck size={16} className="text-brand"/> 核心数据源约定
+                        </h4>
+                        <div className="space-y-4 text-xs font-bold">
+                            <div className="p-4 bg-white rounded-xl border border-slate-100">
+                                <p className="flex items-center gap-2 font-black text-slate-700">
+                                    <ShoppingBag size={14} className="text-brand"/> 权威销售数据 (GMV, CA)
+                                </p>
+                                <p className="text-slate-500 mt-2 text-[11px] leading-relaxed">
+                                    所有核心销售指标，如成交金额(GMV)与成交件数(CA)，其唯一数据源为 <strong>商智事实表 (`fact_shangzhi`)</strong> 中的 `paid_amount` 与 `paid_items` 字段。
+                                </p>
+                            </div>
+                            <div className="p-4 bg-white rounded-xl border border-slate-100">
+                                <p className="flex items-center gap-2 font-black text-slate-700">
+                                    <CreditCard size={14} className="text-blue-500"/> 权威广告花费 (SPEND)
+                                </p>
+                                <p className="text-slate-500 mt-2 text-[11px] leading-relaxed">
+                                    所有广告花费数据，统一来源于 <strong>广告事实表 (`fact_jingzhuntong`)</strong> 中的 `cost` 字段。
+                                </p>
+                            </div>
+                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                                <p className="flex items-center gap-2 font-black text-amber-700">
+                                    <AlertTriangle size={14}/> 广告平台口径说明
+                                </p>
+                                <p className="text-amber-600 mt-2 text-[11px] leading-relaxed">
+                                    广告事实表本身包含的 `total_order_amount` 等销售相关字段，为广告平台统计口径，仅用于广告归因分析，<strong className="underline">不作为</strong>本控制台核心指标的计算依据，以确保口径一致。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Formulas */}
                     <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner">
                         <h4 className="text-sm font-black text-slate-800 uppercase mb-6 flex items-center gap-2"><Calculator size={16} className="text-brand"/> 指标计算公式</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
