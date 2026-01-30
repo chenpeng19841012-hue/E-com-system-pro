@@ -1,9 +1,11 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { DollarSign, Bot, LoaderCircle, AlertCircle, ChevronsUpDown, ChevronDown, Store, PieChart, LayoutDashboard, TrendingUp, ChevronLeft, ChevronRight, Sparkles, Filter, CheckSquare, Square, Search, Target, DatabaseZap } from 'lucide-react';
 import { callQwen } from '../lib/ai';
 import { DB } from '../lib/db';
 import { getSkuIdentifier } from '../lib/helpers';
 import { ProductSKU, Shop } from '../lib/types';
+import { getTodayInBeijingString, generateDateRange } from '../lib/time';
 
 interface ProfitData {
     skuCode: string;
@@ -37,12 +39,11 @@ interface KpiData {
 }
 
 const getInitialDates = () => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 6);
+    const end = getTodayInBeijingString();
+    const start = generateDateRange(end, 7)[0];
     return {
-        startDate: start.toISOString().split('T')[0],
-        endDate: end.toISOString().split('T')[0],
+        startDate: start,
+        endDate: end,
     };
 };
 

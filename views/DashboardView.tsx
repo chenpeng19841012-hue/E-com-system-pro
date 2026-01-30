@@ -13,6 +13,7 @@ import {
 import { DB } from '../lib/db';
 import { ProductSKU, Shop, View } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
+import { getTodayInBeijingString, generateDateRange } from '../lib/time';
 
 type RangeType = 'realtime' | 'yesterday' | '7d' | '30d' | 'custom';
 type MetricKey = 'gmv' | 'ca' | 'spend' | 'roi';
@@ -36,18 +37,6 @@ const getDateKey = (d: string | Date) => {
     if (!d) return 'N/A';
     if (d instanceof Date) return d.toISOString().substring(0, 10);
     return String(d).replace(/\//g, '-').substring(0, 10);
-};
-
-const generateDateRange = (endStr: string, days: number) => {
-    const dates = [];
-    const current = new Date(endStr);
-    current.setUTCHours(0,0,0,0); 
-    
-    for (let i = 0; i < days; i++) {
-        const d = new Date(current.getTime() - i * 86400000);
-        dates.push(d.toISOString().substring(0, 10));
-    }
-    return dates.reverse();
 };
 
 // ... (DataInspectorModal code remains same, omitted for brevity as it is just debugging UI) ...
@@ -251,7 +240,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
     
-    const [dataAnchorDate, setDataAnchorDate] = useState<string>(new Date().toISOString().substring(0, 10));
+    const [dataAnchorDate, setDataAnchorDate] = useState<string>(getTodayInBeijingString());
     const [isDataStale, setIsDataStale] = useState(false);
     const [viewRangeDisplay, setViewRangeDisplay] = useState('');
     const [isDebugOpen, setIsDebugOpen] = useState(false);
@@ -315,17 +304,14 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
         if (rangeType === 'realtime') {
             start = end = anchorStr;
-            const systemToday = new Date().toISOString().substring(0, 10);
+            const systemToday = getTodayInBeijingString();
             if (anchorStr < systemToday) setIsDataStale(true);
         } else if (rangeType === 'yesterday') {
-            const anchorD = new Date(anchorStr);
-            anchorD.setDate(anchorD.getDate() - 1);
-            start = end = anchorD.toISOString().substring(0, 10);
+            const range = generateDateRange(anchorStr, 2);
+            start = end = range.length > 0 ? range[0] : anchorStr;
         } else if (rangeType === 'custom') {
             start = customRange.start;
             end = customRange.end;
-            const diffTime = Math.abs(new Date(end).getTime() - new Date(start).getTime());
-            days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
         } else {
             const daysMap: Record<string, number> = { '7d': 7, '30d': 30 }; 
             days = daysMap[rangeType] || 7;
@@ -335,13 +321,19 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
         }
         
         setViewRangeDisplay(`${start} ~ ${end}`);
-
+        
         const diffDays = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
+        if (diffDays <= 0) {
+             setIsLoading(false);
+             return;
+        }
+
         const finalDateKeys = generateDateRange(end, diffDays);
 
-        const prevEndTimestamp = new Date(start).getTime() - 86400000;
-        const prevEnd = new Date(prevEndTimestamp).toISOString().substring(0, 10);
-        const prevStart = new Date(prevEndTimestamp - (diffDays - 1) * 86400000).toISOString().substring(0, 10);
+        const dayBeforeStart = generateDateRange(start, 2)[0];
+        const prevEnd = dayBeforeStart;
+        const prevStart = generateDateRange(prevEnd, diffDays)[0];
+
 
         try {
             const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
@@ -399,34 +391,58 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             const curr = processStats(currSz, currJzt);
             const prev = processStats(prevSz, prevJzt);
             
-            const dailyAgg: Record<string, DailyRecord> = {};
+            const dailyAgg: Record<string, { date: string, selfGmv: number, popGmv: number, selfCa: number, popCa: number, selfSpend: number, popSpend: number }> = {};
             finalDateKeys.forEach(ds => {
-                dailyAgg[ds] = { date: ds, self: 0, pop: 0, total: 0 };
+                dailyAgg[ds] = { date: ds, selfGmv: 0, popGmv: 0, selfCa: 0, popCa: 0, selfSpend: 0, popSpend: 0 };
             });
-            
-            const factorTable = activeMetric === 'gmv' ? currSz : (activeMetric === 'spend' ? currJzt : currSz);
-            
-            factorTable.forEach(r => {
+
+            currSz.forEach(r => {
                 const dateKey = getDateKey(r.date);
                 if (!dailyAgg[dateKey]) return; 
-                
                 const code = getSkuIdentifier(r)?.trim();
                 if (!code) return;
-                
                 const skuConfig = enabledSkusMap.get(code);
-                if (!skuConfig) return; // 严格过滤
-
+                if (!skuConfig) return;
                 const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
+                const gmv = Number(r.paid_amount) || 0;
+                const ca = Number(r.paid_items) || 0;
+                if (['自营', '入仓'].includes(shopMode)) {
+                    dailyAgg[dateKey].selfGmv += gmv;
+                    dailyAgg[dateKey].selfCa += ca;
+                } else {
+                    dailyAgg[dateKey].popGmv += gmv;
+                    dailyAgg[dateKey].popCa += ca;
+                }
+            });
 
-                let val = 0;
-                if (activeMetric === 'gmv') val = Number(r.paid_amount);
-                else if (activeMetric === 'ca') val = Number(r.paid_items);
-                else if (activeMetric === 'spend') val = Number(r.cost);
-                else if (activeMetric === 'roi') val = Number(r.paid_amount); 
-                
-                if (['自营', '入仓'].includes(shopMode)) dailyAgg[dateKey].self += val; 
-                else dailyAgg[dateKey].pop += val;
-                dailyAgg[dateKey].total += val;
+            currJzt.forEach(r => {
+                const dateKey = getDateKey(r.date);
+                if (!dailyAgg[dateKey]) return; 
+                const code = getSkuIdentifier(r)?.trim();
+                if (!code) return;
+                const skuConfig = enabledSkusMap.get(code);
+                if (!skuConfig) return;
+                const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
+                const spend = Number(r.cost) || 0;
+                if (['自营', '入仓'].includes(shopMode)) {
+                    dailyAgg[dateKey].selfSpend += spend;
+                } else {
+                    dailyAgg[dateKey].popSpend += spend;
+                }
+            });
+            
+            const trendRecords = Object.values(dailyAgg).map(d => {
+                let selfVal = 0, popVal = 0;
+                switch(activeMetric) {
+                    case 'gmv': selfVal = d.selfGmv; popVal = d.popGmv; break;
+                    case 'ca': selfVal = d.selfCa; popVal = d.popCa; break;
+                    case 'spend': selfVal = d.selfSpend; popVal = d.popSpend; break;
+                    case 'roi': 
+                        selfVal = d.selfSpend > 0 ? d.selfGmv / d.selfSpend : 0;
+                        popVal = d.popSpend > 0 ? d.popGmv / d.popSpend : 0;
+                        break;
+                }
+                return { date: d.date, self: selfVal, pop: popVal, total: selfVal + popVal };
             });
 
             setData({
@@ -439,7 +455,8 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                     pop: { current: curr.spend.pop > 0 ? curr.gmv.pop / curr.spend.pop : 0, previous: prev.spend.pop > 0 ? prev.gmv.pop / prev.spend.pop : 0 }
                 }
             });
-            setTrends(Object.values(dailyAgg).sort((a, b) => a.date.localeCompare(b.date)));
+            
+            setTrends(trendRecords.sort((a, b) => a.date.localeCompare(b.date)));
 
             // --- Start AI Strategic Diagnosis ---
             const diag: Diagnosis[] = [];
@@ -556,14 +573,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                                 </span>
                             </div>
                         )}
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
-                                <CalendarDays size={10} className="text-blue-500" />
-                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest leading-none">
-                                    View Range: {viewRangeDisplay}
-                                </span>
-                            </div>
-                        </div>
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">战略指挥控制台</h1>
                     <p className="text-slate-400 font-bold text-sm tracking-wide">Strategic Performance Intelligence & AI Dashboard</p>

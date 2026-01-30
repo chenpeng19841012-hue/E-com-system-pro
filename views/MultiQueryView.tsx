@@ -4,6 +4,7 @@ import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDow
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
 import { DB } from '../lib/db';
+import { getTodayInBeijingString, generateDateRange } from '../lib/time';
 
 interface MultiQueryViewProps {
     skus: ProductSKU[];
@@ -184,8 +185,11 @@ const TrendChart = ({ dailyData, chartMetrics, metricsMap }: { dailyData: any[],
 };
 
 export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryViewProps) => {
-    const [startDate, setStartDate] = useState(new Date(Date.now() - 6*86400000).toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const initialEnd = getTodayInBeijingString();
+    const initialStart = generateDateRange(initialEnd, 7)[0];
+
+    const [startDate, setStartDate] = useState(initialStart);
+    const [endDate, setEndDate] = useState(initialEnd);
     const [timeDimension, setTimeDimension] = useState('day');
     const [selectedShopId, setSelectedShopId] = useState('all');
     const [skuInput, setSkuInput] = useState('');
