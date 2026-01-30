@@ -490,7 +490,7 @@ export const App = () => {
                     <div className="absolute inset-0 bg-brand/30 rounded-full blur-[60px] animate-pulse w-32 h-32 -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2"></div>
                     
                     {/* Logo Container */}
-                    <div className="relative z-10 w-28 h-28 bg-white rounded-[32px] shadow-[0_20px_50px_-12px_rgba(112,173,71,0.3)] flex items-center justify-center border border-white/80 backdrop-blur-sm">
+                    <div className="relative z-10 w-28 h-28 bg-white rounded-[32px] shadow-[0_20px_50px_-12px_rgba(112,173,71,0.3)] flex items-center justify-center border border-white/80 backdrop-blur-sm mb-6">
                         <div className="text-4xl font-black text-brand tracking-tighter">云舟</div>
                     </div>
 
