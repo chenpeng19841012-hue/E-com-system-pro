@@ -39,7 +39,7 @@ const ImportProgressModal = ({ isOpen, progress, status, errorReport }: { isOpen
 };
 
 // ADD/EDIT MODALS
-const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, title, confirmText }: any) => {
+const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, allSkus, shops, addToast, title, confirmText }: any) => {
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
     const [shopId, setShopId] = useState('');
@@ -89,10 +89,18 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
 
     const handleConfirm = async () => {
         setError('');
-        if (!code.trim() || !name.trim() || !shopId) {
-            setError('核心物理字段不可为空。');
+        if (!code.trim() || !shopId) {
+            setError('SKU 物理编码和归属店铺为必填项。');
             return;
         }
+
+        if (!skuToEdit && allSkus) {
+            if (allSkus.some((s: ProductSKU) => s.code === code.trim())) {
+                setError('SKU 物理编码已存在，不可重复。');
+                return;
+            }
+        }
+
         const payload = {
             id: skuToEdit?.id,
             code: code.trim(),
@@ -134,7 +142,7 @@ const SKUFormModal = ({ isOpen, onClose, onConfirm, skuToEdit, shops, addToast, 
                             <input type="text" value={code} onChange={e => setCode(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner font-mono" />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">资产名称 *</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">资产名称</label>
                             <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-800 outline-none focus:border-brand shadow-inner" />
                         </div>
                     </div>
@@ -406,6 +414,7 @@ interface SKUManagementViewProps {
     onAddNewSKU: (sku: any) => Promise<boolean>;
     onUpdateSKU: (sku: ProductSKU) => Promise<boolean>;
     onDeleteSKU: (id: string) => Promise<void>;
+    onBulkDeleteSKUs: (ids: string[]) => Promise<void>;
     onBulkAddSKUs: (skus: any[]) => Promise<void>;
     onAddNewShop: (shop: any) => Promise<boolean>;
     onUpdateShop: (shop: Shop) => Promise<boolean>;
@@ -421,7 +430,6 @@ interface SKUManagementViewProps {
     addToast: (type: 'success' | 'error', title: string, message: string) => void;
 }
 
-// ... (Existing components: BulkActionSelect, BulkActionToolbar)
 const BulkActionSelect = ({ label, options, onApply }: { label:string, options: {value:string, label:string}[], onApply: (value:string) => void }) => (
     <div className="relative">
         <select 
@@ -436,7 +444,7 @@ const BulkActionSelect = ({ label, options, onApply }: { label:string, options: 
     </div>
 );
 
-const BulkActionToolbar = ({ selectedCount, onUpdate, onClear }: { selectedCount: number, onUpdate: (field: keyof ProductSKU, value: any) => void, onClear: () => void }) => {
+const BulkActionToolbar = ({ selectedCount, onUpdate, onClear, onDelete }: { selectedCount: number, onUpdate: (field: keyof ProductSKU, value: any) => void, onClear: () => void, onDelete: () => void }) => {
     return (
         <div className="w-full bg-blue-50 border-2 border-blue-200 rounded-3xl p-4 flex items-center justify-between animate-fadeIn">
             <div className="flex items-center gap-4">
@@ -447,6 +455,9 @@ const BulkActionToolbar = ({ selectedCount, onUpdate, onClear }: { selectedCount
                 <BulkActionSelect label="修改模式" onApply={value => onUpdate('mode', value)} options={[{label: '入仓', value: '入仓'}, {label: '厂直', value: '厂直'}]} />
                 <BulkActionSelect label="修改状态" onApply={value => onUpdate('status', value)} options={[{label: '在售', value: '在售'}, {label: '待售', value: '待售'}, {label: '下架', value: '下架'}]} />
                 <BulkActionSelect label="修改统计" onApply={value => onUpdate('isStatisticsEnabled', value === 'true')} options={[{label: '参与统计', value: 'true'}, {label: '忽略统计', value: 'false'}]} />
+                <button onClick={onDelete} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-500 font-black text-[10px] rounded-xl hover:bg-rose-100 border border-rose-100 transition-colors shadow-sm uppercase tracking-widest active:scale-95">
+                    <Trash2 size={12}/> 删除选中
+                </button>
             </div>
         </div>
     );
@@ -455,17 +466,15 @@ const BulkActionToolbar = ({ selectedCount, onUpdate, onClear }: { selectedCount
 
 export const SKUManagementView = ({ 
     shops, skus, agents, skuLists,
-    onAddNewSKU, onUpdateSKU, onDeleteSKU, onBulkAddSKUs,
+    onAddNewSKU, onUpdateSKU, onDeleteSKU, onBulkDeleteSKUs, onBulkAddSKUs,
     onAddNewShop, onUpdateShop, onDeleteShop, onBulkAddShops,
     onAddNewAgent, onUpdateAgent, onDeleteAgent, onBulkAddAgents,
     onAddNewSkuList, onUpdateSkuList, onDeleteSkuList,
     addToast 
 }: SKUManagementViewProps) => {
-    // ... (Existing State) ...
     const [activeTab, setActiveTab] = useState<ProductSubView>('sku');
     const [importModal, setImportModal] = useState({ isOpen: false, progress: 0, status: '', errors: [] as string[] });
 
-    // ... (Modals State) ...
     const [isAddSKUModalOpen, setIsAddSKUModalOpen] = useState(false);
     const [editingSku, setEditingSku] = useState<ProductSKU | null>(null);
     const skuFileInputRef = useRef<HTMLInputElement>(null);
@@ -479,9 +488,9 @@ export const SKUManagementView = ({
     const [editingList, setEditingList] = useState<SkuList | null>(null);
     const [expandedListId, setExpandedListId] = useState<string | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'sku' | 'shop' | 'agent' | 'list' } | null>(null);
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
 
-    // SKU Filter States - CHANGED: Replace selectedBrand with selectedStats
-    const [selectedStats, setSelectedStats] = useState('all'); // 'all' | 'true' | 'false'
+    const [selectedStats, setSelectedStats] = useState('all');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedShop, setSelectedShop] = useState('all');
     const [selectedStatus, setSelectedStatus] = useState('all');
@@ -491,10 +500,8 @@ export const SKUManagementView = ({
     const [skuSearchText, setSkuSearchText] = useState('');
     const [appliedSkuSearch, setAppliedSkuSearch] = useState<string[]>([]);
     
-    // NEW: Selection state for bulk actions
     const [selectedSkuIds, setSelectedSkuIds] = useState<Set<string>>(new Set());
 
-    // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const ROWS_PER_PAGE = 50;
 
@@ -503,7 +510,6 @@ export const SKUManagementView = ({
     const uniqueCategories = useMemo(() => Array.from(new Set(skus.map(sku => sku.category).filter(Boolean))).sort(), [skus]);
     const uniqueModels = useMemo(() => Array.from(new Set(skus.map(sku => sku.model).filter(Boolean))).sort(), [skus]);
 
-    // FILTER LOGIC - UPDATED
     const filteredSkus = useMemo(() => {
         return skus.filter(sku => {
             const statsMatch = selectedStats === 'all' || 
@@ -525,7 +531,6 @@ export const SKUManagementView = ({
         });
     }, [skus, selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
 
-    // ... (rest of filtering and sorting logic) ...
     const sortedAndFilteredSkus = useMemo(() => {
         const order: any = { '在售': 1, '待售': 2, '下架': 3 };
         return [...filteredSkus].sort((a, b) => (order[a.status ?? '下架'] || 99) - (order[b.status ?? '下架'] || 99));
@@ -539,11 +544,9 @@ export const SKUManagementView = ({
 
     useEffect(() => {
         setCurrentPage(1);
-        setSelectedSkuIds(new Set()); // Reset selection on filter change
+        setSelectedSkuIds(new Set()); 
     }, [selectedStats, selectedCategory, selectedShop, selectedStatus, selectedAdStatus, selectedMode, selectedModel, appliedSkuSearch]);
 
-    // ... (Handlers) ...
-    // NEW: Selection handlers
     const handleSelectSku = (id: string) => {
         const newSelection = new Set(selectedSkuIds);
         if (newSelection.has(id)) newSelection.delete(id);
@@ -559,7 +562,6 @@ export const SKUManagementView = ({
         }
     };
     
-    // NEW: Bulk update handler
     const handleBulkUpdate = async (field: keyof ProductSKU, value: any) => {
         if (selectedSkuIds.size === 0) return;
 
@@ -570,6 +572,13 @@ export const SKUManagementView = ({
         await onBulkAddSKUs(skusToUpdate);
         addToast('success', '批量更新成功', `已更新 ${selectedSkuIds.size} 项资产。`);
         setSelectedSkuIds(new Set());
+    };
+    
+    const handleConfirmBulkDelete = async () => {
+        if (selectedSkuIds.size === 0) return;
+        await onBulkDeleteSKUs(Array.from(selectedSkuIds));
+        setSelectedSkuIds(new Set());
+        setIsBulkDeleteModalOpen(false);
     };
 
     const handleSearchClick = () => {
@@ -593,7 +602,6 @@ export const SKUManagementView = ({
         setDeleteTarget(null);
     };
 
-    // ... (Export/Import Handlers) ...
     const handleDownloadTemplate = (type: 'sku' | 'shop' | 'agent') => {
         let headers = type === 'sku' ? ['SKU编码 (code)', '商品名称 (name)', '店铺名称 (shopName)', '品牌 (brand)', '类目 (category)', '型号 (model)', '小型号 (subModel)', 'MTM (mtm)', '配置 (configuration)', '成本价 (costPrice)', '前台价 (sellingPrice)', '促销价 (promoPrice)', '京东点位% (jdCommission)', '入仓库存 (warehouseStock)', '厂直库存 (factoryStock)', '模式 (mode)', '状态 (status)', '广告 (advertisingStatus)', '统计 (isStatisticsEnabled)']
                     : type === 'shop' ? ['店铺名称 (name)', '店铺ID (platformId)', '经营模式 (mode)']
@@ -690,15 +698,18 @@ export const SKUManagementView = ({
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 pb-20 bg-[#F8FAFC] min-h-screen">
-            {/* ... (ImportProgressModal, ConfirmModal, SKUFormModal, ShopFormModal, AgentFormModal, SkuListFormModal, Inputs) same as before ... */}
             <ImportProgressModal isOpen={importModal.isOpen} progress={importModal.progress} status={importModal.status} errorReport={importModal.errors} />
             <ConfirmModal isOpen={!!deleteTarget} title="物理层删除确认" onConfirm={handleConfirmDelete} onCancel={() => setDeleteTarget(null)} confirmText="永久移除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>您正在执行物理层移除指令：<strong className="font-black text-slate-900">"{deleteTarget?.name}"</strong></p>
                 <p className="mt-2 text-rose-500 font-bold opacity-80">该操作将永久注销资产名录中的对应记录，无法撤销。</p>
             </ConfirmModal>
+            <ConfirmModal isOpen={isBulkDeleteModalOpen} title="批量物理删除确认" onConfirm={handleConfirmBulkDelete} onCancel={() => setIsBulkDeleteModalOpen(false)} confirmText={`确认移除 (${selectedSkuIds.size})`} confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
+                <p>您正在执行批量物理层移除指令，共选中 <strong className="font-black text-rose-600">{selectedSkuIds.size}</strong> 项资产。</p>
+                <p className="mt-2 text-rose-500 font-bold opacity-80">该操作将永久注销这些记录，无法撤销。</p>
+            </ConfirmModal>
 
-            <SKUFormModal isOpen={isAddSKUModalOpen} onClose={() => setIsAddSKUModalOpen(false)} onConfirm={onAddNewSKU} shops={shops} addToast={addToast} title="新增 SKU 物理资产" confirmText="确认录入" />
-            {editingSku && <SKUFormModal isOpen={!!editingSku} onClose={() => setEditingSku(null)} onConfirm={onUpdateSKU} skuToEdit={editingSku} shops={shops} addToast={addToast} title="修订 SKU 资产参数" confirmText="确认更新" />}
+            <SKUFormModal isOpen={isAddSKUModalOpen} onClose={() => setIsAddSKUModalOpen(false)} onConfirm={onAddNewSKU} shops={shops} allSkus={skus} addToast={addToast} title="新增 SKU 物理资产" confirmText="确认录入" />
+            {editingSku && <SKUFormModal isOpen={!!editingSku} onClose={() => setEditingSku(null)} onConfirm={onUpdateSKU} skuToEdit={editingSku} shops={shops} allSkus={skus} addToast={addToast} title="修订 SKU 资产参数" confirmText="确认更新" />}
             <ShopFormModal isOpen={isAddShopModalOpen} onClose={() => setIsAddShopModalOpen(false)} onConfirm={onAddNewShop} title="建立店铺资产" confirmText="确认新增" />
             {editingShop && <ShopFormModal isOpen={!!editingShop} onClose={() => setEditingShop(null)} onConfirm={onUpdateShop} shopToEdit={editingShop} title="修订店铺资产" confirmText="确认更新" />}
             <AgentFormModal isOpen={isAddAgentModalOpen} onClose={() => setIsAddAgentModalOpen(false)} onConfirm={onAddNewAgent} shops={shops} title="同步客服席位" confirmText="确认新增" />
@@ -709,7 +720,6 @@ export const SKUManagementView = ({
             <input type="file" ref={shopFileInputRef} onChange={(e) => handleFileSelected(e, 'shop')} accept=".xlsx, .xls" className="hidden" />
             <input type="file" ref={agentFileInputRef} onChange={(e) => handleFileSelected(e, 'agent')} accept=".xlsx, .xls" className="hidden" />
 
-            {/* Command Header - Standardized */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-10 border-b border-slate-200 pb-8">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -733,13 +743,11 @@ export const SKUManagementView = ({
                 
                 {activeTab === 'sku' && (
                     <div className="space-y-12 relative z-10">
-                        {/* Filter Control Matrix */}
                         <div className="bg-slate-50/50 rounded-[40px] p-10 border border-slate-100 shadow-inner space-y-8">
                             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-5">
                                 <SelectFilter label="归属店铺" value={selectedShop} onChange={setSelectedShop} options={[{v:'all',l:'全域探测'}, ...shops.map(s=>({v:s.id,l:s.name}))]} />
                                 <SelectFilter label="类目筛选" value={selectedCategory} onChange={setSelectedCategory} options={[{v:'all',l:'所有类目'}, ...uniqueCategories.map(c=>({v:c,l:c}))]} />
                                 
-                                {/* REPLACED: Brand -> Statistics Status */}
                                 <SelectFilter label="统计状态" value={selectedStats} onChange={setSelectedStats} options={[{v:'all',l:'全部状态'}, {v:'true',l:'统计中'}, {v:'false',l:'已忽略'}]} />
                                 
                                 <SelectFilter label="型号检索" value={selectedModel} onChange={setSelectedModel} options={[{v:'all',l:'所有型号'}, ...uniqueModels.map(m=>({v:m,l:m}))]} />
@@ -759,7 +767,6 @@ export const SKUManagementView = ({
                             </div>
                         </div>
 
-                        {/* Action Bar */}
                         {selectedSkuIds.size === 0 ? (
                             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                                 <div className="flex items-center gap-4">
@@ -776,15 +783,19 @@ export const SKUManagementView = ({
                                 </div>
                             </div>
                         ) : (
-                            <BulkActionToolbar selectedCount={selectedSkuIds.size} onUpdate={handleBulkUpdate} onClear={() => setSelectedSkuIds(new Set())} />
+                            <BulkActionToolbar 
+                                selectedCount={selectedSkuIds.size} 
+                                onUpdate={handleBulkUpdate} 
+                                onClear={() => setSelectedSkuIds(new Set())}
+                                onDelete={() => setIsBulkDeleteModalOpen(true)}
+                            />
                         )}
 
-                        {/* High-Density Table */}
                         <div className="overflow-x-auto rounded-[40px] border border-slate-100 no-scrollbar shadow-inner bg-white">
                             <table className="w-full text-sm table-fixed min-w-[1400px]">
                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                     <tr className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] border-b border-slate-100">
-                                        <th className="w-[4%] text-center pl-10 py-6">
+                                        <th className="w-[4%] text-center py-6">
                                             <button onClick={handleSelectAllSkus} className="text-slate-300 hover:text-brand transition-colors">
                                                 {selectedSkuIds.size === sortedAndFilteredSkus.length && sortedAndFilteredSkus.length > 0 ? <CheckSquare size={20} className="text-brand" /> : <Square size={20} />}
                                             </button>
@@ -807,7 +818,7 @@ export const SKUManagementView = ({
                                     ) : (
                                         paginatedSkus.map(s => (
                                             <tr key={s.id} className={`hover:bg-slate-50/50 transition-all group/row ${selectedSkuIds.has(s.id) ? 'bg-blue-50/50' : ''}`}>
-                                                <td className="py-6 pl-10 text-center">
+                                                <td className="py-6 text-center">
                                                     <button onClick={() => handleSelectSku(s.id)} className={`${selectedSkuIds.has(s.id) ? 'text-brand' : 'text-slate-200'} hover:text-brand transition-colors`}>
                                                         {selectedSkuIds.has(s.id) ? <CheckSquare size={20} /> : <Square size={20} />}
                                                     </button>
@@ -874,7 +885,6 @@ export const SKUManagementView = ({
                             </table>
                         </div>
 
-                        {/* Pagination Area */}
                         {totalPages > 1 && (
                             <div className="flex items-center justify-between pt-8">
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">展示 {(currentPage - 1) * ROWS_PER_PAGE + 1} - {Math.min(currentPage * ROWS_PER_PAGE, sortedAndFilteredSkus.length)} / 共 {sortedAndFilteredSkus.length}</span>
@@ -894,7 +904,6 @@ export const SKUManagementView = ({
 
                 {activeTab !== 'sku' && (
                     <div className="space-y-12 animate-fadeIn">
-                        {/* ... (Shops, Agents, Lists views content) ... */}
                         <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-8">
                              <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-center text-brand">

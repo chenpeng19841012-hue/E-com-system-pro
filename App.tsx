@@ -198,6 +198,17 @@ export const App = () => {
         return true;
     };
 
+    const onBulkDeleteSKUs = async (ids: string[]) => {
+        try {
+            const idSet = new Set(ids);
+            const remainingSkus = skus.filter(s => !idSet.has(s.id));
+            await handleBulkSave('dim_skus', remainingSkus, 'SKU');
+            addToast('success', '批量删除成功', `已成功移除 ${ids.length} 项资产。`);
+        } catch (e) {
+            addToast('error', '批量删除失败', '操作数据库时发生错误。');
+        }
+    };
+
     // --- HELPER: Safe ID Normalizer (Handles Scientific Notation) ---
     const normalizeIdString = (val: any) => {
         if (val === undefined || val === null || val === '') return null;
@@ -477,7 +488,8 @@ export const App = () => {
                     skuLists={skuLists} 
                     onAddNewSKU={async (s)=> { const n = [...skus, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_skus', n, 'SKU'); return true; }} 
                     onUpdateSKU={handleUpdateSKU} 
-                    onDeleteSKU={async (id)=> { const n = skus.filter(x=>x.id!==id); await handleBulkSave('dim_skus', n, 'SKU'); }} 
+                    onDeleteSKU={async (id)=> onBulkDeleteSKUs([id])}
+                    onBulkDeleteSKUs={onBulkDeleteSKUs}
                     onBulkAddSKUs={async (newList)=> { 
                         const updatedSkus = [...skus];
                         newList.forEach(newItem => {
