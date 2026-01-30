@@ -235,21 +235,20 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
     );
 };
 
-export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast, cachedData }: { setCurrentView: (view: View) => void, skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
+export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast }: { setCurrentView: (view: View) => void, skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
     
     const [dataAnchorDate, setDataAnchorDate] = useState<string>(getTodayInBeijingString());
     const [isDataStale, setIsDataStale] = useState(false);
-    const [viewRangeDisplay, setViewRangeDisplay] = useState('');
     const [isDebugOpen, setIsDebugOpen] = useState(false);
     
     const [debugRawData, setDebugRawData] = useState<{shangzhi: any[], jingzhuntong: any[]}>({ shangzhi: [], jingzhuntong: [] });
 
     const [customRange, setCustomRange] = useState({
-        start: new Date(Date.now() - 14 * 86400000).toISOString().substring(0, 10),
-        end: new Date().toISOString().substring(0, 10)
+        start: generateDateRange(getTodayInBeijingString(), 14)[0],
+        end: getTodayInBeijingString()
     });
     
     const [data, setData] = useState<Record<MetricKey, MetricGroup>>({
@@ -268,7 +267,12 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
-            setDataAnchorDate(factStats.shangzhi.latestDate);
+            const latestDataDate = factStats.shangzhi.latestDate;
+            const today = getTodayInBeijingString();
+            setDataAnchorDate(latestDataDate);
+            if (latestDataDate < today) {
+                setIsDataStale(true);
+            }
         }
     }, [factStats]);
 
@@ -294,46 +298,35 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     const fetchData = async () => {
         setIsLoading(true);
-        setIsDataStale(false);
 
         let start = "";
         let end = "";
-        let days = 1;
         
-        const anchorStr = getDateKey(dataAnchorDate);
+        const anchorStr = dataAnchorDate;
 
         if (rangeType === 'realtime') {
             start = end = anchorStr;
-            const systemToday = getTodayInBeijingString();
-            if (anchorStr < systemToday) setIsDataStale(true);
         } else if (rangeType === 'yesterday') {
             const range = generateDateRange(anchorStr, 2);
-            start = end = range.length > 0 ? range[0] : anchorStr;
+            start = end = range.length > 1 ? range[0] : anchorStr;
         } else if (rangeType === 'custom') {
             start = customRange.start;
             end = customRange.end;
         } else {
             const daysMap: Record<string, number> = { '7d': 7, '30d': 30 }; 
-            days = daysMap[rangeType] || 7;
+            const days = daysMap[rangeType] || 7;
             end = anchorStr;
             const range = generateDateRange(anchorStr, days);
-            start = range[0];
+            start = range.length > 0 ? range[0] : anchorStr;
         }
         
-        setViewRangeDisplay(`${start} ~ ${end}`);
-        
-        const diffDays = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
-        if (diffDays <= 0) {
-             setIsLoading(false);
-             return;
-        }
-
+        const diffDays = Math.max(1, Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1);
         const finalDateKeys = generateDateRange(end, diffDays);
 
-        const dayBeforeStart = generateDateRange(start, 2)[0];
-        const prevEnd = dayBeforeStart;
-        const prevStart = generateDateRange(prevEnd, diffDays)[0];
-
+        const dayBeforeStartRange = generateDateRange(start, 2);
+        const prevEnd = dayBeforeStartRange.length > 1 ? dayBeforeStartRange[0] : start;
+        const prevStartRange = generateDateRange(prevEnd, diffDays);
+        const prevStart = prevStartRange.length > 0 ? prevStartRange[0] : prevEnd;
 
         try {
             const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
