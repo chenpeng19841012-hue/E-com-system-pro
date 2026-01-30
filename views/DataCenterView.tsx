@@ -402,9 +402,9 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[24px] p-6 flex flex-row items-center justify-between relative group/upload">
-                                <div className="flex items-center gap-5">
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-md text-brand group-hover/upload:scale-110 transition-transform duration-500 shrink-0">
+                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[24px] p-4 flex flex-row items-center justify-between relative group/upload">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md text-brand group-hover/upload:scale-110 transition-transform duration-500 shrink-0">
                                         {isAnalyzing ? <LoaderCircle size={24} className="animate-spin" /> : <UploadCloud size={24} />}
                                     </div>
                                     <div className="text-left">
@@ -418,7 +418,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                                 <div className="relative">
                                     <input type="file" onChange={handleFileSelect} accept=".xlsx, .xls" disabled={isAnalyzing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <button disabled={isAnalyzing} className="px-8 py-4 bg-white border border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
+                                    <button disabled={isAnalyzing} className="px-8 py-3 bg-white border border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
                                         {isAnalyzing ? '分析中...' : '选择本地文件'}
                                     </button>
                                 </div>
@@ -549,7 +549,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                         {history.length === 0 ? (
                             <tr><td colSpan={6} className="py-40 text-center opacity-30 italic font-black uppercase tracking-widest text-slate-300">Awaiting Data Inflow</td></tr>
                         ) : (
-                            history.map((h: UploadHistory) => (
+                            history.slice(0, 20).map((h: UploadHistory) => (
                                 <tr key={h.id} className="hover:bg-slate-50/50 transition-all group/row">
                                     <td className="py-6 pl-10">
                                         <div className="flex items-center gap-3">
