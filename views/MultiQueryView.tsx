@@ -221,38 +221,26 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const shopMap = new Map(shops.map(s => [s.id, s]));
 
-            // Fetch data
-            const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate);
-            const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate);
+            const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate, isExplicitSearch ? parsedSkus : undefined);
+            const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate, isExplicitSearch ? parsedSkus : undefined);
 
-            // 🛡️ 核心修复：更智能的 SKU 匹配过滤器
             const filter = (row: any) => {
-                const codeRaw = getSkuIdentifier(row); 
-                if (!row.date || !codeRaw) return false;
+                const codeRaw = getSkuIdentifier(row);
+                if (!codeRaw) return false;
                 const code = String(codeRaw).trim();
 
-                if (isExplicitSearch) {
-                    if (!parsedSkus.includes(code)) return false;
-                    
-                    // 如果指定了具体 SKU，放宽店铺匹配（如果数据没归档店铺但 SKU 匹配，也放行）
-                    if (selectedShopId !== 'all') {
-                        const asset = enabledSkusMap.get(code); 
-                        if (asset) {
-                            if (asset.shopId !== selectedShopId) return false;
-                        } else if (row.shop_name) {
-                            const targetShopName = shopMap.get(selectedShopId)?.name;
-                            if (targetShopName && row.shop_name !== targetShopName) return false;
-                        }
-                        // Fallback: If searching by SKU, assume user wants to see it even if shop info is missing
-                    }
-                    return true;
+                if (!isExplicitSearch && !enabledSkusMap.has(code)) {
+                    return false;
                 }
 
-                // If not searching by SKU, enforce asset check stricter
-                const asset = enabledSkusMap.get(code);
-                if (!asset) return false;
                 if (selectedShopId !== 'all') {
-                    if (asset.shopId !== selectedShopId) return false;
+                    const asset = enabledSkusMap.get(code);
+                    if (asset) {
+                        if (asset.shopId !== selectedShopId) return false;
+                    } else {
+                        const targetShopName = shopMap.get(selectedShopId)?.name;
+                        if (row.shop_name !== targetShopName) return false;
+                    }
                 }
                 return true;
             };
@@ -263,9 +251,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 const getOrCreateEntry = (row: any) => {
                     let key = String(row.date).substring(0, 10);
                     
-                    if (timeDimension === 'month') {
-                        key = key.substring(0, 7); 
-                    } else if (timeDimension === 'week') {
+                    if (timeDimension === 'month') key = key.substring(0, 7); 
+                    else if (timeDimension === 'week') {
                         const d = new Date(key);
                         d.setUTCDate(d.getUTCDate() - (d.getDay() || 7) + 1);
                         key = d.toISOString().split('T')[0];
@@ -280,19 +267,13 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         const code = String(getSkuIdentifier(row)).trim();
                         if (parsedSkus.length === 1) {
                              const asset = enabledSkusMap.get(code);
-                             if(asset) {
-                                 shopName = shopMap.get(asset.shopId)?.name || '未知';
-                             } else if (row.shop_name) {
-                                 shopName = row.shop_name + " (Raw)";
-                             } else {
-                                 // 当没有找到资产配置时，使用原始数据
-                                 shopName = "未归档资产";
-                             }
+                             if(asset) shopName = shopMap.get(asset.shopId)?.name || '未知';
+                             else if (row.shop_name) shopName = row.shop_name + " (Raw)";
+                             else shopName = "未归档资产";
                         }
 
                         merged.set(aggKey, { 
-                            date: key, 
-                            aggDate: aggKey, 
+                            date: key, aggDate: aggKey, 
                             sku_code: 'AGGREGATED', 
                             sku_shop: { 
                                 code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
@@ -305,7 +286,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     return merged.get(aggKey)!;
                 };
 
-                // 1. 只处理商智数据 -> 只累加销售指标
                 const filteredSz = sz.filter(filter);
                 filteredSz.forEach(r => {
                     const ent = getOrCreateEntry(r);
@@ -316,7 +296,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     ent['uv'] += (Number(r.uv) || 0);
                 });
 
-                // 2. 只处理广告数据 -> 只累加消耗指标
                 const filteredJzt = jzt.filter(filter);
                 filteredJzt.forEach(r => {
                     const ent = getOrCreateEntry(r);
@@ -325,7 +304,6 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     ent['impressions'] += (Number(r.impressions) || 0);
                 });
                 
-                // 3. 计算衍生指标
                 Array.from(merged.values()).forEach((ent: any) => {
                     ent['cpc'] = ent['clicks'] > 0 ? ent['cost'] / ent['clicks'] : 0;
                     ent['roi'] = ent['cost'] > 0 ? ent['paid_amount'] / ent['cost'] : 0;
@@ -343,8 +321,8 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             if (comparisonType === 'period') { cE = new Date(mainStart); cE.setDate(cE.getDate()-1); cS = new Date(cE.getTime() - diff); }
             else { cS = new Date(mainStart); cS.setFullYear(cS.getFullYear()-1); cE = new Date(mainEnd); cE.setFullYear(cE.getFullYear()-1); }
             
-            const compRowsSz = await DB.getRange('fact_shangzhi', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
-            const compRowsJzt = await DB.getRange('fact_jingzhuntong', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0]);
+            const compRowsSz = await DB.getRange('fact_shangzhi', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0], isExplicitSearch ? parsedSkus : undefined);
+            const compRowsJzt = await DB.getRange('fact_jingzhuntong', cS.toISOString().split('T')[0], cE.toISOString().split('T')[0], isExplicitSearch ? parsedSkus : undefined);
             const compData = processData(compRowsSz, compRowsJzt);
 
             const calcTotals = (d: any[]) => {
@@ -355,17 +333,19 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
 
             const dMap = new Map<string, any>();
             mainData.forEach(r => {
-                if (!dMap.has(r.aggDate)) dMap.set(r.aggDate, { date: r.aggDate });
+                if (!dMap.has(r.aggDate)) dMap.set(r.aggDate, { date: r.aggDate, pv: 0, uv: 0, paid_items: 0, paid_amount: 0, cost: 0, clicks: 0, paid_users: 0 });
                 const ent = dMap.get(r.aggDate);
-                [...VISUAL_METRICS, 'clicks', 'paid_users', 'total_order_amount'].forEach(k => ent[k] = (ent[k] || 0) + (Number(r[k]) || 0));
+                Object.keys(ent).forEach(k => {
+                    if (k !== 'date') ent[k] += (Number(r[k]) || 0);
+                });
             });
             const dData = Array.from(dMap.values()).sort((a,b) => a.date.localeCompare(b.date));
-            dData.forEach(d => { d.cpc = d.clicks ? d.cost / d.clicks : 0; d.roi = d.cost ? (d.total_order_amount || d.paid_amount || 0) / d.cost : 0; d.paid_conversion_rate = d.uv ? d.paid_users / d.uv : 0; });
+            dData.forEach(d => { d.cpc = d.clicks ? d.cost / d.clicks : 0; d.roi = d.cost ? d.paid_amount / d.cost : 0; d.paid_conversion_rate = d.uv ? d.paid_users / d.uv : 0; });
 
             setVisualisationData({ mainTotals: calcTotals(mainData), compTotals: calcTotals(compData), dailyData: dData });
             setQueryResult(mainData.sort((a,b) => b.date.localeCompare(a.date)));
             
-            addToast('success', '计算完成', `已基于${isExplicitSearch ? '物理全量' : '资产库'}聚合 ${mainData.length} 条有效记录。`);
+            addToast('success', '计算完成', `已基于物理全量聚合 ${mainData.length} 条有效记录。`);
         } catch (e: any) {
             addToast('error', '检索失败', e.message);
         } finally {

@@ -427,7 +427,7 @@ export const DB = {
       return results;
   },
 
-  async getRange(tableName: string, startDate: string, endDate: string): Promise<any[]> {
+  async getRange(tableName: string, startDate: string, endDate: string, skuCodes?: string[]): Promise<any[]> {
     const supabase = getClient();
     if (!supabase) return [];
     let allRows: any[] = [];
@@ -435,8 +435,25 @@ export const DB = {
     const pageSize = 2000;
     let hasMore = true;
     while (hasMore) {
-        const { data, error } = await supabase.from(tableName).select('*').gte('date', startDate).lte('date', endDate).range(page * pageSize, (page + 1) * pageSize - 1);
-        if (error) { hasMore = false; } 
+        let query = supabase.from(tableName).select('*')
+            .gte('date', startDate)
+            .lte('date', endDate)
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (skuCodes && skuCodes.length > 0) {
+            const skuList = `(${skuCodes.join(',')})`;
+            if (tableName === 'fact_shangzhi') {
+                query = query.or(`sku_code.in.${skuList},product_id.in.${skuList}`);
+            } else if (tableName === 'fact_jingzhuntong') {
+                query = query.in('tracked_sku_id', skuCodes);
+            }
+        }
+        
+        const { data, error } = await query;
+        if (error) { 
+            console.error(`[DB getRange Error]`, error);
+            hasMore = false; 
+        } 
         else if (data && data.length > 0) {
             allRows = allRows.concat(data);
             if (data.length < pageSize) hasMore = false;
