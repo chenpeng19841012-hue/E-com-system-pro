@@ -6,8 +6,6 @@ import { getSkuIdentifier } from '../lib/helpers';
 import { DB } from '../lib/db';
 
 interface MultiQueryViewProps {
-    shangzhiData: any[]; // Deprecated
-    jingzhuntongData: any[]; // Deprecated
     skus: ProductSKU[];
     shops: Shop[];
     schemas: {
