@@ -209,7 +209,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
         setCurrentPage(1);
 
         try {
-            const parsedSkus = skuInput.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+            const parsedSkus = skuInput.split(/[\n,，\s]+/).map(s => s.trim()).filter(Boolean);
             const isExplicitSearch = parsedSkus.length > 0;
             
             const enabledSkusMap = new Map<string, ProductSKU>();

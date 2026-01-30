@@ -344,23 +344,12 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
         const prevStart = new Date(prevEndTimestamp - (diffDays - 1) * 86400000).toISOString().substring(0, 10);
 
         try {
-            let currSz = [], currJzt = [], prevSz = [], prevJzt = [];
-            
-            const isRangeCached = (rangeType !== 'custom') && cachedData && cachedData.shangzhi.length > 0;
-
-            if (isRangeCached && cachedData) {
-                currSz = cachedData.shangzhi.filter(r => r.date >= start && r.date <= end);
-                currJzt = cachedData.jingzhuntong.filter(r => r.date >= start && r.date <= end);
-                prevSz = cachedData.shangzhi.filter(r => r.date >= prevStart && r.date <= prevEnd);
-                prevJzt = cachedData.jingzhuntong.filter(r => r.date >= prevStart && r.date <= prevEnd);
-            } else {
-                [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
-                    DB.getRange('fact_shangzhi', start, end),
-                    DB.getRange('fact_jingzhuntong', start, end),
-                    DB.getRange('fact_shangzhi', prevStart, prevEnd),
-                    DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
-                ]);
-            }
+            const [currSz, currJzt, prevSz, prevJzt] = await Promise.all([
+                DB.getRange('fact_shangzhi', start, end),
+                DB.getRange('fact_jingzhuntong', start, end),
+                DB.getRange('fact_shangzhi', prevStart, prevEnd),
+                DB.getRange('fact_jingzhuntong', prevStart, prevEnd)
+            ]);
             
             setDebugRawData({ shangzhi: currSz, jingzhuntong: currJzt });
 
@@ -538,7 +527,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     useEffect(() => {
         fetchData();
-    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate, cachedData]); 
+    }, [rangeType, customRange, activeMetric, enabledSkusMap, shopIdToMode, dataAnchorDate]); 
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
