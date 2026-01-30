@@ -76,6 +76,7 @@ export const CloudSyncView = ({ addToast }: any) => {
     
     // 界面状态
     const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+    const [isSqlScriptExpanded, setIsSqlScriptExpanded] = useState(false);
     
     // 诊断状态
     const [diagSteps, setDiagSteps] = useState<{ step: string; status: 'pending' | 'ok' | 'fail' | 'warn'; msg: string }[]>([]);
@@ -401,11 +402,17 @@ NOTIFY pgrst, 'reload schema';
                 <div className="lg:col-span-7 space-y-6">
                     <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm relative overflow-hidden h-full flex flex-col">
                         <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3 text-slate-800">
+                            <div 
+                                className="flex items-center gap-3 text-slate-800 cursor-pointer"
+                                onClick={() => setIsSqlScriptExpanded(!isSqlScriptExpanded)}
+                            >
                                 <Terminal size={20} className="text-slate-400" />
                                 <div className="flex flex-col">
                                     <h4 className="text-sm font-black uppercase tracking-wider">智能架构同步脚本 (Auto-Sync)</h4>
                                     <p className="text-[9px] text-slate-400 font-bold">已更新广告表去重规则 (时间+账户+SKU+花费)</p>
+                                </div>
+                                <div className="ml-4 text-slate-400 hover:text-slate-600 transition-colors">
+                                    {isSqlScriptExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                                 </div>
                             </div>
                             <button 
@@ -418,31 +425,44 @@ NOTIFY pgrst, 'reload schema';
                             </button>
                         </div>
 
-                        <div className="bg-green-50 p-4 rounded-xl border border-green-100 mb-6 flex gap-3">
-                            <FileJson size={18} className="text-green-600 shrink-0" />
-                            <div className="space-y-1">
-                                <p className="text-[11px] text-green-800 font-bold leading-relaxed">
-                                    此脚本会删除旧的唯一约束，并应用新的去重规则（Date + Account + SKU + Cost）。
-                                </p>
-                                <p className="text-[10px] text-green-700 font-medium ml-1">
-                                    请复制并在 Supabase SQL Editor 执行一次，以解决上传报错和数据覆盖问题。
-                                </p>
-                            </div>
-                        </div>
+                        {isSqlScriptExpanded ? (
+                            <div className="animate-fadeIn flex-1 flex flex-col min-h-0">
+                                <div className="bg-green-50 p-4 rounded-xl border border-green-100 mb-6 flex gap-3">
+                                    <FileJson size={18} className="text-green-600 shrink-0" />
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] text-green-800 font-bold leading-relaxed">
+                                            此脚本会删除旧的唯一约束，并应用新的去重规则（Date + Account + SKU + Cost）。
+                                        </p>
+                                        <p className="text-[10px] text-green-700 font-medium ml-1">
+                                            请复制并在 Supabase SQL Editor 执行一次，以解决上传报错和数据覆盖问题。
+                                        </p>
+                                    </div>
+                                </div>
 
-                        <div className="relative z-10 flex-1 flex flex-col min-h-[400px]">
-                            <div className="absolute top-4 right-4 z-20">
-                                <button onClick={() => { navigator.clipboard.writeText(dynamicSqlScript); addToast('success', '复制成功', '已复制全量同步脚本。'); }} className="p-2 bg-slate-700 rounded-lg hover:bg-[#70AD47] transition-all text-white shadow-lg">
-                                    <Copy size={14}/>
-                                </button>
+                                <div className="relative z-10 flex-1 flex flex-col min-h-[400px]">
+                                    <div className="absolute top-4 right-4 z-20">
+                                        <button onClick={() => { navigator.clipboard.writeText(dynamicSqlScript); addToast('success', '复制成功', '已复制全量同步脚本。'); }} className="p-2 bg-slate-700 rounded-lg hover:bg-[#70AD47] transition-all text-white shadow-lg">
+                                            <Copy size={14}/>
+                                        </button>
+                                    </div>
+                                    <pre className="bg-slate-900 p-6 rounded-2xl text-[10px] font-mono text-slate-300 overflow-x-auto h-full leading-relaxed border border-slate-800 custom-scrollbar flex-1">
+                                        {dynamicSqlScript}
+                                    </pre>
+                                </div>
                             </div>
-                            <pre className="bg-slate-900 p-6 rounded-2xl text-[10px] font-mono text-slate-300 overflow-x-auto h-full leading-relaxed border border-slate-800 custom-scrollbar flex-1">
-                                {dynamicSqlScript}
-                            </pre>
-                        </div>
+                        ) : (
+                            <div 
+                                className="flex-1 flex flex-col items-center justify-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center cursor-pointer hover:bg-slate-100 transition-colors" 
+                                onClick={() => setIsSqlScriptExpanded(true)}
+                            >
+                                <Terminal size={32} className="text-slate-300 mb-4" />
+                                <p className="text-sm font-black text-slate-500">点击展开云端架构同步脚本</p>
+                                <p className="text-xs text-slate-400 mt-2">用于初始化或修复云端数据库表结构。</p>
+                            </div>
+                        )}
+
                     </div>
                     
-                    {/* 新增的常用 SQL 区域 */}
                     <CommonSqlSection addToast={addToast} />
                 </div>
             </div>
