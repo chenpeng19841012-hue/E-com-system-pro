@@ -230,6 +230,7 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
     const [name, setName] = useState('');
     const [platformId, setPlatformId] = useState('');
     const [mode, setMode] = useState('自营');
+    const [isDefault, setIsDefault] = useState(false);
     const [error, setError] = useState('');
 
     React.useEffect(() => {
@@ -237,13 +238,14 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
             setName(shopToEdit?.name || '');
             setPlatformId(shopToEdit?.platformId || '');
             setMode(shopToEdit?.mode || '自营');
+            setIsDefault(shopToEdit?.isDefault || false);
             setError('');
         }
     }, [isOpen, shopToEdit]);
 
     const handleConfirm = async () => {
         if (!name.trim()) { setError('店铺名称不可为空。'); return; }
-        const payload = { id: shopToEdit?.id, name: name.trim(), platformId: platformId.trim(), mode };
+        const payload = { id: shopToEdit?.id, name: name.trim(), platformId: platformId.trim(), mode, isDefault };
         if (await onConfirm(payload)) onClose();
     };
 
@@ -266,6 +268,15 @@ const ShopFormModal = ({ isOpen, onClose, onConfirm, shopToEdit, title, confirmT
                         <input value={platformId} onChange={e => setPlatformId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-mono font-black text-slate-600 outline-none focus:border-brand shadow-inner" />
                     </div>
                     <SelectInput label="经营模式" value={mode} options={['自营', 'POP', '分销']} onChange={setMode} />
+                    <div className="mt-6">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">默认状态</label>
+                        <div className="mt-2 flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                            <p className="text-sm font-bold text-slate-700">上传商智时，若无店铺归属则优先匹配此店铺</p>
+                            <button onClick={() => setIsDefault(!isDefault)} className={`flex items-center gap-2 transition-all ${isDefault ? 'text-brand' : 'text-slate-400'}`}>
+                                {isDefault ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 {error && <p className="text-xs text-rose-500 mt-6 bg-rose-50 p-3 rounded-xl font-bold border border-rose-100">{error}</p>}
                 <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-slate-50">
@@ -828,13 +839,19 @@ export const SKUManagementView = ({
                         <div className="overflow-hidden rounded-[40px] border border-slate-100 bg-white">
                              {activeTab === 'shop' && (
                                 <table className="w-full text-left text-[11px]">
-                                    <thead className="bg-slate-50/80"><tr className="text-slate-400 font-black uppercase tracking-widest border-b border-slate-100"><th className="p-6 pl-10">店铺物理全称</th><th className="p-6 text-center">模式</th><th className="p-6 text-center">平台 ID</th><th className="p-6 text-center">操作</th></tr></thead>
+                                    <thead className="bg-slate-50/80"><tr className="text-slate-400 font-black uppercase tracking-widest border-b border-slate-100"><th className="p-6 pl-10">店铺物理全称</th><th className="p-6 text-center">模式</th><th className="p-6 text-center">平台 ID</th><th className="p-6 text-center">默认状态</th><th className="p-6 text-center">操作</th></tr></thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {shops.map(s => (
                                             <tr key={s.id} className="hover:bg-slate-50/50 transition-colors group">
                                                 <td className="p-6 pl-10 font-black text-slate-800 text-sm">{s.name}</td>
                                                 <td className="p-6 text-center"><span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest">{s.mode}</span></td>
                                                 <td className="p-6 text-center font-mono font-bold text-slate-400">{s.platformId || '-'}</td>
+                                                <td className="p-6 text-center">
+                                                    <button onClick={() => onUpdateShop({ ...s, isDefault: !s.isDefault })} className={`flex items-center justify-center mx-auto gap-2 transition-all ${s.isDefault ? 'text-brand' : 'text-slate-300 hover:text-slate-500'}`}>
+                                                        {s.isDefault ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                                                        <span className="text-[10px] font-black uppercase tracking-widest">{s.isDefault ? '默认' : ''}</span>
+                                                    </button>
+                                                </td>
                                                 <td className="p-6 text-center">
                                                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <button onClick={() => setEditingShop(s)} className="p-2.5 border border-slate-100 rounded-xl text-slate-400 hover:text-brand hover:bg-white shadow-sm"><Edit2 size={14}/></button>

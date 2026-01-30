@@ -184,6 +184,19 @@ export const App = () => {
         await loadMetadata();
         return true;
     };
+    
+    const handleUpdateShop = async (shopToUpdate: Shop) => {
+        let updatedShops = shops.map(s => s.id === shopToUpdate.id ? shopToUpdate : s);
+
+        if (shopToUpdate.isDefault) {
+            updatedShops = updatedShops.map(s =>
+                s.id === shopToUpdate.id ? s : { ...s, isDefault: false }
+            );
+        }
+        
+        await handleBulkSave('dim_shops', updatedShops, '店铺');
+        return true;
+    };
 
     // --- HELPER: Safe ID Normalizer (Handles Scientific Notation) ---
     const normalizeIdString = (val: any) => {
@@ -235,6 +248,8 @@ export const App = () => {
     const handleRawDataImport = async (data: any[], type: TableType, shopId?: string, fileName: string = 'batch_upload', onProgress?: (current: number, total: number) => void) => {
         DB.resetClient();
         
+        const defaultShop = shops.find(s => s.isDefault);
+        
         // 1. 构建映射表 (DB Schema Map)
         const headerMap: Record<string, string> = {};
         const currentSchema = schemas[type];
@@ -269,6 +284,8 @@ export const App = () => {
                 if (shop) mappedRow['shop_name'] = shop.name;
             } else if (row['店铺名称'] || row['shop_name']) {
                 mappedRow['shop_name'] = row['店铺名称'] || row['shop_name'];
+            } else if (type === 'shangzhi' && defaultShop) {
+                mappedRow['shop_name'] = defaultShop.name;
             }
 
             // C. 核心映射与清洗逻辑
@@ -474,7 +491,7 @@ export const App = () => {
                         await handleBulkSave('dim_skus', updatedSkus, 'SKU');
                     }} 
                     onAddNewShop={async (s)=> { const n = [...shops, {...s, id: Date.now().toString()}]; await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
-                    onUpdateShop={async (s)=> { const n = shops.map(x=>x.id===s.id?s:x); await handleBulkSave('dim_shops', n, '店铺'); return true; }} 
+                    onUpdateShop={handleUpdateShop} 
                     onDeleteShop={async (id)=> { const n = shops.filter(x=>x.id!==id); await handleBulkSave('dim_shops', n, '店铺'); }} 
                     onBulkAddShops={async (newList)=> {
                         const updatedShops = [...shops];

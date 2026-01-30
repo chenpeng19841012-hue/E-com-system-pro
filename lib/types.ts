@@ -25,6 +25,7 @@ export interface Shop {
   name:string;
   platformId?: string;
   mode: string; 
+  isDefault?: boolean;
 }
 
 export type SKUStatus = '待售' | '在售' | '下架';

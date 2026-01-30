@@ -390,21 +390,23 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[24px] p-5 flex flex-col items-center justify-center relative group/upload">
-                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md text-brand mb-3 group-hover/upload:scale-110 transition-transform duration-500">
-                                    {isAnalyzing ? <LoaderCircle size={20} className="animate-spin" /> : <UploadCloud size={20} />}
-                                </div>
-                                <div className="text-center mb-3">
-                                    <h4 className="font-black text-slate-900 text-xs tracking-tight">
-                                        {isAnalyzing ? '正在解析物理结构...' : '点击挂载 Excel 物理文件'}
-                                    </h4>
-                                    <p className="text-[8px] text-slate-400 font-black mt-0.5 tracking-[0.2em] uppercase italic">
-                                        System Auto-Splitting Enabled
-                                    </p>
+                            <div className="bg-slate-50/50 border-2 border-dashed border-slate-200 hover:border-brand transition-all rounded-[24px] p-6 flex flex-row items-center justify-between relative group/upload">
+                                <div className="flex items-center gap-5">
+                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-md text-brand group-hover/upload:scale-110 transition-transform duration-500 shrink-0">
+                                        {isAnalyzing ? <LoaderCircle size={24} className="animate-spin" /> : <UploadCloud size={24} />}
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="font-black text-slate-900 text-sm tracking-tight">
+                                            {isAnalyzing ? '正在解析物理结构...' : '点击挂载 Excel 物理文件'}
+                                        </h4>
+                                        <p className="text-[9px] text-slate-400 font-black mt-1 tracking-[0.2em] uppercase italic">
+                                            SYSTEM AUTO-SPLITTING ENABLED
+                                        </p>
+                                    </div>
                                 </div>
                                 <div className="relative">
                                     <input type="file" onChange={handleFileSelect} accept=".xlsx, .xls" disabled={isAnalyzing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <button disabled={isAnalyzing} className="px-6 py-2 bg-white border border-slate-200 text-slate-500 font-black text-[9px] rounded-xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
+                                    <button disabled={isAnalyzing} className="px-8 py-4 bg-white border border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
                                         {isAnalyzing ? '分析中...' : '选择本地文件'}
                                     </button>
                                 </div>
