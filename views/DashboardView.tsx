@@ -7,10 +7,11 @@ import {
     Star, CalendarX, X, MousePointer2, SearchCode, ChevronLeft,
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
     History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
-    ListFilter, Calculator, Microscope
+    ListFilter, Calculator, Microscope, LayoutGrid, Search, FileText,
+    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync
 } from 'lucide-react';
 import { DB } from '../lib/db';
-import { ProductSKU, Shop } from '../lib/types';
+import { ProductSKU, Shop, View } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
 
 type RangeType = 'realtime' | 'yesterday' | '7d' | '30d' | 'custom';
@@ -28,6 +29,72 @@ interface Diagnosis {
     details: Record<string, string | number>;
     severity: 'critical' | 'warning' | 'info' | 'success';
 }
+
+const IntelligenceHub = ({ setCurrentView }: { setCurrentView: (view: View) => void }) => {
+    const sections = [
+        {
+          title: '战略指挥',
+          items: [
+            { label: 'AI 仪表盘', view: 'dashboard', icon: LayoutGrid },
+            { label: '战略沙盘', view: 'multiquery', icon: Search },
+            { label: '运营报表', view: 'reports', icon: FileText },
+          ],
+        },
+        {
+            title: '智慧运营',
+            items: [
+                { label: '盈利分析', view: 'ai-profit-analytics', icon: DollarSign },
+                { label: '补货策略', view: 'ai-smart-replenishment', icon: PackagePlus },
+                { label: '竞品监控', view: 'ai-competitor-monitoring', icon: Binoculars },
+                { label: '销售预测', view: 'ai-sales-forecast', icon: TrendingUp },
+            ]
+        },
+        {
+            title: '创作工场',
+            items: [
+                { label: '文案实验', view: 'ai-description', icon: Sparkles },
+                { label: '视觉创意', view: 'ai-ad-image', icon: ImageIcon },
+                { label: '智能客服', view: 'ai-cs-assistant', icon: MessageSquare },
+                { label: '智能报价', view: 'ai-quoting', icon: Calculator },
+            ]
+        },
+        {
+            title: '数字底座',
+            items: [
+                { label: 'SKU资产', view: 'products', icon: Package },
+                { label: '底层治理', view: 'data-experience', icon: Layers },
+                { label: '云端同步', view: 'cloud-sync', icon: CloudSync },
+                { label: '数据中心', view: 'data-center', icon: Database },
+            ]
+        }
+    ];
+
+    return (
+        <div className="bg-white rounded-[40px] p-10 shadow-sm border border-slate-100 mb-8">
+            <h2 className="text-2xl font-black text-slate-900 mb-2">云舟 Intelligence Hub</h2>
+            <p className="text-sm text-slate-400 font-bold mb-8">搭载 Gemini 3.0 的新一代电商全链路运营系统</p>
+            {sections.map(section => (
+                <div key={section.title} className="mb-8 last:mb-0">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{section.title}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {section.items.map(item => (
+                             <button 
+                                key={item.view} 
+                                onClick={() => setCurrentView(item.view as View)}
+                                className="flex items-center text-left p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg hover:-translate-y-1 transition-all group"
+                            >
+                                <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mr-4 shadow-sm border border-slate-100 group-hover:bg-brand group-hover:text-white text-slate-500 transition-colors">
+                                    <item.icon size={24} />
+                                </div>
+                                <span className="text-xs font-black text-slate-700">{item.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 const formatVal = (v: number, isFloat = false) => isFloat ? v.toFixed(2) : Math.round(v).toLocaleString();
 
@@ -245,7 +312,7 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
     );
 };
 
-export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: { skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
+export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast, cachedData }: { setCurrentView: (view: View) => void, skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, cachedData?: { shangzhi: any[], jingzhuntong: any[] } }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
@@ -463,6 +530,8 @@ export const DashboardView = ({ skus, shops, factStats, addToast, cachedData }: 
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
+            <IntelligenceHub setCurrentView={setCurrentView} />
+            
             {/* ... (UI components remain same) ... */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-4">
                 <div className="space-y-1">

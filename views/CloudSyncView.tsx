@@ -451,13 +451,15 @@ NOTIFY pgrst, 'reload schema';
                                 </div>
                             </div>
                         ) : (
-                            <div 
-                                className="flex-1 flex flex-col items-center justify-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center cursor-pointer hover:bg-slate-100 transition-colors" 
-                                onClick={() => setIsSqlScriptExpanded(true)}
-                            >
-                                <Terminal size={32} className="text-slate-300 mb-4" />
-                                <p className="text-sm font-black text-slate-500">点击展开云端架构同步脚本</p>
-                                <p className="text-xs text-slate-400 mt-2">用于初始化或修复云端数据库表结构。</p>
+                             <div className="flex-1 flex flex-col items-center justify-center">
+                                <div 
+                                    className="w-full max-w-2xl flex flex-col items-center justify-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center cursor-pointer hover:bg-slate-100 transition-colors" 
+                                    onClick={() => setIsSqlScriptExpanded(true)}
+                                >
+                                    <Terminal size={32} className="text-slate-300 mb-4" />
+                                    <p className="text-sm font-black text-slate-500">点击展开云端架构同步脚本</p>
+                                    <p className="text-xs text-slate-400 mt-2">用于初始化或修复云端数据库表结构。</p>
+                                </div>
                             </div>
                         )}
 
