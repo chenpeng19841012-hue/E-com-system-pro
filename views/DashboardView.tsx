@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     TrendingUp, ShoppingBag, Activity, CreditCard, Target, 
@@ -70,7 +69,7 @@ const DataInspectorModal = ({
                 if (date < dateRange.start || date > dateRange.end) return;
                 
                 const sku = getSkuIdentifier(r);
-                if (!sku || !enabledSkusMap.has(sku)) return;
+                if (!sku) return; // Only check if SKU exists, not if it's enabled for stats
 
                 const key = getKey(date, sku);
                 const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
@@ -94,7 +93,7 @@ const DataInspectorModal = ({
         return Array.from(dataMap.values())
             .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0)
             .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku));
-    }, [rawData, dateRange, enabledSkusMap]);
+    }, [rawData, dateRange]);
 
     const formulas = [
         { metric: 'GMV (成交金额)', formula: 'SUM(商智事实表[paid_amount])', description: '周期内，所有被统计SKU的“成交金额”之和。' },
