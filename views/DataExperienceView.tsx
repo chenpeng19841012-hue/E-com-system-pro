@@ -285,7 +285,7 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
         setIsDedupeModalOpen(false);
         setDeleteProgress({ current: 0, total: 100, mode: 'dedupe' });
         try {
-            const removedCount = await DB.deduplicateTable(`fact_${tableTypeSearch}`, (scanned, deleted) => {
+            const removedCount = await DB.deduplicateTable(`fact_${tableTypeSearch}`, (scanned: number, deleted: number) => {
                 setDeleteProgress({ current: scanned, total: 100, mode: 'dedupe' });
             });
             await handleExecuteSearch();
