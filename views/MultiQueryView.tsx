@@ -370,9 +370,43 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
         return { allMetricsMap: map };
     }, [schemas]);
 
+    const summaryRow = useMemo(() => {
+        if (queryResult.length === 0) return null;
+    
+        const totals = queryResult.reduce((acc, row) => {
+            Object.keys(row).forEach(key => {
+                if (typeof row[key] === 'number') {
+                    acc[key] = (acc[key] || 0) + row[key];
+                }
+            });
+            return acc;
+        }, {} as Record<string, number>);
+    
+        totals.paid_conversion_rate = (totals.uv || 0) > 0 ? (totals.paid_users || 0) / totals.uv : 0;
+        totals.cpc = (totals.clicks || 0) > 0 ? (totals.cost || 0) / totals.clicks : 0;
+        totals.roi = (totals.cost || 0) > 0 ? (totals.paid_amount || 0) / totals.cost : 0;
+    
+        return {
+            ...totals,
+            date: '汇总',
+            aggDate: 'summary-row',
+            sku_shop: {
+                code: '全周期汇总',
+                shopName: 'Total'
+            }
+        };
+    }, [queryResult]);
+
     const totalPages = Math.ceil(queryResult.length / ROWS_PER_PAGE);
-    const resultHeaders = ['date', 'sku_shop', ...selectedMetrics];
     const paginatedResult = queryResult.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+    const resultHeaders = ['date', 'sku_shop', ...selectedMetrics];
+
+    const dataForTable = useMemo(() => {
+        if (summaryRow && currentPage === 1) {
+            return [summaryRow, ...paginatedResult];
+        }
+        return paginatedResult;
+    }, [summaryRow, paginatedResult, currentPage]);
 
     return (
         <>
@@ -532,11 +566,11 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {isLoading ? (<tr><td colSpan={resultHeaders.length} className="py-40 text-center"><div className="flex flex-col items-center gap-4 text-slate-300 animate-pulse"><LoaderCircle size={48} className="animate-spin" /><p className="font-black uppercase tracking-[0.4em] text-xs">Penetrating Cloud Records...</p></div></td></tr>) : queryResult.length === 0 ? (<tr><td colSpan={resultHeaders.length} className="py-48 text-center text-slate-300 font-black text-sm uppercase tracking-widest opacity-20">Awaiting Search Execution</td></tr>) : (
-                                        paginatedResult.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50/80 transition-colors group">
+                                        dataForTable.map((row, idx) => (
+                                            <tr key={row.aggDate || idx} className={`transition-colors group ${row.aggDate === 'summary-row' ? 'bg-brand/5 font-black' : 'hover:bg-slate-50/80'}`}>
                                                 {resultHeaders.map(key => (
-                                                    <td key={key} className={`py-4 px-4 text-[11px] text-slate-600 truncate font-mono text-center border-b border-slate-50`}>
-                                                        {key === 'sku_shop' ? (<div className="truncate text-left pl-2"><div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div><div className="text-[9px] text-slate-400 font-bold mt-0.5 truncate uppercase tracking-tighter opacity-70">{row.sku_shop.shopName}</div></div>) : key === 'date' ? (<span className="font-black text-slate-500 whitespace-nowrap bg-slate-100/50 px-2 py-1 rounded-md">{row.date}</span>) : (row[key] == null) ? (<span className="opacity-20">-</span>) : typeof row[key] === 'number' ? (<span className={`font-black ${['paid_amount','cost','roi'].includes(key) ? 'text-slate-900' : 'text-slate-600'}`}>{formatMetricValue(row[key], key)}</span>) : row[key]}
+                                                    <td key={key} className={`py-4 px-4 text-[11px] truncate font-mono text-center ${row.aggDate === 'summary-row' ? 'text-slate-900' : `text-slate-600 ${idx > 0 ? 'border-b border-slate-50' : ''}`}`}>
+                                                        {key === 'sku_shop' ? (<div className="truncate text-left pl-2"><div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div><div className={`text-[9px] font-bold mt-0.5 truncate uppercase tracking-tighter ${row.aggDate === 'summary-row' ? 'text-brand' : 'text-slate-400 opacity-70'}`}>{row.sku_shop.shopName}</div></div>) : key === 'date' ? (<span className={`font-black whitespace-nowrap px-2 py-1 rounded-md ${row.aggDate === 'summary-row' ? 'bg-brand/10 text-brand' : 'text-slate-500 bg-slate-100/50'}`}>{row.date}</span>) : (row[key] == null) ? (<span className="opacity-20">-</span>) : typeof row[key] === 'number' ? (<span className={`font-black ${['paid_amount','cost','roi'].includes(key) ? (row.aggDate === 'summary-row' ? 'text-brand' : 'text-slate-900') : (row.aggDate === 'summary-row' ? 'text-slate-800' : 'text-slate-600')}`}>{formatMetricValue(row[key], key)}</span>) : row[key]}
                                                     </td>
                                                 ))}
                                             </tr>
