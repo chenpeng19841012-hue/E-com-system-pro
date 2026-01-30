@@ -159,6 +159,18 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                     effectiveType = detectedType; // 立即使用检测到的类型
                 }
 
+                // 新增：广告数据物理校验
+                if (effectiveType === 'jingzhuntong') {
+                    const hasDate = headers.includes('日期') || headers.includes('时间');
+                    const hasAccount = headers.includes('账户昵称') || headers.includes('账户');
+
+                    if (!hasDate || !hasAccount) {
+                        addToast('error', '物理校验失败', '广告数据表格必须包含 [日期] 和 [账户昵称] 列。');
+                        setIsAnalyzing(false);
+                        return; // 中断处理
+                    }
+                }
+
                 // 自动切片逻辑
                 const chunks: any[][] = [];
                 for (let i = 0; i < data.length; i += CHUNK_SIZE) {
