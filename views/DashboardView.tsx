@@ -8,7 +8,7 @@ import {
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
     History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
     ListFilter, Calculator, Microscope, LayoutGrid, Search, FileText,
-    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync
+    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync, CheckSquare
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop, View } from '../lib/types';
@@ -43,56 +43,58 @@ const DataInspectorModal = ({
     isOpen, 
     onClose, 
     rawData,
-    dateRange
+    dateRange,
+    skus
 }: { 
     isOpen: boolean, 
     onClose: () => void, 
     rawData: { shangzhi: any[], jingzhuntong: any[] },
-    dateRange: { start: string, end: string }
+    dateRange: { start: string, end: string },
+    skus: ProductSKU[]
 }) => {
     if (!isOpen) return null;
+
+    const { enabledSkus, enabledSkusMap } = useMemo(() => {
+        const enabled = skus.filter(s => s.isStatisticsEnabled);
+        const map = new Map(enabled.map(s => [s.code, s]));
+        return { enabledSkus: enabled, enabledSkusMap: map };
+    }, [skus]);
 
     const sourceData = useMemo(() => {
         const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, spend: number, source: string[] }>();
         const getKey = (date: string, sku: string) => `${date}-${sku}`;
 
-        rawData.shangzhi.forEach(r => {
-            const date = getDateKey(r.date);
-            if (date < dateRange.start || date > dateRange.end) return;
-            
-            const sku = getSkuIdentifier(r);
-            if (!sku) return;
+        const processRows = (rows: any[], type: 'shangzhi' | 'jingzhuntong') => {
+             rows.forEach(r => {
+                const date = getDateKey(r.date);
+                if (date < dateRange.start || date > dateRange.end) return;
+                
+                const sku = getSkuIdentifier(r);
+                if (!sku || !enabledSkusMap.has(sku)) return;
 
-            const key = getKey(date, sku);
-            const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
-            
-            entry.gmv += Number(r.paid_amount) || 0;
-            entry.ca += Number(r.paid_items) || 0;
-            if (!entry.source.includes('商智')) entry.source.push('商智');
-            
-            dataMap.set(key, entry);
-        });
+                const key = getKey(date, sku);
+                const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
+                
+                if (type === 'shangzhi') {
+                    entry.gmv += Number(r.paid_amount) || 0;
+                    entry.ca += Number(r.paid_items) || 0;
+                    if (!entry.source.includes('商智')) entry.source.push('商智');
+                } else { // jingzhuntong
+                    entry.spend += Number(r.cost) || 0;
+                    if (!entry.source.includes('广告')) entry.source.push('广告');
+                }
+                
+                dataMap.set(key, entry);
+            });
+        };
 
-        rawData.jingzhuntong.forEach(r => {
-            const date = getDateKey(r.date);
-            if (date < dateRange.start || date > dateRange.end) return;
-            
-            const sku = getSkuIdentifier(r);
-            if (!sku) return;
-
-            const key = getKey(date, sku);
-            const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
-            
-            entry.spend += Number(r.cost) || 0;
-            if (!entry.source.includes('广告')) entry.source.push('广告');
-
-            dataMap.set(key, entry);
-        });
+        processRows(rawData.shangzhi, 'shangzhi');
+        processRows(rawData.jingzhuntong, 'jingzhuntong');
 
         return Array.from(dataMap.values())
             .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0)
             .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku));
-    }, [rawData, dateRange]);
+    }, [rawData, dateRange, enabledSkusMap]);
 
     const formulas = [
         { metric: 'GMV (成交金额)', formula: 'SUM(商智事实表[paid_amount])', description: '周期内，所有被统计SKU的“成交金额”之和。' },
@@ -160,6 +162,23 @@ const DataInspectorModal = ({
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    {/* NEW SECTION: Enabled SKUs */}
+                    <div className="p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 shadow-inner flex flex-col">
+                        <h4 className="text-sm font-black text-slate-800 uppercase mb-4 flex items-center gap-2"><CheckSquare size={16} className="text-brand"/> 已纳入统计的物理资产 ({enabledSkus.length})</h4>
+                        <div className="overflow-y-auto max-h-48 custom-scrollbar pr-4 -mr-4 rounded-xl">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {enabledSkus.length > 0 ? enabledSkus.map((sku) => (
+                                    <div key={sku.id} className="bg-white p-3 rounded-xl border border-slate-100">
+                                        <p className="font-mono font-bold text-slate-700 text-[10px] truncate" title={sku.code}>{sku.code}</p>
+                                        <p className="text-[9px] text-slate-400 font-medium truncate" title={sku.name}>{sku.name}</p>
+                                    </div>
+                                )) : (
+                                    <p className="col-span-full text-center p-4 text-slate-400 font-bold text-xs">没有资产被标记为“参与统计”</p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -758,6 +777,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 onClose={() => setIsDebugOpen(false)} 
                 rawData={debugRawData} 
                 dateRange={viewRange}
+                skus={skus}
             />
         </div>
     );
