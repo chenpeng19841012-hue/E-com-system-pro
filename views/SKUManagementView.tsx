@@ -781,7 +781,7 @@ export const SKUManagementView = ({
 
                         {/* High-Density Table */}
                         <div className="overflow-x-auto rounded-[40px] border border-slate-100 no-scrollbar shadow-inner bg-white">
-                            <table className="w-full text-sm table-fixed min-w-[1600px]">
+                            <table className="w-full text-sm table-fixed min-w-[1400px]">
                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                     <tr className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] border-b border-slate-100">
                                         <th className="w-[4%] text-center pl-10 py-6">
@@ -789,16 +789,16 @@ export const SKUManagementView = ({
                                                 {selectedSkuIds.size === sortedAndFilteredSkus.length && sortedAndFilteredSkus.length > 0 ? <CheckSquare size={20} className="text-brand" /> : <Square size={20} />}
                                             </button>
                                         </th>
-                                        <th className="w-[15%] text-left py-6">SKU 物理标识</th>
-                                        <th className="w-[10%] text-center">分类 / 品牌</th>
-                                        <th className="w-[18%] text-center">规格配置 / 型号</th>
-                                        <th className="w-[12%] text-center">MTM / 小型号</th>
-                                        <th className="w-[10%] text-right pr-6">结算 / 标价 / 促</th>
-                                        <th className="w-[8%] text-center">点位 / 模式</th>
-                                        <th className="w-[12%] text-center">全渠道物理库存</th>
-                                        <th className="w-[8%] text-center">运营权重</th>
-                                        <th className="w-[6%] text-center">统计</th>
-                                        <th className="w-[7%] text-center pr-10">审计</th>
+                                        <th className="w-[16%] text-left py-6">SKU 物理标识</th>
+                                        <th className="w-[8%] text-center">分类 / 品牌</th>
+                                        <th className="w-[15%] text-center">规格配置 / 型号</th>
+                                        <th className="w-[10%] text-center">MTM / 小型号</th>
+                                        <th className="w-[9%] text-right pr-6">结算 / 标价 / 促</th>
+                                        <th className="w-[7%] text-center">点位 / 模式</th>
+                                        <th className="w-[10%] text-center">全渠道物理库存</th>
+                                        <th className="w-[7%] text-center">运营权重</th>
+                                        <th className="w-[5%] text-center">统计</th>
+                                        <th className="w-[9%] text-center pr-10">审计</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
@@ -901,7 +901,7 @@ export const SKUManagementView = ({
                                     {activeTab==='shop'?<Store size={28}/>:activeTab==='agent'?<User size={28}/>:<List size={28}/>}
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">已挂载资产明细</h3>
+                                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">已挂载资产明细</h3>
                                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Physical Entities Management</p>
                                 </div>
                              </div>
