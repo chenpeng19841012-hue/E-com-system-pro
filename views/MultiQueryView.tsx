@@ -526,7 +526,10 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(112,173,71,0.03),transparent_70%)] pointer-events-none"></div>
                     <div className="flex justify-between items-center mb-6 relative z-10">
                         <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-brand flex items-center justify-center shadow-lg border border-white/10 group-hover/board:rotate-6 transition-transform duration-500"><TrendingUp size={28} className="text-white" /></div><div><h3 className="text-xl font-black tracking-tight uppercase">核心业务透视看板</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Physical Performance Insight Board</p></div></div>
-                        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner"><button onClick={() => setComparisonType('period')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'period' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>环比前一周期</button><button onClick={() => setComparisonType('year')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'year' ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>同比去年同期</button></div>
+                        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+                            <button onClick={() => setComparisonType('period')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'period' ? 'bg-brand text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>环比前一周期</button>
+                            <button onClick={() => setComparisonType('year')} className={`px-6 py-2 text-[10px] font-black uppercase rounded-xl transition-all ${comparisonType === 'year' ? 'bg-brand text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>同比去年同期</button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6 relative z-10">
@@ -586,7 +589,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 <div className="bg-white rounded-[48px] shadow-sm border-2 border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
                     <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
                         <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">沙盘推演明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Sandbox Simulation Result Set</p></div></div>
-                        <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 shadow-xl shadow-slate-200 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出维度明细</button>
+                        <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出明细</button>
                     </div>
                     <div className="flex-1 p-8 flex flex-col">
                         <div className="overflow-x-auto rounded-[32px] border border-slate-100 no-scrollbar shadow-inner bg-white flex-1 min-h-[400px]">

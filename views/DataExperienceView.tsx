@@ -392,8 +392,8 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
                     <p className="text-slate-500 font-medium text-xs mt-1 opacity-60">Physical Data Cleansing & Meta-Architecture Management</p>
                 </div>
                 <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
-                    <button onClick={() => setActiveTab('preview')} className={`px-10 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'preview' ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}><Eye size={14}/> 数据物理清洗</button>
-                    <button onClick={() => setActiveTab('schema')} className={`px-10 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'schema' ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}><Settings size={14}/> 物理架构映射</button>
+                    <button onClick={() => setActiveTab('preview')} className={`px-10 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'preview' ? 'bg-brand text-white shadow-xl shadow-brand/20 scale-105' : 'text-slate-500 hover:text-slate-700'}`}><Eye size={14}/> 数据物理清洗</button>
+                    <button onClick={() => setActiveTab('schema')} className={`px-10 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'schema' ? 'bg-brand text-white shadow-xl shadow-brand/20 scale-105' : 'text-slate-500 hover:text-slate-700'}`}><Settings size={14}/> 物理架构映射</button>
                 </div>
             </div>
 
@@ -519,7 +519,7 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
                                         <CopyMinus size={14} /> 去重
                                     </button>
                                     <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-6 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
-                                    <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-10 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
+                                    <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-10 py-4 rounded-[22px] bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
                                         {isLoadingData ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16}/>}
                                         {isLoadingData ? '穿透中...' : '探测'}
                                     </button>

@@ -418,7 +418,7 @@ export const DataCenterView = ({ onImportData, onBatchUpdate, history, factStats
                                 </div>
                                 <div className="relative">
                                     <input type="file" onChange={handleFileSelect} accept=".xlsx, .xls" disabled={isAnalyzing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
-                                    <button disabled={isAnalyzing} className="px-8 py-3 bg-white border border-slate-200 text-slate-500 font-black text-xs rounded-2xl hover:border-brand hover:text-brand transition-all shadow-sm uppercase tracking-widest disabled:opacity-50">
+                                    <button disabled={isAnalyzing} className="px-8 py-3 bg-brand border border-transparent text-white font-black text-xs rounded-2xl hover:bg-[#5da035] transition-all shadow-lg shadow-brand/20 uppercase tracking-widest disabled:opacity-50">
                                         {isAnalyzing ? '分析中...' : '选择本地文件'}
                                     </button>
                                 </div>
