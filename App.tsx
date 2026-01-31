@@ -198,7 +198,6 @@ export const App = () => {
             setFactTables({ shangzhi: recentSz, jingzhuntong: recentJzt, customer_service: recentCs });
             
             // **内存加速缓存 -> 物理快照 (RAW DATA)**
-            // FIX: Aggregate raw data to match HotCacheInspectorModal's expected structure
             const skuMap = new Map(s_skus.map((s: ProductSKU) => [s.code, s]));
             const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
             const mergedCacheMap = new Map<string, any>();
@@ -214,7 +213,12 @@ export const App = () => {
                         code: skuCode,
                         shopName: r.shop_name || (skuAsset ? shopMap.get(skuAsset.shopId) : '未知')
                     },
-                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0, cost: 0, clicks: 0, impressions: 0
+                    // shangzhi
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
+                    paid_orders: 0, add_to_cart_users: 0, category_l3: '',
+                    // jingzhuntong
+                    cost: 0, clicks: 0, impressions: 0, account_nicknames: new Set<string>(),
+                    direct_orders: 0, direct_order_amount: 0, total_orders: 0, total_order_amount: 0,
                 };
             
                 entry.pv += Number(r.pv) || 0;
@@ -222,6 +226,9 @@ export const App = () => {
                 entry.paid_items += Number(r.paid_items) || 0;
                 entry.paid_amount += Number(r.paid_amount) || 0;
                 entry.paid_users += Number(r.paid_users) || 0;
+                entry.paid_orders += Number(r.paid_orders) || 0;
+                entry.add_to_cart_users += Number(r.add_to_cart_users) || 0;
+                if (!entry.category_l3 && r.category_l3) entry.category_l3 = r.category_l3;
                 
                 mergedCacheMap.set(key, entry);
             });
@@ -237,13 +244,23 @@ export const App = () => {
                         code: skuCode,
                         shopName: r.shop_name || (skuAsset ? shopMap.get(skuAsset.shopId) : '未知')
                     },
-                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0, cost: 0, clicks: 0, impressions: 0
+                     // shangzhi
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
+                    paid_orders: 0, add_to_cart_users: 0, category_l3: '',
+                    // jingzhuntong
+                    cost: 0, clicks: 0, impressions: 0, account_nicknames: new Set<string>(),
+                    direct_orders: 0, direct_order_amount: 0, total_orders: 0, total_order_amount: 0,
                 };
             
                 entry.cost += Number(r.cost) || 0;
                 entry.clicks += Number(r.clicks) || 0;
                 entry.impressions += Number(r.impressions) || 0;
-            
+                if (r.account_nickname) entry.account_nicknames.add(r.account_nickname);
+                entry.direct_orders += Number(r.direct_orders) || 0;
+                entry.direct_order_amount += Number(r.direct_order_amount) || 0;
+                entry.total_orders += Number(r.total_orders) || 0;
+                entry.total_order_amount += Number(r.total_order_amount) || 0;
+
                 mergedCacheMap.set(key, entry);
             });
             
@@ -253,12 +270,14 @@ export const App = () => {
                 row.paid_conversion_rate = row.uv > 0 ? (row.paid_users / row.uv) : 0;
                 row.cpc = row.clicks > 0 ? (row.cost / row.clicks) : 0;
                 row.roi = row.cost > 0 ? (row.paid_amount / row.cost) : 0;
+                row.account_nickname = Array.from(row.account_nicknames).join(', ');
+                delete row.account_nicknames;
             });
             
             const newHotCacheData = aggregatedData.sort((a, b) => {
-                const dateComp = (b.date || '').localeCompare(a.date || '');
-                if (dateComp !== 0) return dateComp;
-                return (a.sku_shop.code || '').localeCompare(b.sku_shop.code || '');
+                const skuComp = (a.sku_shop.code || '').localeCompare(b.sku_shop.code || '');
+                if (skuComp !== 0) return skuComp;
+                return (b.date || '').localeCompare(a.date || '');
             });
     
             setHotCacheData(newHotCacheData);

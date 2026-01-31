@@ -1087,11 +1087,11 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                             <button 
                                 key={i.id} 
                                 onClick={() => !i.disabled && setRangeType(i.id as RangeType)} 
-                                className={`px-5 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500'} ${i.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:text-slate-700'}`}
+                                className={`px-5 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${rangeType === i.id ? 'bg-brand text-white shadow-xl scale-105' : 'text-slate-500'} ${i.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:text-slate-700'}`}
                                 disabled={i.disabled}
                                 title={i.title || ''}
                             >
-                                {i.icon && <i.icon size={12} className={rangeType === i.id ? 'text-brand' : 'opacity-50'} />}
+                                {i.icon && <i.icon size={12} className={rangeType === i.id ? 'text-white' : 'opacity-50'} />}
                                 {i.l}
                             </button>
                         ))}
@@ -1130,14 +1130,19 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
                 <div className="xl:col-span-4 bg-white rounded-[40px] p-6 shadow-xl border-2 border-slate-100 flex flex-col relative overflow-hidden group/diag h-[420px]">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full blur-[80px] -translate-y-1/3 translate-x-1/3"></div>
-                    <div className="flex items-center gap-4 mb-4 relative z-10 shrink-0">
-                        <div className="w-10 h-10 rounded-[14px] bg-brand flex items-center justify-center shadow-2xl shadow-brand/30 border border-white/20 group-hover/diag:scale-110 transition-transform duration-500"><BotIcon size={20} className="text-white" /></div>
-                        <div>
-                            <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">AI 战略诊断室 <Sparkles size={14} className="text-brand animate-pulse" /></h3>
-                            <p className="text-[9px] text-slate-400 font-black uppercase mt-0.5 tracking-widest leading-none">Neural Decision Intelligence</p>
+                    <div className="flex items-center justify-between gap-4 mb-4 relative z-10 shrink-0">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-[14px] bg-brand flex items-center justify-center shadow-2xl shadow-brand/30 border border-white/20 group-hover/diag:scale-110 transition-transform duration-500"><BotIcon size={20} className="text-white" /></div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">AI 战略诊断室 <Sparkles size={14} className="text-brand animate-pulse" /></h3>
+                                <p className="text-[9px] text-slate-400 font-black uppercase mt-0.5 tracking-widest leading-none">Neural Decision Intelligence</p>
+                            </div>
                         </div>
+                        <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="px-5 py-2 bg-slate-100 text-slate-500 rounded-full font-black text-[10px] hover:bg-slate-200 transition-all uppercase tracking-widest">
+                            全部
+                        </button>
                     </div>
-                    <div className="flex-1 relative mb-4 overflow-hidden mask-linear-fade">
+                    <div className="flex-1 relative overflow-hidden mask-linear-fade">
                         {diagnoses.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center bg-slate-50/50 rounded-[32px] border border-dashed border-slate-200 p-8 text-center opacity-40">
                                 <DatabaseZap size={32} className="text-slate-300 mb-3" />
@@ -1155,7 +1160,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                             </div>
                         )}
                     </div>
-                    <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="w-full relative z-10 py-3.5 bg-slate-900 text-white rounded-[18px] font-black text-[10px] hover:bg-black transition-all flex items-center justify-center gap-2 shadow-xl active:scale-95 uppercase tracking-[0.2em] mt-auto shrink-0">查看全量审计矩阵 <ChevronRight size={12} /></button>
                 </div>
             </div>
 
