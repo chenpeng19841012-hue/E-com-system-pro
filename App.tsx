@@ -126,7 +126,6 @@ export const App = () => {
             setLoadingMessage('正在探测数据边界...');
             
             // 1. 优先获取数据统计，以确定最新的数据日期 (Data Anchor)
-            // 这确保了即使数据是 2026 年的或者 2024 年的，我们也能抓取到正确的热数据窗口
             const [statSz, statJzt, statCs] = await Promise.all([
                 DB.getTableSummary('fact_shangzhi'),
                 DB.getTableSummary('fact_jingzhuntong'),
@@ -135,7 +134,6 @@ export const App = () => {
 
             // 智能计算热数据时间窗口
             let anchorDate = new Date();
-            // 如果商智有数据，以商智最新日期为准（核心业务表）
             if (statSz.latestDate && statSz.latestDate !== 'N/A') {
                 const szDate = new Date(statSz.latestDate);
                 if (!isNaN(szDate.getTime())) {
@@ -144,8 +142,8 @@ export const App = () => {
             }
             
             const endDateStr = anchorDate.toISOString().split('T')[0];
-            // 专家模式：向前追溯 90 天 (原 60 天)，应对更大幅度的时间跨度
-            const startDate = new Date(anchorDate.getTime() - 90 * 24 * 60 * 60 * 1000);
+            // 严格遵循用户指令：向前追溯 60 天
+            const startDate = new Date(anchorDate.getTime() - 59 * 24 * 60 * 60 * 1000); // 包含当天，所以是59
             const startDateStr = startDate.toISOString().split('T')[0];
 
             setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
@@ -167,7 +165,6 @@ export const App = () => {
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA),
                 DB.loadConfig('comp_shops', []),
                 DB.loadConfig('comp_groups', []),
-                // 使用动态计算的日期范围
                 DB.getRange('fact_shangzhi', startDateStr, endDateStr),
                 DB.getRange('fact_jingzhuntong', startDateStr, endDateStr),
                 DB.getRange('fact_customer_service', startDateStr, endDateStr)
@@ -178,21 +175,10 @@ export const App = () => {
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             setCompShops(s_compShops); setCompGroups(s_compGroups);
             
-            // 更新统计状态 (显示云端真实总数)
-            setFactStats({
-                shangzhi: statSz,
-                jingzhuntong: statJzt,
-                customer_service: statCs
-            });
-
-            // 注入热数据缓存
-            setFactTables({
-                shangzhi: recentSz,
-                jingzhuntong: recentJzt,
-                customer_service: recentCs
-            });
+            setFactStats({ shangzhi: statSz, jingzhuntong: statJzt, customer_service: statCs });
+            setFactTables({ shangzhi: recentSz, jingzhuntong: recentJzt, customer_service: recentCs });
             
-            // **内存加速引擎：预聚合数据 (沙盘逻辑 1:1 复制)**
+            // **内存加速引擎：1:1 复刻战略沙盘聚合算法**
             const skusToTrack = s_skus.filter((s: ProductSKU) => s.isStatisticsEnabled);
             const skusToTrackMap = new Map(skusToTrack.map((s: ProductSKU) => [s.code, s]));
             const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
@@ -222,10 +208,7 @@ export const App = () => {
 
                 const entry = hotCacheAggMap.get(key) || {
                     date: dateKey,
-                    sku_shop: {
-                        code: skuCode,
-                        shopName: shopMap.get(skuInfo.shopId) || '未知'
-                    },
+                    sku_shop: { code: skuCode, shopName: shopMap.get(skuInfo.shopId) || '未知' },
                     pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
                     cost: 0, clicks: 0,
                 };
@@ -234,7 +217,8 @@ export const App = () => {
                 entry.uv += Number(row.uv) || 0;
                 entry.paid_items += Number(row.paid_items) || 0;
                 entry.paid_amount += Number(row.paid_amount) || 0;
-                entry.paid_users += Number(row.paid_users) || 0;
+                // **核心对齐**: 1:1 复刻沙盘的成交人数计算逻辑，兼容 paid_customers 字段
+                entry.paid_users += (Number(row.paid_users) || Number(row.paid_customers) || 0);
                 
                 hotCacheAggMap.set(key, entry);
             });
@@ -254,10 +238,7 @@ export const App = () => {
 
                 const entry = hotCacheAggMap.get(key) || {
                     date: dateKey,
-                    sku_shop: {
-                        code: skuCode,
-                        shopName: shopMap.get(skuInfo.shopId) || '未知'
-                    },
+                    sku_shop: { code: skuCode, shopName: shopMap.get(skuInfo.shopId) || '未知' },
                     pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
                     cost: 0, clicks: 0,
                 };
