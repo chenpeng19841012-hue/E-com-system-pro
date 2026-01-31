@@ -179,7 +179,7 @@ export const App = () => {
                 recentSz = parsed.shangzhi;
                 recentJzt = parsed.jingzhuntong;
                 recentCs = parsed.customer_service;
-                addToast('info', '缓存命中', '已从当前浏览器会话缓存中加载数据。');
+                // addToast('info', '缓存命中', '已从当前浏览器会话缓存中加载数据。');
             } else {
                 setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
                 [recentSz, recentJzt, recentCs] = await Promise.all([
@@ -198,15 +198,67 @@ export const App = () => {
             setFactTables({ shangzhi: recentSz, jingzhuntong: recentJzt, customer_service: recentCs });
             
             // **内存加速缓存 -> 物理快照 (RAW DATA)**
-            const shangzhiRaw = recentSz.map((r: any) => ({ ...r, source: '商智' }));
-            const jingzhuntongRaw = recentJzt.map((r: any) => ({ ...r, source: '广告' }));
-    
-            const newHotCacheData = [...shangzhiRaw, ...jingzhuntongRaw].sort((a, b) => {
+            // FIX: Aggregate raw data to match HotCacheInspectorModal's expected structure
+            const skuMap = new Map(s_skus.map((s: ProductSKU) => [s.code, s]));
+            const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
+            const mergedCacheMap = new Map<string, any>();
+
+            (recentSz || []).forEach((r: any) => {
+                const skuCode = getSkuIdentifier(r);
+                if (!skuCode || !r.date) return;
+                const key = `${r.date}-${skuCode}`;
+                const skuAsset = skuMap.get(skuCode);
+                const entry = mergedCacheMap.get(key) || {
+                    date: r.date,
+                    sku_shop: {
+                        code: skuCode,
+                        shopName: r.shop_name || (skuAsset ? shopMap.get(skuAsset.shopId) : '未知')
+                    },
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0, cost: 0, clicks: 0, impressions: 0
+                };
+            
+                entry.pv += Number(r.pv) || 0;
+                entry.uv += Number(r.uv) || 0;
+                entry.paid_items += Number(r.paid_items) || 0;
+                entry.paid_amount += Number(r.paid_amount) || 0;
+                entry.paid_users += Number(r.paid_users) || 0;
+                
+                mergedCacheMap.set(key, entry);
+            });
+            
+            (recentJzt || []).forEach((r: any) => {
+                const skuCode = getSkuIdentifier(r);
+                if (!skuCode || !r.date) return;
+                const key = `${r.date}-${skuCode}`;
+                 const skuAsset = skuMap.get(skuCode);
+                const entry = mergedCacheMap.get(key) || {
+                    date: r.date,
+                    sku_shop: {
+                        code: skuCode,
+                        shopName: r.shop_name || (skuAsset ? shopMap.get(skuAsset.shopId) : '未知')
+                    },
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0, cost: 0, clicks: 0, impressions: 0
+                };
+            
+                entry.cost += Number(r.cost) || 0;
+                entry.clicks += Number(r.clicks) || 0;
+                entry.impressions += Number(r.impressions) || 0;
+            
+                mergedCacheMap.set(key, entry);
+            });
+            
+            const aggregatedData = Array.from(mergedCacheMap.values());
+            
+            aggregatedData.forEach(row => {
+                row.paid_conversion_rate = row.uv > 0 ? (row.paid_users / row.uv) : 0;
+                row.cpc = row.clicks > 0 ? (row.cost / row.clicks) : 0;
+                row.roi = row.cost > 0 ? (row.paid_amount / row.cost) : 0;
+            });
+            
+            const newHotCacheData = aggregatedData.sort((a, b) => {
                 const dateComp = (b.date || '').localeCompare(a.date || '');
                 if (dateComp !== 0) return dateComp;
-                const skuA = getSkuIdentifier(a) || '';
-                const skuB = getSkuIdentifier(b) || '';
-                return skuA.localeCompare(skuB);
+                return (a.sku_shop.code || '').localeCompare(b.sku_shop.code || '');
             });
     
             setHotCacheData(newHotCacheData);
