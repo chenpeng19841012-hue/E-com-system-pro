@@ -595,7 +595,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
     const [selectedDiagnosis, setSelectedDiagnosis] = useState<Diagnosis | null>(null);
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
 
-    const systemVersion = 'v6.0.18887';
+    const systemVersion = 'v6.1.19001';
 
     const handleMarkAsHandled = (id: string) => {
         setDiagnoses(prev => prev.filter(d => d.id !== id));

@@ -200,10 +200,12 @@ export const App = () => {
                  const skuCode = getSkuIdentifier(row);
                  if (!skuCode || !enabledSkusMap.has(skuCode)) return;
 
-                 const key = `${row.date}-${skuCode}`;
+                 const dateKey = String(row.date).substring(0, 10);
+                 const key = `${dateKey}-${skuCode}`;
+
                  const entry = aggMap.get(key) || { 
                     // Key fields
-                    date: row.date, 
+                    date: dateKey, 
                     sku: skuCode,
                     skuName: enabledSkusMap.get(skuCode)?.name || '', 
                     shop_name: '',
