@@ -194,7 +194,7 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
     const [shopSearch, setShopSearch] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [qualityFilter, setQualityFilter] = useState<'all' | 'date_issue' | 'duplicates' | 'date_null_only'>('all');
+    const [qualityFilter, setQualityFilter] = useState<'all' | 'date_is_null' | 'duplicates'>('all');
     
     // Data Management
     const [tableData, setTableData] = useState<any[]>([]);
@@ -475,8 +475,7 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
                                     <div className="relative">
                                         <select value={qualityFilter} onChange={e => setQualityFilter(e.target.value as any)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm">
                                             <option value="all">全量数据 (All Records)</option>
-                                            <option value="date_null_only">❌ 仅日期为空 (Date is NULL)</option>
-                                            <option value="date_issue"> 时间空值/异常 (Date Errors)</option>
+                                            <option value="date_is_null">❌ 日期为空 (Date is NULL)</option>
                                             <option value="duplicates">⚠️ 完全重复数据 (Duplicate Rows)</option>
                                         </select>
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

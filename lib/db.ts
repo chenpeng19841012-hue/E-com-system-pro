@@ -111,7 +111,7 @@ export const DB = {
       endDate?: string, 
       sku?: string, 
       shopName?: string,
-      qualityFilter?: 'date_issue' | 'duplicates' | 'all' | 'date_null_only'
+      qualityFilter?: 'date_is_null' | 'duplicates' | 'all'
   }, limit = 100): Promise<any[]> {
       const supabase = getClient();
       if (!supabase) return [];
@@ -119,11 +119,8 @@ export const DB = {
       let query = supabase.from(tableName).select('*');
 
       // 质量筛选
-      if (filters.qualityFilter === 'date_null_only') {
+      if (filters.qualityFilter === 'date_is_null') {
           query = query.is('date', null);
-      } else if (filters.qualityFilter === 'date_issue') {
-          // 查找 date 为 NULL 或 空字符串的情况
-          query = query.or('date.is.null,date.eq.""');
       } 
       // 质量筛选：重复数据 (此处不处理，由 getDuplicatePreview 处理)
       else {
@@ -495,8 +492,7 @@ export const DB = {
         .select('id, product_id')
         .is('sku_code', null)
         .not('product_id', 'is', null)
-        .not('date', 'is', null)
-        .not('date', 'eq', ''); // 修复：同时跳过日期为空字符串的损坏行
+        .gte('date', '1970-01-01'); // More robustly select rows with valid dates, skipping null/empty ones.
 
     if (skuError) throw new Error(`扫描 SKU 编码失败: ${skuError.message}`);
 
@@ -527,8 +523,7 @@ export const DB = {
                 .from(tableName)
                 .select(`id, ${skuColumns.join(', ')}`)
                 .is('shop_name', null)
-                .not('date', 'is', null) // 修复：跳过日期为 null 的损坏行
-                .not('date', 'eq', '')   // 修复：同时跳过日期为空字符串的损坏行
+                .gte('date', '1970-01-01') // More robustly select rows with valid dates
                 .range(page * CHUNK_SIZE, (page + 1) * CHUNK_SIZE - 1);
 
             if (error) throw new Error(`扫描${tableName}失败: ${error.message}`);
