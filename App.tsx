@@ -3,11 +3,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     Search, ChevronLeft, ChevronRight,
     LayoutGrid, FileText, DollarSign, PackagePlus, Binoculars, TrendingUp,
-    Sparkles, ImageIcon, MessageSquare, Calculator, Package, Database, CloudSync, Layers
+    Sparkles, ImageIcon, MessageSquare, Calculator, Package, Database, CloudSync, Layers, Zap
 } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { ToastContainer } from './components/Toast';
+import { HotCacheInspectorModal } from './components/HotCacheInspectorModal'; 
 import { DashboardView } from './views/DashboardView';
 import { MultiQueryView } from './views/MultiQueryView';
 import { ReportsView } from './views/ReportsView';
@@ -27,7 +28,8 @@ import { AICompetitorMonitoringView } from './views/AICompetitorMonitoringView';
 
 import { View, TableType, ToastProps, Shop, ProductSKU, CustomerServiceAgent, UploadHistory, QuotingData, SkuList, SnapshotSettings, MonitoredCompetitorShop, CompetitorGroup } from './lib/types';
 import { DB } from './lib/db';
-import { parseExcelFile } from './lib/excel';
+import { getSkuIdentifier } from './lib/helpers';
+// FIX: Import schema constants that were missing, causing reference errors.
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from './lib/schemas';
 
 const INITIAL_QUOTING_DATA: QuotingData = {
@@ -104,6 +106,10 @@ export const App = () => {
     
     // 热数据缓存 (智能动态窗口)
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
+    // 新增：内存聚合缓存 (Session-level)
+    const [hotCacheData, setHotCacheData] = useState<any[]>([]);
+    const [isHotCacheInspectorOpen, setIsHotCacheInspectorOpen] = useState(false);
+
 
     // Competitor Monitoring Data
     const [compShops, setCompShops] = useState<MonitoredCompetitorShop[]>([]);
@@ -166,7 +172,7 @@ export const App = () => {
                 DB.getRange('fact_jingzhuntong', startDateStr, endDateStr),
                 DB.getRange('fact_customer_service', startDateStr, endDateStr)
             ]);
-
+            
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
             setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
@@ -185,6 +191,42 @@ export const App = () => {
                 jingzhuntong: recentJzt,
                 customer_service: recentCs
             });
+            
+            // **内存加速引擎：预聚合数据**
+            const enabledSkusMap = new Map(s_skus.filter((s:any) => s.isStatisticsEnabled).map((s:any) => [s.code, s]));
+            const aggMap = new Map<string, any>();
+            
+            const processRow = (row: any, type: 'sz' | 'jzt') => {
+                 const skuCode = getSkuIdentifier(row);
+                 if (!skuCode || !enabledSkusMap.has(skuCode)) return;
+
+                 const key = `${row.date}-${skuCode}`;
+                 const entry = aggMap.get(key) || { 
+                     date: row.date, 
+                     sku: skuCode,
+                     skuName: enabledSkusMap.get(skuCode)?.name || '', 
+                     gmv: 0, ca: 0, uv: 0, spend: 0, roi: 0,
+                 };
+
+                 if (type === 'sz') {
+                     entry.gmv += Number(row.paid_amount) || 0;
+                     entry.ca += Number(row.paid_items) || 0;
+                     entry.uv += Number(row.uv) || 0;
+                 } else { // jzt
+                     entry.spend += Number(row.cost) || 0;
+                 }
+                 aggMap.set(key, entry);
+            };
+
+            recentSz.forEach(r => processRow(r, 'sz'));
+            recentJzt.forEach(r => processRow(r, 'jzt'));
+            
+            aggMap.forEach(entry => {
+                entry.roi = entry.spend > 0 ? entry.gmv / entry.spend : 0;
+            });
+            
+            setHotCacheData(Array.from(aggMap.values()).sort((a,b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku)));
+
 
         } catch (e) {
             console.error("Initialization failed:", e);
@@ -623,11 +665,20 @@ export const App = () => {
                         <div className="w-3 h-3 rounded-full bg-green-400 border border-green-500/50"></div>
                     </div>
                     <IntelligenceHub setCurrentView={setCurrentView} />
+                    <button onClick={() => setIsHotCacheInspectorOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm ml-auto">
+                        <Zap size={14} />
+                        <span className="text-xs font-black uppercase tracking-widest">内存加速缓存</span>
+                    </button>
                 </header>
                 <main className="flex-1 overflow-y-auto no-scrollbar relative">
                     {renderView()}
                 </main>
                 <ToastContainer toasts={toasts} />
+                <HotCacheInspectorModal
+                    isOpen={isHotCacheInspectorOpen}
+                    onClose={() => setIsHotCacheInspectorOpen(false)}
+                    data={hotCacheData}
+                />
             </div>
         </div>
     );
