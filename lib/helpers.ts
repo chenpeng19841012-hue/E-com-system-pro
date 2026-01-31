@@ -99,29 +99,35 @@ export const detectTableType = (headers: string[], schemas: any): TableType | nu
     return bestMatch;
 };
 
-// 🛡️ 核心修复：强力 SKU 识别器
-// 能够处理：纯数字、科学计数法字符串 ("1.00212E+11")、带空格字符串
+// 🛡️ 核心修复：1:1 复刻沙盘的鲁棒性 SKU 识别器
+// 能够处理：纯数字、科学计数法字符串、带空格字符串、不同字段优先级
 export const getSkuIdentifier = (row: any): string | null => {
     if (!row) return null;
+
+    // 严格遵循沙盘的字段优先级：sku_code > tracked_sku_id > product_id
+    const rawVal = row.sku_code ?? row.tracked_sku_id ?? row.product_id ?? null;
     
-    // 优先取 sku_code，其次 product_id，再次 tracked_sku_id
-    const rawVal = row.sku_code || row.product_id || row.tracked_sku_id;
-    if (rawVal === undefined || rawVal === null) return null;
+    if (rawVal === null || rawVal === undefined) return null;
 
-    // 1. 如果是数字，强制转为非科学计数法的字符串
-    if (typeof rawVal === 'number') {
-        return rawVal.toLocaleString('fullwide', { useGrouping: false });
-    }
+    // 强制转为字符串并清理前后空格
+    let strVal = String(rawVal).trim();
+    if (strVal === '') return null;
 
-    const strVal = String(rawVal).trim();
-
-    // 2. 如果是科学计数法字符串 (e.g. "1.00212482468E11")，尝试还原
+    // 鲁棒地处理科学计数法
     if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
         const num = Number(strVal);
-        if (!isNaN(num)) {
-            return num.toLocaleString('fullwide', { useGrouping: false });
+        // 确保转换有效
+        if (!isNaN(num) && Number.isFinite(num)) {
+            // 使用 toFixed(0) 保证超长数字ID被还原为精确的字符串，避免 locale 影响
+            return num.toFixed(0);
         }
     }
+    
+    // 对于已经是数字字符串的，直接返回
+    if (/^\d+$/.test(strVal)) {
+        return strVal;
+    }
 
+    // 其他情况直接返回清理后的字符串
     return strVal;
 };

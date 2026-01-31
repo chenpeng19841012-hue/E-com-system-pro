@@ -1,3 +1,4 @@
+
 /**
  * Cloud-Native Database Adapter
  * v5.7.0 Upgrade: Robust Network Handling & Retry Logic
@@ -480,15 +481,39 @@ export const DB = {
     if (error) throw error;
   },
   
-  async repairAssetOwnership(shops: Shop[], skus: ProductSKU[], onProgress: (message: string) => void): Promise<number> {
+  async repairAssetOwnership(shops: Shop[], skus: ProductSKU[], onProgress: (message: string) => void): Promise<{ fixedOwnership: number, fixedSkuCodes: number }> {
     const supabase = getClient();
     if (!supabase) throw new Error("云端物理链路未建立。");
 
+    let totalFixedOwnership = 0;
+    let totalFixedSkuCodes = 0;
+
+    // 1. 校准 fact_shangzhi 中缺失的 sku_code
+    onProgress("正在扫描并校准 SKU 物理编码...");
+    const { data: skuToFix, error: skuError } = await supabase
+        .from('fact_shangzhi')
+        .select('id, product_id')
+        .is('sku_code', null)
+        .not('product_id', 'is', null);
+
+    if (skuError) throw new Error(`扫描 SKU 编码失败: ${skuError.message}`);
+
+    if (skuToFix && skuToFix.length > 0) {
+        onProgress(`发现 ${skuToFix.length} 条记录需要补充 SKU 编码，正在写入...`);
+        const skuUpdates = skuToFix.map(row => ({
+            id: row.id,
+            sku_code: row.product_id
+        }));
+        const { error: skuUpdateError } = await supabase.from('fact_shangzhi').upsert(skuUpdates);
+        if (skuUpdateError) throw new Error(`更新 SKU 编码失败: ${skuUpdateError.message}`);
+        totalFixedSkuCodes = skuToFix.length;
+    }
+
+    // 2. 校准缺失的 shop_name
     onProgress("正在加载资产与店铺映射...");
     const shopMap = new Map(shops.map(s => [s.id, s.name]));
     const skuShopMap = new Map(skus.map(s => [s.code, s.shopId]));
 
-    let totalFixed = 0;
     const CHUNK_SIZE = 500;
 
     const fixTable = async (tableName: string, skuColumns: string[]) => {
@@ -517,19 +542,15 @@ export const DB = {
                         break;
                     }
                 }
-
-                const shopName = foundShopId ? shopMap.get(foundShopId) : null;
-                if (shopName) {
-                    return { id: row.id, shop_name: shopName };
-                }
-                return null;
-            }).filter((u): u is {id: any, shop_name: string} => u !== null);
+                const shopName = (foundShopId ? shopMap.get(foundShopId) : null) || "未知店铺";
+                return { id: row.id, shop_name: shopName };
+            });
 
             if (updates.length > 0) {
-                onProgress(`发现 ${updates.length} 条记录需要校准，正在写入...`);
+                onProgress(`发现 ${updates.length} 条记录需要校准店铺归属，正在写入...`);
                 const { error: updateError } = await supabase.from(tableName).upsert(updates);
                 if (updateError) throw new Error(`${tableName} 更新失败: ${updateError.message}`);
-                totalFixed += updates.length;
+                totalFixedOwnership += updates.length;
             }
             
             if (toFix.length < CHUNK_SIZE) hasMore = false;
@@ -542,6 +563,6 @@ export const DB = {
     await fixTable('fact_jingzhuntong', ['tracked_sku_id']);
 
     onProgress("校准完成。");
-    return totalFixed;
+    return { fixedOwnership: totalFixedOwnership, fixedSkuCodes: totalFixedSkuCodes };
   }
 };

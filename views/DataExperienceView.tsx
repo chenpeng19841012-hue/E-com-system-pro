@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck, CopyMinus, Eraser } from 'lucide-react';
@@ -319,12 +320,25 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
         setIsRepairing(true);
         setRepairProgress("正在初始化...");
         try {
-            const fixedCount = await DB.repairAssetOwnership(shops, skus, (message: string) => {
+            const { fixedOwnership, fixedSkuCodes } = await DB.repairAssetOwnership(shops, skus, (message: string) => {
                 setRepairProgress(message);
             });
             await onRefreshData(); // 刷新 App 级数据
             await handleExecuteSearch(); // 刷新当前视图
-            addToast('success', '校准完成', `成功修复 ${fixedCount} 条记录的资产归属。`);
+            
+            const messages: string[] = [];
+            if (fixedSkuCodes > 0) {
+                messages.push(`成功补充 ${fixedSkuCodes} 条 SKU 编码`);
+            }
+            if (fixedOwnership > 0) {
+                messages.push(`成功修复 ${fixedOwnership} 条店铺归属`);
+            }
+
+            if (messages.length > 0) {
+                addToast('success', '校准完成', `${messages.join('；')}。`);
+            } else {
+                addToast('info', '校准完成', '未发现可修复的数据。');
+            }
         } catch (e: any) {
             addToast('error', '校准失败', e.message);
         } finally {

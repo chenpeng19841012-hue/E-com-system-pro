@@ -125,14 +125,12 @@ export const App = () => {
         try {
             setLoadingMessage('正在探测数据边界...');
             
-            // 1. 优先获取数据统计，以确定最新的数据日期 (Data Anchor)
             const [statSz, statJzt, statCs] = await Promise.all([
                 DB.getTableSummary('fact_shangzhi'),
                 DB.getTableSummary('fact_jingzhuntong'),
                 DB.getTableSummary('fact_customer_service')
             ]);
 
-            // 智能计算热数据时间窗口
             let anchorDate = new Date();
             if (statSz.latestDate && statSz.latestDate !== 'N/A') {
                 const szDate = new Date(statSz.latestDate);
@@ -142,13 +140,11 @@ export const App = () => {
             }
             
             const endDateStr = anchorDate.toISOString().split('T')[0];
-            // 严格遵循用户指令：向前追溯 60 天
-            const startDate = new Date(anchorDate.getTime() - 59 * 24 * 60 * 60 * 1000); // 包含当天，所以是59
+            const startDate = new Date(anchorDate.getTime() - 59 * 24 * 60 * 60 * 1000);
             const startDateStr = startDate.toISOString().split('T')[0];
 
             setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
 
-            // 2. 并行加载所有配置 + 基于智能窗口的热数据
             const [
                 s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups,
                 recentSz, recentJzt, recentCs
@@ -184,31 +180,18 @@ export const App = () => {
             const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
             const hotCacheAggMap = new Map<string, any>();
 
-            const normalize = (val: any): string | null => {
-                if (val === undefined || val === null) return null;
-                if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
-                const strVal = String(val).trim();
-                if (strVal === '') return null;
-                if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
-                    const num = Number(strVal);
-                    if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
-                }
-                return strVal;
-            };
-
             // 1. Process Shangzhi Data
             recentSz.forEach((row: any) => {
-                const rawIdentifier = row.sku_code || row.product_id;
-                const skuCode = normalize(rawIdentifier);
-                if (!skuCode || !skusToTrackMap.has(skuCode)) return;
+                const skuIdentifier = getSkuIdentifier(row);
+                if (!skuIdentifier || !skusToTrackMap.has(skuIdentifier)) return;
 
-                const skuInfo = skusToTrackMap.get(skuCode)!;
+                const skuInfo = skusToTrackMap.get(skuIdentifier)!;
                 const dateKey = String(row.date).substring(0, 10);
-                const key = `${dateKey}-${skuCode}`;
+                const key = `${dateKey}-${skuIdentifier}`;
 
                 const entry = hotCacheAggMap.get(key) || {
                     date: dateKey,
-                    sku_shop: { code: skuCode, shopName: shopMap.get(skuInfo.shopId) || '未知' },
+                    sku_shop: { code: skuIdentifier, shopName: shopMap.get(skuInfo.shopId) || '未知' },
                     pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
                     cost: 0, clicks: 0,
                 };
@@ -217,7 +200,6 @@ export const App = () => {
                 entry.uv += Number(row.uv) || 0;
                 entry.paid_items += Number(row.paid_items) || 0;
                 entry.paid_amount += Number(row.paid_amount) || 0;
-                // **核心对齐**: 1:1 复刻沙盘的成交人数计算逻辑，兼容 paid_customers 字段
                 entry.paid_users += (Number(row.paid_users) || Number(row.paid_customers) || 0);
                 
                 hotCacheAggMap.set(key, entry);
@@ -225,20 +207,16 @@ export const App = () => {
 
             // 2. Process Jingzhuntong Data
             recentJzt.forEach((row: any) => {
-                let rawIdentifier: any = row.tracked_sku_id;
-                if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
-                    rawIdentifier = row.sku_code || row.product_id;
-                }
-                const skuCode = normalize(rawIdentifier);
-                if (!skuCode || !skusToTrackMap.has(skuCode)) return;
+                const skuIdentifier = getSkuIdentifier(row);
+                if (!skuIdentifier || !skusToTrackMap.has(skuIdentifier)) return;
 
-                const skuInfo = skusToTrackMap.get(skuCode)!;
+                const skuInfo = skusToTrackMap.get(skuIdentifier)!;
                 const dateKey = String(row.date).substring(0, 10);
-                const key = `${dateKey}-${skuCode}`;
+                const key = `${dateKey}-${skuIdentifier}`;
 
                 const entry = hotCacheAggMap.get(key) || {
                     date: dateKey,
-                    sku_shop: { code: skuCode, shopName: shopMap.get(skuInfo.shopId) || '未知' },
+                    sku_shop: { code: skuIdentifier, shopName: shopMap.get(skuInfo.shopId) || '未知' },
                     pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
                     cost: 0, clicks: 0,
                 };
