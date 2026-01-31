@@ -70,44 +70,45 @@ const DataInspectorModal = ({
 
     const sourceData = useMemo(() => {
         const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, spend: number, source: string[] }>();
-        const getKey = (date: string, sku: string, type: 'shangzhi' | 'jingzhuntong') => `${date}-${sku}-${type}`;
-
+        
         const processRows = (rows: any[], type: 'shangzhi' | 'jingzhuntong') => {
-             rows.forEach(r => {
+             rows.forEach((r, i) => {
                 const date = getDateKey(r.date);
                 if (date < dateRange.start || date > dateRange.end) return;
                 
                 let sku: string | null = null;
-
-                // Robust SKU identification logic
+                
                 if (type === 'shangzhi') {
-                    const skuCode = r.sku_code ? String(r.sku_code).trim() : null;
-                    const productId = r.product_id ? String(r.product_id).trim() : null;
-
-                    if (skuCode && enabledSkusMap.has(skuCode)) {
-                        sku = skuCode;
-                    } else if (productId && enabledSkusMap.has(productId)) {
-                        sku = productId;
+                    // For Shangzhi, trust sku_code or product_id
+                    const identifiedSku = getSkuIdentifier({ sku_code: r.sku_code, product_id: r.product_id });
+                    if (identifiedSku && enabledSkusMap.has(identifiedSku)) {
+                        sku = identifiedSku;
                     }
                 } else { // jingzhuntong
-                    const identifier = getSkuIdentifier(r);
-                    if (identifier && enabledSkusMap.has(identifier)) {
-                        sku = identifier;
+                    // For Jingzhuntong, ONLY trust tracked_sku_id to avoid mismatches
+                    let identifiedSku = getSkuIdentifier({ tracked_sku_id: r.tracked_sku_id });
+                    // Fallback if tracked_sku_id is missing but other IDs are present
+                    if (!identifiedSku) {
+                        identifiedSku = getSkuIdentifier({ sku_code: r.sku_code, product_id: r.product_id });
+                    }
+                    if (identifiedSku && enabledSkusMap.has(identifiedSku)) {
+                        sku = identifiedSku;
                     }
                 }
 
                 if (!sku) return; // If no enabled SKU identifier is found, skip the row.
 
-                const key = getKey(date, sku, type);
+                // Unique key per source to show distinct raw rows
+                const key = `${date}-${sku}-${type}-${i}`;
                 const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
                 
                 if (type === 'shangzhi') {
                     entry.gmv += Number(r.paid_amount) || 0;
                     entry.ca += Number(r.paid_items) || 0;
-                    if (entry.source.length === 0) entry.source.push('商智');
+                    if (!entry.source.includes('商智')) entry.source.push('商智');
                 } else { // jingzhuntong
                     entry.spend += Number(r.cost) || 0;
-                    if (entry.source.length === 0) entry.source.push('广告');
+                    if (!entry.source.includes('广告')) entry.source.push('广告');
                 }
                 
                 dataMap.set(key, entry);

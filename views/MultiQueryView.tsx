@@ -227,12 +227,25 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
             const rowsSz = await DB.getRange('fact_shangzhi', startDate, endDate, isExplicitSearch ? parsedSkus : undefined);
             const rowsJzt = await DB.getRange('fact_jingzhuntong', startDate, endDate, isExplicitSearch ? parsedSkus : undefined);
 
-            const filter = (row: any) => {
-                const codeRaw = getSkuIdentifier(row);
+            const filter = (row: any, type: 'sz' | 'jzt') => {
+                let codeRaw: string | null = null;
+                 if (type === 'sz') {
+                    codeRaw = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
+                 } else {
+                    codeRaw = getSkuIdentifier({ tracked_sku_id: row.tracked_sku_id });
+                    if (!codeRaw) {
+                        codeRaw = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
+                    }
+                 }
+
                 if (!codeRaw) return false;
                 const code = String(codeRaw).trim();
 
                 if (!isExplicitSearch && !enabledSkusMap.has(code)) {
+                    return false;
+                }
+                
+                if (isExplicitSearch && !parsedSkus.includes(code)) {
                     return false;
                 }
 
@@ -267,19 +280,20 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         let shopName = '多店铺/多SKU';
                         if (selectedShopId !== 'all') shopName = shopMap.get(selectedShopId)?.name || '未知';
                         
-                        const code = String(getSkuIdentifier(row)).trim();
+                        let skuCodeIdentifier = 'AGGREGATED';
                         if (parsedSkus.length === 1) {
-                             const asset = enabledSkusMap.get(code);
-                             if(asset) shopName = shopMap.get(asset.shopId)?.name || '未知';
-                             else if (row.shop_name) shopName = row.shop_name + " (Raw)";
-                             else shopName = "未归档资产";
+                            skuCodeIdentifier = parsedSkus[0];
+                            const asset = enabledSkusMap.get(skuCodeIdentifier);
+                            if(asset) shopName = shopMap.get(asset.shopId)?.name || '未知';
+                            else if (row.shop_name) shopName = row.shop_name + " (Raw)";
+                            else shopName = "未归档资产";
                         }
+
 
                         merged.set(aggKey, { 
                             date: key, aggDate: aggKey, 
-                            sku_code: 'AGGREGATED', 
                             sku_shop: { 
-                                code: parsedSkus.length === 1 ? parsedSkus[0] : (isExplicitSearch ? '搜索结果汇总' : '全盘汇总'), 
+                                code: skuCodeIdentifier,
                                 shopName: shopName 
                             },
                             pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
@@ -289,8 +303,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     return merged.get(aggKey)!;
                 };
 
-                const filteredSz = sz.filter(filter);
-                filteredSz.forEach(r => {
+                sz.filter(r => filter(r, 'sz')).forEach(r => {
                     const ent = getOrCreateEntry(r);
                     ent['paid_items'] += (Number(r.paid_items) || 0);
                     ent['paid_amount'] += (Number(r.paid_amount) || 0);
@@ -299,8 +312,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     ent['uv'] += (Number(r.uv) || 0);
                 });
 
-                const filteredJzt = jzt.filter(filter);
-                filteredJzt.forEach(r => {
+                jzt.filter(r => filter(r, 'jzt')).forEach(r => {
                     const ent = getOrCreateEntry(r);
                     ent['cost'] += (Number(r.cost) || 0);
                     ent['clicks'] += (Number(r.clicks) || 0);
@@ -550,7 +562,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                 {/* 明细表区域 */}
                 <div className="bg-white rounded-[48px] shadow-sm border-2 border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
                     <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                        <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">沙盘推演明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Sandbox Simulation Result Set</p></div></div>
+                        <div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-brand shadow-sm"><Database size={24} /></div><div><h3 className="text-xl font-black text-slate-800 tracking-tight">沙盘推演明细</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Sandbox Simulation Result Set</p></div></div>
                         <button className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-slate-800 text-white font-black text-xs hover:bg-slate-700 shadow-xl shadow-slate-200 transition-all active:scale-95 uppercase tracking-widest"><Download size={16} /> 导出维度明细</button>
                     </div>
                     <div className="flex-1 p-8 flex flex-col">

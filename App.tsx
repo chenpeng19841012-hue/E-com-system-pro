@@ -197,7 +197,19 @@ export const App = () => {
             const aggMap = new Map<string, any>();
             
             const processRow = (row: any, type: 'sz' | 'jzt') => {
-                 const skuCode = getSkuIdentifier(row);
+                 let skuCode: string | null = null;
+                 if (type === 'sz') {
+                     // For Shangzhi, trust sku_code or product_id
+                     skuCode = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
+                 } else { // jzt
+                     // For Jingzhuntong, ONLY trust tracked_sku_id to avoid mismatches
+                     skuCode = getSkuIdentifier({ tracked_sku_id: row.tracked_sku_id });
+                     // Fallback if tracked_sku_id is missing but other IDs are present
+                     if (!skuCode) {
+                         skuCode = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
+                     }
+                 }
+
                  if (!skuCode || !enabledSkusMap.has(skuCode)) return;
 
                  const dateKey = String(row.date).substring(0, 10);
