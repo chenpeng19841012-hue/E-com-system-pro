@@ -1138,8 +1138,8 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                                 <p className="text-[9px] text-slate-400 font-black uppercase mt-0.5 tracking-widest leading-none">Neural Decision Intelligence</p>
                             </div>
                         </div>
-                        <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="px-5 py-2 bg-slate-100 text-slate-500 rounded-full font-black text-[10px] hover:bg-slate-200 transition-all uppercase tracking-widest">
-                            全部
+                        <button onClick={() => setIsAllDiagnosesModalOpen(true)} className="px-5 py-2 bg-brand text-white rounded-full font-black text-[10px] hover:bg-[#5da035] shadow-lg shadow-brand/20 transition-all uppercase tracking-widest">
+                            查看全部预警
                         </button>
                     </div>
                     <div className="flex-1 relative overflow-hidden mask-linear-fade">
