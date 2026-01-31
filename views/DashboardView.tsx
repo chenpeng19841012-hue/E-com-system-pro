@@ -672,11 +672,18 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 previousPeriodKeys = prevRange.length > 1 ? [prevRange[0]] : [];
             } else if (rangeType === 'yesterday') {
                 daysInPeriod = 1;
-                const yesterdayRange = generateDateRange(anchorStr, 2);
-                currentPeriodKeys = yesterdayRange.length > 1 ? [yesterdayRange[0]] : [anchorStr];
+                // 核心修正：昨日严格参照北京时间的日历昨天，而非数据锚点
+                const todayBeijing = getTodayInBeijingString();
+                const yesterdayRange = generateDateRange(todayBeijing, 2);
                 
-                const prevRange = generateDateRange(currentPeriodKeys[0], 2);
-                previousPeriodKeys = prevRange.length > 1 ? [prevRange[0]] : [];
+                currentPeriodKeys = yesterdayRange.length > 1 ? [yesterdayRange[0]] : [];
+        
+                if (currentPeriodKeys.length > 0) {
+                    const dayBeforeYesterdayRange = generateDateRange(currentPeriodKeys[0], 2);
+                    previousPeriodKeys = dayBeforeYesterdayRange.length > 1 ? [dayBeforeYesterdayRange[0]] : [];
+                } else {
+                     previousPeriodKeys = [];
+                }
             } else if (rangeType === 'custom') {
                  const diffTime = Math.abs(new Date(customRange.end).getTime() - new Date(customRange.start).getTime());
                  daysInPeriod = Math.ceil(diffTime / 86400000) + 1;
@@ -686,10 +693,8 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             } else {
                 const daysMap: Record<string, number> = { '7d': 7, '30d': 30 };
                 daysInPeriod = daysMap[rangeType] || 7;
-                // 修正：直接使用数据锚点日期作为当前周期的结束日期
                 currentPeriodKeys = generateDateRange(anchorStr, daysInPeriod);
                 
-                // 确保环比周期正确对齐
                 const currentPeriodStartDate = currentPeriodKeys[0];
                 const prevPeriodEndDate = generateDateRange(currentPeriodStartDate, 2)[0];
                 previousPeriodKeys = generateDateRange(prevPeriodEndDate, daysInPeriod);
@@ -1015,13 +1020,19 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                     </button>
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
                         {[
-                            {id:'realtime', l:'实时', icon: Wifi}, 
+                            {id:'realtime', l:'实时', icon: Wifi, disabled: true, title: '实时物理链路尚未建立'}, 
                             {id:'yesterday', l:'昨日', icon: History},
                             {id:'7d', l:'近7天'},
                             {id:'30d', l:'近30天'},
                             {id:'custom', l:'自定义'}
                         ].map(i => (
-                            <button key={i.id} onClick={() => setRangeType(i.id as RangeType)} className={`px-5 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <button 
+                                key={i.id} 
+                                onClick={() => !i.disabled && setRangeType(i.id as RangeType)} 
+                                className={`px-5 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${rangeType === i.id ? 'bg-white text-slate-900 shadow-xl scale-105' : 'text-slate-500'} ${i.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:text-slate-700'}`}
+                                disabled={i.disabled}
+                                title={i.title || ''}
+                            >
                                 {i.icon && <i.icon size={12} className={rangeType === i.id ? 'text-brand' : 'opacity-50'} />}
                                 {i.l}
                             </button>
