@@ -70,7 +70,7 @@ const DataInspectorModal = ({
     }, [skus]);
 
     const sourceData = useMemo(() => {
-        const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, spend: number, source: string[] }>();
+        const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, uv: number, spend: number, source: string[] }>();
         
         const processRows = (rows: any[], type: 'shangzhi' | 'jingzhuntong') => {
              rows.forEach((r, i) => {
@@ -110,11 +110,12 @@ const DataInspectorModal = ({
 
                 // Unique key per source to show distinct raw rows
                 const key = `${date}-${sku}-${type}-${i}`;
-                const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
+                const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, uv: 0, spend: 0, source: [] };
                 
                 if (type === 'shangzhi') {
                     entry.gmv += Number(r.paid_amount) || 0;
                     entry.ca += Number(r.paid_items) || 0;
+                    entry.uv += Number(r.uv) || 0;
                     if (!entry.source.includes('商智')) entry.source.push('商智');
                 } else { // jingzhuntong
                     entry.spend += Number(r.cost) || 0;
@@ -129,7 +130,7 @@ const DataInspectorModal = ({
         processRows(rawData.jingzhuntong, 'jingzhuntong');
 
         return Array.from(dataMap.values())
-            .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0)
+            .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0 || d.uv > 0)
             .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku) || a.source[0].localeCompare(b.source[0]));
     }, [rawData, dateRange, enabledSkusMap]);
 
@@ -174,6 +175,7 @@ const DataInspectorModal = ({
                                         <th className="p-3">SKU</th>
                                         <th className="p-3 text-right">GMV</th>
                                         <th className="p-3 text-right">CA</th>
+                                        <th className="p-3 text-right">访客数</th>
                                         <th className="p-3 text-right">SPEND</th>
                                         <th className="p-3 text-center">Source</th>
                                     </tr>
@@ -185,6 +187,7 @@ const DataInspectorModal = ({
                                             <td className="p-3 font-bold text-slate-800 truncate max-w-[200px]">{row.sku}</td>
                                             <td className="p-3 text-right text-slate-600">¥{row.gmv.toFixed(2)}</td>
                                             <td className="p-3 text-right text-slate-600">{row.ca}</td>
+                                            <td className="p-3 text-right text-slate-600">{row.uv}</td>
                                             <td className="p-3 text-right text-slate-600">¥{row.spend.toFixed(2)}</td>
                                             <td className="p-3 text-center">
                                                 <div className="flex items-center justify-center gap-1">
@@ -195,7 +198,7 @@ const DataInspectorModal = ({
                                             </td>
                                         </tr>
                                     )) : (
-                                        <tr><td colSpan={6} className="text-center p-10 text-slate-400 font-bold">周期内无物理数据记录</td></tr>
+                                        <tr><td colSpan={7} className="text-center p-10 text-slate-400 font-bold">周期内无物理数据记录</td></tr>
                                     )}
                                 </tbody>
                             </table>
