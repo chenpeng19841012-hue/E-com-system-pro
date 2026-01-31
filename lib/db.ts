@@ -494,7 +494,8 @@ export const DB = {
         .from('fact_shangzhi')
         .select('id, product_id')
         .is('sku_code', null)
-        .not('product_id', 'is', null);
+        .not('product_id', 'is', null)
+        .not('date', 'is', null); // 修复：跳过日期为空的损坏行
 
     if (skuError) throw new Error(`扫描 SKU 编码失败: ${skuError.message}`);
 
@@ -525,6 +526,7 @@ export const DB = {
                 .from(tableName)
                 .select(`id, ${skuColumns.join(', ')}`)
                 .is('shop_name', null)
+                .not('date', 'is', null) // 修复：跳过日期为空的损坏行
                 .range(page * CHUNK_SIZE, (page + 1) * CHUNK_SIZE - 1);
 
             if (error) throw new Error(`扫描${tableName}失败: ${error.message}`);
