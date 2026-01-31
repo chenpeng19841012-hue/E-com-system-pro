@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     Search, ChevronLeft, ChevronRight,
     LayoutGrid, FileText, DollarSign, PackagePlus, Binoculars, TrendingUp,
-    Sparkles, ImageIcon, MessageSquare, Calculator, Package, Database, CloudSync, Layers, Zap
+    Sparkles, ImageIcon, MessageSquare, Calculator, Package, Database, CloudSync, Layers, Zap, SearchCode
 } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
@@ -85,6 +85,7 @@ export const App = () => {
     const [toasts, setToasts] = useState<ToastProps[]>([]);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isAppLoading, setIsAppLoading] = useState(true);
+    const [headerControls, setHeaderControls] = useState<React.ReactNode>(null);
     // loadingMessage is kept for internal logic flow but not rendered
     const [loadingMessage, setLoadingMessage] = useState('连接云端资产库...');
     
@@ -532,6 +533,13 @@ export const App = () => {
         }
     };
 
+    const wrappedSetCurrentView = (view: View) => {
+        if (view !== 'dashboard') {
+            setHeaderControls(null);
+        }
+        setCurrentView(view);
+    };
+
     const renderView = () => {
         if (isAppLoading) return (
             <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#F8FAFC]">
@@ -568,8 +576,7 @@ export const App = () => {
         
         const commonProps = { skus, shops, agents, schemas, addToast };
         switch (currentView) {
-            // FIX: Removed cachedData={factTables} prop from DashboardView as it's not used by the component.
-            case 'dashboard': return <DashboardView setCurrentView={setCurrentView} {...commonProps} factStats={factStats} />;
+            case 'dashboard': return <DashboardView setHeaderControls={setHeaderControls} setCurrentView={wrappedSetCurrentView} {...commonProps} factStats={factStats} />;
             case 'multiquery': return <MultiQueryView {...commonProps} />;
             case 'reports': return <ReportsView {...commonProps} factTables={factTables} skuLists={skuLists} onAddNewSkuList={async (l:any) => { const n = [...skuLists, {...l, id: Date.now().toString()}]; setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onUpdateSkuList={async (l:any) => { const n = skuLists.map(x=>x.id===l.id?l:x); setSkuLists(n); await DB.saveConfig('dim_sku_lists', n); return true; }} onDeleteSkuList={(id:any) => { const n = skuLists.filter(x=>x.id!==id); setSkuLists(n); DB.saveConfig('dim_sku_lists', n); }} />;
             // 传递 handleRawDataImport 给 DataCenterView
@@ -650,14 +657,13 @@ export const App = () => {
                     addToast={addToast} 
                 />
             );
-            // FIX: Removed cachedData={factTables} prop from DashboardView as it's not used by the component.
-            default: return <DashboardView setCurrentView={setCurrentView} {...commonProps} factStats={factStats} />;
+            default: return <DashboardView setHeaderControls={setHeaderControls} setCurrentView={wrappedSetCurrentView} {...commonProps} factStats={factStats} />;
         }
     };
 
     return (
         <div className="flex flex-row h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
-            <Sidebar currentView={currentView} setCurrentView={setCurrentView} isSidebarCollapsed={isSidebarCollapsed} setIsSidebarCollapsed={setIsSidebarCollapsed} />
+            <Sidebar currentView={currentView} setCurrentView={wrappedSetCurrentView} isSidebarCollapsed={isSidebarCollapsed} setIsSidebarCollapsed={setIsSidebarCollapsed} />
             <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative border-l border-slate-200">
                 <header className="h-14 bg-white/80 backdrop-blur-lg border-b border-slate-200 flex items-center px-6 shrink-0 z-20 relative">
                     <button
@@ -673,11 +679,14 @@ export const App = () => {
                         <div className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500/50"></div>
                         <div className="w-3 h-3 rounded-full bg-green-400 border border-green-500/50"></div>
                     </div>
-                    <IntelligenceHub setCurrentView={setCurrentView} />
-                    <button onClick={() => setIsHotCacheInspectorOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm ml-auto">
-                        <Zap size={14} />
-                        <span className="text-xs font-black uppercase tracking-widest">内存加速缓存</span>
-                    </button>
+                    <IntelligenceHub setCurrentView={wrappedSetCurrentView} />
+                    <div className="ml-auto flex items-center gap-4">
+                        {headerControls}
+                        <button onClick={() => setIsHotCacheInspectorOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
+                            <Zap size={14} />
+                            <span className="text-xs font-black uppercase tracking-widest">内存加速缓存</span>
+                        </button>
+                    </div>
                 </header>
                 <main className="flex-1 overflow-y-auto no-scrollbar relative">
                     {renderView()}

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     TrendingUp, ShoppingBag, Activity, CreditCard, Target, 
@@ -572,7 +573,7 @@ const MainTrendVisual = ({ data, metricKey, errorMessage }: { data: DailyRecord[
     );
 };
 
-export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast }: { setCurrentView: (view: View) => void, skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any }) => {
+export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast, setHeaderControls }: { setCurrentView: (view: View) => void, skus: ProductSKU[], shops: Shop[], factStats?: any, addToast: any, setHeaderControls: (node: React.ReactNode) => void }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeMetric, setActiveMetric] = useState<MetricKey>('gmv');
     const [rangeType, setRangeType] = useState<RangeType>('7d');
@@ -606,6 +607,16 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
     const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
 
     const systemVersion = 'v6.1.19001';
+
+    useEffect(() => {
+        setHeaderControls(
+            <button onClick={() => setIsDebugOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
+                <SearchCode size={14} />
+                <span className="text-xs font-black uppercase tracking-widest">链路探测器</span>
+            </button>
+        );
+        return () => setHeaderControls(null); // Cleanup on unmount
+    }, [setHeaderControls, setIsDebugOpen]);
 
     const handleMarkAsHandled = (id: string) => {
         setDiagnoses(prev => prev.filter(d => d.id !== id));
@@ -1063,10 +1074,6 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 </div>
                 
                 <div className="flex items-center gap-4">
-                     <button onClick={() => setIsDebugOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
-                        <SearchCode size={14} />
-                        <span className="text-xs font-black uppercase tracking-widest">链路探测器</span>
-                    </button>
                     <div className="flex bg-slate-200/50 p-1.5 rounded-[22px] shadow-inner border border-slate-200">
                         {[
                             {id:'realtime', l:'实时', icon: Wifi, disabled: true, title: '实时物理链路尚未建立'}, 
