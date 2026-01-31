@@ -1,8 +1,18 @@
+
 import React from 'react';
 import { X, Zap, Database } from 'lucide-react';
 
 export const HotCacheInspectorModal = ({ isOpen, onClose, data }: { isOpen: boolean, onClose: () => void, data: any[] }) => {
     if (!isOpen) return null;
+
+    const formatMetricValue = (value: number | undefined | null, type: 'currency' | 'percent' | 'float' | 'integer') => {
+        const num = value || 0;
+        if (type === 'currency') return `¥${Math.round(num).toLocaleString()}`;
+        if (type === 'percent') return `${(num * 100).toFixed(2)}%`;
+        if (type === 'float') return num.toFixed(2);
+        return Math.round(num).toLocaleString();
+    };
+
 
     return (
         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
@@ -29,72 +39,43 @@ export const HotCacheInspectorModal = ({ isOpen, onClose, data }: { isOpen: bool
                         <h4 className="text-sm font-black text-slate-800 uppercase mb-4 flex items-center gap-2">
                             <Database size={16} className="text-brand"/> 预聚合数据快照 ({data.length} 条)
                         </h4>
-                        <div className="overflow-auto max-h-96 custom-scrollbar pr-4 -mr-4 rounded-xl">
-                             <table className="w-full text-xs table-auto min-w-[2500px]">
-                                <thead className="sticky top-0 bg-slate-50/80 backdrop-blur-sm">
-                                    <tr className="text-slate-400 font-black uppercase tracking-widest text-left">
-                                        <th className="p-3 sticky left-0 bg-slate-50/80 z-20 min-w-[100px]">日期</th>
-                                        <th className="p-3 sticky left-[100px] bg-slate-50/80 z-20 min-w-[160px]">SKU</th>
-                                        <th className="p-3">店铺</th>
-                                        <th className="p-3">三级类目</th>
-                                        <th className="p-3">广告账户</th>
-                                        <th className="p-3 text-right">GMV</th>
-                                        <th className="p-3 text-right">CA</th>
-                                        <th className="p-3 text-right">UV</th>
-                                        <th className="p-3 text-right">PV</th>
-                                        <th className="p-3 text-right">成交转化率</th>
-                                        <th className="p-3 text-right">成交单量</th>
-                                        <th className="p-3 text-right">加购人数</th>
-                                        <th className="p-3 text-right">加购件数</th>
-                                        <th className="p-3 text-right">花费</th>
-                                        <th className="p-3 text-right">展现</th>
-                                        <th className="p-3 text-right">点击</th>
-                                        <th className="p-3 text-right">直接订单行</th>
-                                        <th className="p-3 text-right">直接订单额</th>
-                                        <th className="p-3 text-right">间接订单行</th>
-                                        <th className="p-3 text-right">间接订单额</th>
-                                        <th className="p-3 text-right">总订单行</th>
-                                        <th className="p-3 text-right">总订单额</th>
-                                        <th className="p-3 text-right">直接加购</th>
-                                        <th className="p-3 text-right">间接加购</th>
-                                        <th className="p-3 text-right">总加购</th>
-                                        <th className="p-3 text-right">ROI</th>
-                                        <th className="p-3 text-right">CPC</th>
+                        <div className="overflow-auto max-h-[500px] custom-scrollbar pr-4 -mr-4 rounded-xl">
+                             <table className="w-full text-sm table-fixed min-w-[1400px]">
+                                <thead className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-30">
+                                    <tr className="text-slate-400 font-black text-[10px] uppercase tracking-widest text-center">
+                                        <th className="py-6 px-4 border-b border-slate-100 w-[120px] sticky left-0 bg-slate-50/80 z-20">日期</th>
+                                        <th className="py-6 px-4 border-b border-slate-100 w-[200px] sticky left-[120px] bg-slate-50/80 z-20 text-left">资产归属</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">浏览量</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">访客数</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">成交件数</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">成交金额</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">成交转化率</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">广告花费</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">CPC</th>
+                                        <th className="py-6 px-4 border-b border-slate-100">ROI</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
+                                <tbody className="divide-y divide-slate-50">
                                     {data.length > 0 ? data.map((row, i) => (
-                                        <tr key={i} className="hover:bg-slate-100/50 transition-colors group">
-                                            <td className="p-3 font-bold text-slate-600 sticky left-0 bg-white group-hover:bg-slate-100/50 z-10 transition-none">{row.date}</td>
-                                            <td className="p-3 font-bold text-slate-800 truncate max-w-[150px] sticky left-[100px] bg-white group-hover:bg-slate-100/50 z-10 transition-none">{row.sku}</td>
-                                            <td className="p-3 text-slate-500 truncate max-w-[150px] font-sans font-bold">{row.shop_name}</td>
-                                            <td className="p-3 text-slate-500 truncate max-w-[150px] font-sans font-bold">{row.category_l3}</td>
-                                            <td className="p-3 text-slate-500 truncate max-w-[150px] font-sans font-bold">{row.account_nickname}</td>
-                                            <td className="p-3 text-right text-slate-600">¥{Math.round(row.gmv).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.ca)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.uv)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.pv)}</td>
-                                            <td className="p-3 text-right font-black text-rose-600">{(row.cvr * 100).toFixed(2)}%</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.paid_orders)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.add_to_cart_users)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.add_to_cart_items)}</td>
-                                            <td className="p-3 text-right text-amber-600">¥{Math.round(row.spend).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.impressions).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.clicks).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.direct_orders)}</td>
-                                            <td className="p-3 text-right text-slate-600">¥{Math.round(row.direct_order_amount).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.indirect_orders)}</td>
-                                            <td className="p-3 text-right text-slate-600">¥{Math.round(row.indirect_order_amount).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.total_orders)}</td>
-                                            <td className="p-3 text-right text-slate-600">¥{Math.round(row.total_order_amount).toLocaleString()}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.direct_add_to_cart)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.indirect_add_to_cart)}</td>
-                                            <td className="p-3 text-right text-slate-600">{Math.round(row.total_add_to_cart)}</td>
-                                            <td className="p-3 text-right font-black text-brand">{row.roi.toFixed(2)}</td>
-                                            <td className="p-3 text-right font-black text-indigo-600">¥{row.cpc.toFixed(2)}</td>
+                                        <tr key={i} className="hover:bg-slate-50/80 transition-colors group">
+                                            <td className="py-4 px-4 text-center font-mono text-[11px] sticky left-0 bg-white group-hover:bg-slate-50/80 z-10 transition-none">
+                                                <span className="font-black whitespace-nowrap px-2 py-1 rounded-md text-slate-500 bg-slate-100/50">{row.date}</span>
+                                            </td>
+                                            <td className="py-4 px-4 sticky left-[120px] bg-white group-hover:bg-slate-50/80 z-10 transition-none">
+                                                <div className="font-black text-slate-800 truncate text-xs" title={row.sku_shop.code}>{row.sku_shop.code}</div>
+                                                <div className="text-[9px] font-bold mt-0.5 truncate uppercase tracking-tighter text-slate-400 opacity-70">{row.sku_shop.shopName}</div>
+                                            </td>
+                                            <td className="py-4 px-4 text-center font-mono font-bold text-slate-600 text-[11px]">{formatMetricValue(row.pv, 'integer')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-bold text-slate-600 text-[11px]">{formatMetricValue(row.uv, 'integer')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-bold text-slate-600 text-[11px]">{formatMetricValue(row.paid_items, 'integer')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-black text-slate-900 text-[11px]">{formatMetricValue(row.paid_amount, 'currency')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-black text-rose-600 text-[11px]">{formatMetricValue(row.paid_conversion_rate, 'percent')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-bold text-amber-600 text-[11px]">{formatMetricValue(row.cost, 'currency')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-black text-indigo-600 text-[11px]">{formatMetricValue(row.cpc, 'currency')}</td>
+                                            <td className="py-4 px-4 text-center font-mono font-black text-brand text-[11px]">{formatMetricValue(row.roi, 'float')}</td>
                                         </tr>
                                     )) : (
-                                        <tr><td colSpan={27} className="text-center p-10 text-slate-400 font-bold">内存缓存为空</td></tr>
+                                        <tr><td colSpan={10} className="text-center p-20 text-slate-400 font-black text-sm uppercase tracking-widest">内存缓存为空或无统计中的资产</td></tr>
                                     )}
                                 </tbody>
                             </table>

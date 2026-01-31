@@ -721,28 +721,31 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 const prev = { gmv: { total: 0, self: 0, pop: 0 }, ca: { total: 0, self: 0, pop: 0 }, spend: { total: 0, self: 0, pop: 0 } };
 
                 const processRow = (row: any, targetPeriod: 'curr' | 'prev', type: 'sz' | 'jzt') => {
-                    let code: string | null = null;
-                    let skuConfig: ProductSKU | undefined = undefined;
-
-                    // Robust SKU identification logic
-                    if (type === 'sz') {
-                        const skuCode = row.sku_code ? String(row.sku_code).trim() : null;
-                        const productId = row.product_id ? String(row.product_id).trim() : null;
-                        
-                        if (skuCode && enabledSkusMap.has(skuCode)) {
-                            code = skuCode;
-                        } else if (productId && enabledSkusMap.has(productId)) {
-                            code = productId;
+                    const normalize = (val: any): string | null => {
+                        if (val === undefined || val === null) return null;
+                        if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
+                        const strVal = String(val).trim();
+                        if (strVal === '') return null;
+                        if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+                            const num = Number(strVal);
+                            if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
                         }
+                        return strVal;
+                    };
+    
+                    let rawIdentifier: any = null;
+                    if (type === 'sz') {
+                        rawIdentifier = row.sku_code || row.product_id;
                     } else { // 'jzt'
-                        const identifier = getSkuIdentifier(row);
-                        if (identifier && enabledSkusMap.has(identifier)) {
-                            code = identifier;
+                        rawIdentifier = row.tracked_sku_id;
+                        if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
+                            rawIdentifier = row.sku_code || row.product_id;
                         }
                     }
+                    const code = normalize(rawIdentifier);
 
-                    if (!code) return; // If no enabled SKU is found, exit.
-                    skuConfig = enabledSkusMap.get(code)!;
+                    if (!code || !enabledSkusMap.has(code)) return;
+                    const skuConfig = enabledSkusMap.get(code)!;
                     
                     const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
                     const stats = targetPeriod === 'curr' ? curr : prev;

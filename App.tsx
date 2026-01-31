@@ -192,120 +192,90 @@ export const App = () => {
                 customer_service: recentCs
             });
             
-            // **内存加速引擎：预聚合数据**
-            const enabledSkusMap = new Map(s_skus.filter((s:any) => s.isStatisticsEnabled).map((s:any) => [s.code, s]));
-            const aggMap = new Map<string, any>();
-            
-            const processRow = (row: any, type: 'sz' | 'jzt') => {
-                 const normalize = (val: any): string | null => {
-                    if (val === undefined || val === null) return null;
-                    if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
-                    const strVal = String(val).trim();
-                    if (strVal === '') return null;
-                    if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
-                        const num = Number(strVal);
-                        if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
-                    }
-                    return strVal;
-                };
+            // **内存加速引擎：预聚合数据 (沙盘逻辑 1:1 复制)**
+            const skusToTrack = s_skus.filter((s: ProductSKU) => s.isStatisticsEnabled);
+            const skusToTrackMap = new Map(skusToTrack.map((s: ProductSKU) => [s.code, s]));
+            const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
+            const hotCacheAggMap = new Map<string, any>();
 
-                let rawIdentifier: any = null;
-                if (type === 'sz') {
-                    rawIdentifier = row.sku_code || row.product_id;
-                } else { // jzt
-                    rawIdentifier = row.tracked_sku_id;
-                    if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
-                        rawIdentifier = row.sku_code || row.product_id;
-                    }
+            const normalize = (val: any): string | null => {
+                if (val === undefined || val === null) return null;
+                if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
+                const strVal = String(val).trim();
+                if (strVal === '') return null;
+                if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+                    const num = Number(strVal);
+                    if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
                 }
-                const skuCode = normalize(rawIdentifier);
-
-                 if (!skuCode || !enabledSkusMap.has(skuCode)) return;
-
-                 const dateKey = String(row.date).substring(0, 10);
-                 const key = `${dateKey}-${skuCode}`;
-
-                 const entry = aggMap.get(key) || { 
-                    // Key fields
-                    date: dateKey, 
-                    sku: skuCode,
-                    skuName: enabledSkusMap.get(skuCode)?.name || '', 
-                    shop_name: '',
-                    category_l3: '',
-                    account_nickname: '',
-
-                    // Shangzhi Metrics
-                    gmv: 0,
-                    ca: 0,
-                    uv: 0,
-                    pv: 0,
-                    paid_orders: 0,
-                    paid_users: 0,
-                    add_to_cart_users: 0,
-                    add_to_cart_items: 0,
-
-                    // Jingzhuntong Metrics
-                    spend: 0,
-                    impressions: 0,
-                    clicks: 0,
-                    direct_orders: 0,
-                    direct_order_amount: 0,
-                    indirect_orders: 0,
-                    indirect_order_amount: 0,
-                    total_orders: 0,
-                    total_order_amount: 0,
-                    direct_add_to_cart: 0,
-                    indirect_add_to_cart: 0,
-                    total_add_to_cart: 0,
-
-                    // Calculated Metrics
-                    roi: 0,
-                    cpc: 0,
-                    cvr: 0,
-                 };
-
-                 if (type === 'sz') {
-                    if (!entry.shop_name) entry.shop_name = row.shop_name || '';
-                    if (!entry.category_l3) entry.category_l3 = row.category_l3 || '';
-                     
-                    entry.gmv += Number(row.paid_amount) || 0;
-                    entry.ca += Number(row.paid_items) || 0;
-                    entry.uv += Number(row.uv) || 0;
-                    entry.pv += Number(row.pv) || 0;
-                    entry.paid_orders += Number(row.paid_orders) || 0;
-                    entry.paid_users += Number(row.paid_users) || 0;
-                    entry.add_to_cart_users += Number(row.add_to_cart_users) || 0;
-                    entry.add_to_cart_items += Number(row.add_to_cart_items) || 0;
-                 } else { // jzt
-                    if (!entry.account_nickname) entry.account_nickname = row.account_nickname || '';
-
-                    entry.spend += Number(row.cost) || 0;
-                    entry.impressions += Number(row.impressions) || 0;
-                    entry.clicks += Number(row.clicks) || 0;
-                    entry.direct_orders += Number(row.direct_orders) || 0;
-                    entry.direct_order_amount += Number(row.direct_order_amount) || 0;
-                    entry.indirect_orders += Number(row.indirect_orders) || 0;
-                    entry.indirect_order_amount += Number(row.indirect_order_amount) || 0;
-                    entry.total_orders += Number(row.total_orders) || 0;
-                    entry.total_order_amount += Number(row.total_order_amount) || 0;
-                    entry.direct_add_to_cart += Number(row.direct_add_to_cart) || 0;
-                    entry.indirect_add_to_cart += Number(row.indirect_add_to_cart) || 0;
-                    entry.total_add_to_cart += Number(row.total_add_to_cart) || 0;
-                 }
-                 aggMap.set(key, entry);
+                return strVal;
             };
 
-            recentSz.forEach(r => processRow(r, 'sz'));
-            recentJzt.forEach(r => processRow(r, 'jzt'));
-            
-            aggMap.forEach(entry => {
-                entry.roi = entry.spend > 0 ? entry.gmv / entry.spend : 0;
-                entry.cpc = entry.clicks > 0 ? entry.spend / entry.clicks : 0;
-                entry.cvr = entry.uv > 0 ? entry.paid_users / entry.uv : 0;
+            // 1. Process Shangzhi Data
+            recentSz.forEach((row: any) => {
+                const rawIdentifier = row.sku_code || row.product_id;
+                const skuCode = normalize(rawIdentifier);
+                if (!skuCode || !skusToTrackMap.has(skuCode)) return;
+
+                const skuInfo = skusToTrackMap.get(skuCode)!;
+                const dateKey = String(row.date).substring(0, 10);
+                const key = `${dateKey}-${skuCode}`;
+
+                const entry = hotCacheAggMap.get(key) || {
+                    date: dateKey,
+                    sku_shop: {
+                        code: skuCode,
+                        shopName: shopMap.get(skuInfo.shopId) || '未知'
+                    },
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
+                    cost: 0, clicks: 0,
+                };
+                
+                entry.pv += Number(row.pv) || 0;
+                entry.uv += Number(row.uv) || 0;
+                entry.paid_items += Number(row.paid_items) || 0;
+                entry.paid_amount += Number(row.paid_amount) || 0;
+                entry.paid_users += Number(row.paid_users) || 0;
+                
+                hotCacheAggMap.set(key, entry);
+            });
+
+            // 2. Process Jingzhuntong Data
+            recentJzt.forEach((row: any) => {
+                let rawIdentifier: any = row.tracked_sku_id;
+                if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
+                    rawIdentifier = row.sku_code || row.product_id;
+                }
+                const skuCode = normalize(rawIdentifier);
+                if (!skuCode || !skusToTrackMap.has(skuCode)) return;
+
+                const skuInfo = skusToTrackMap.get(skuCode)!;
+                const dateKey = String(row.date).substring(0, 10);
+                const key = `${dateKey}-${skuCode}`;
+
+                const entry = hotCacheAggMap.get(key) || {
+                    date: dateKey,
+                    sku_shop: {
+                        code: skuCode,
+                        shopName: shopMap.get(skuInfo.shopId) || '未知'
+                    },
+                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
+                    cost: 0, clicks: 0,
+                };
+
+                entry.cost += Number(row.cost) || 0;
+                entry.clicks += Number(row.clicks) || 0;
+                
+                hotCacheAggMap.set(key, entry);
             });
             
-            setHotCacheData(Array.from(aggMap.values()).sort((a,b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku)));
-
+            // 3. Calculate derived metrics
+            hotCacheAggMap.forEach((entry: any) => {
+                entry.paid_conversion_rate = entry.uv > 0 ? entry.paid_users / entry.uv : 0;
+                entry.cpc = entry.clicks > 0 ? entry.cost / entry.clicks : 0;
+                entry.roi = entry.cost > 0 ? entry.paid_amount / entry.cost : 0;
+            });
+            
+            setHotCacheData(Array.from(hotCacheAggMap.values()).sort((a,b) => b.date.localeCompare(a.date) || a.sku_shop.code.localeCompare(b.sku_shop.code)));
 
         } catch (e) {
             console.error("Initialization failed:", e);

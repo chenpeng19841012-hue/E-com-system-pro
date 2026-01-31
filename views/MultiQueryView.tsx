@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
+
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
 import { getSkuIdentifier } from '../lib/helpers';
@@ -204,6 +205,16 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
     const [chartMetrics, setChartMetrics] = useState<Set<string>>(new Set(['uv', 'paid_amount', 'cost']));
     
     const ROWS_PER_PAGE = 20;
+
+    useEffect(() => {
+        const enabledSkus = skus
+            .filter(s => s.isStatisticsEnabled)
+            .map(s => s.code);
+        
+        if (enabledSkus.length > 0) {
+            setSkuInput(enabledSkus.join('\n'));
+        }
+    }, [skus]);
 
     const handleQuery = async () => {
         setIsLoading(true); 
@@ -492,12 +503,12 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                     <div className="grid grid-cols-[1fr_auto_auto] gap-4 items-end pt-4 border-t border-slate-50 relative z-10">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SKU 精准检索 (支持逗号分隔)</label>
-                            <input 
+                            <textarea
                                 placeholder="输入单个或多个 SKU (以逗号或换行分隔)，精准洞察..." 
                                 value={skuInput} 
                                 onChange={e => setSkuInput(e.target.value)} 
                                 onKeyDown={e => e.key === 'Enter' && handleQuery()}
-                                className="w-full h-12 bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono" 
+                                className="w-full h-24 bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 py-3 text-xs font-black text-slate-700 outline-none focus:border-brand shadow-inner font-mono no-scrollbar resize-none" 
                             />
                         </div>
                         <button onClick={() => { setSkuInput(''); setVisualisationData(null); }} className="h-12 w-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-300 hover:text-slate-500 hover:border-slate-300 transition-all active:scale-95 flex items-center justify-center shadow-sm">
@@ -613,7 +624,7 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                         </div>
 
                         {/* 分页组件 */}
-                        {queryResult.length > 0 && (
+                        {totalPages > 1 && (
                             <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6 px-4">
                                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                     展示 {(currentPage - 1) * ROWS_PER_PAGE + 1} - {Math.min(currentPage * ROWS_PER_PAGE, queryResult.length)} / 共 {queryResult.length} 行记录
