@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Eye, Settings, Database, RotateCcw, Plus, FileText, Download, Trash2, Edit2, X, Search, Filter, Zap, AlertCircle, Calendar, Store, CheckSquare, Square, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, LoaderCircle, Sparkles, Activity, LayoutGrid, ShieldCheck, CopyMinus, Eraser } from 'lucide-react';
-import { DataExpSubView, TableType, FieldDefinition, Shop } from '../lib/types';
+import { DataExpSubView, TableType, FieldDefinition, Shop, ProductSKU } from '../lib/types';
 import { getTableName, getSkuIdentifier } from '../lib/helpers';
 import { INITIAL_SHANGZHI_SCHEMA, INITIAL_JINGZHUNTONG_SCHEMA, INITIAL_CUSTOMER_SERVICE_SCHEMA } from '../lib/schemas';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -47,6 +46,19 @@ const ProgressModal = ({ isOpen, current, total, mode = 'delete' }: { isOpen: bo
                     <span>Progress: {percent}%</span>
                     <span>{mode === 'dedupe' ? `Scanned: ${current.toLocaleString()}` : `${current.toLocaleString()} / ${total.toLocaleString()} Rows`}</span>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+const RepairProgressModal = ({ isOpen, message }: { isOpen: boolean, message: string }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-md p-12 text-center animate-fadeIn border border-slate-200">
+                <LoaderCircle className="animate-spin text-brand mx-auto mb-8" size={48} />
+                <h3 className="text-2xl font-black text-slate-900 mb-2">正在执行资产归属校准</h3>
+                <p className="text-slate-500 text-sm font-bold min-h-[2rem]">{message}</p>
             </div>
         </div>
     );
@@ -162,7 +174,7 @@ const formatDateForDisplay = (dateValue: any): string => {
     return dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
 };
 
-export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTable, onDeleteRows, onRefreshData, addToast }: any) => {
+export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onClearTable, onDeleteRows, onRefreshData, addToast }: { skus: ProductSKU[], schemas: any, shops: Shop[], onUpdateSchema: any, onClearTable: any, onDeleteRows: any, onRefreshData: any, addToast: any }) => {
     const [activeTab, setActiveTab] = useState<DataExpSubView>('preview');
     const [selectedSchemaType, setSelectedSchemaType] = useState<TableType>('shangzhi');
     
@@ -187,6 +199,11 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
     const [tableData, setTableData] = useState<any[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [selectedRowIds, setSelectedRowIds] = useState<Set<any>>(new Set());
+    
+    // Repair State
+    const [isRepairing, setIsRepairing] = useState(false);
+    const [repairProgress, setRepairProgress] = useState('');
+
 
     // Load initial data on mount (recent 10 rows) to show something
     useEffect(() => {
@@ -297,10 +314,29 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
             setDeleteProgress(null);
         }
     };
+    
+    const handleRepairOwnership = async () => {
+        setIsRepairing(true);
+        setRepairProgress("正在初始化...");
+        try {
+            const fixedCount = await DB.repairAssetOwnership(shops, skus, (message: string) => {
+                setRepairProgress(message);
+            });
+            await onRefreshData(); // 刷新 App 级数据
+            await handleExecuteSearch(); // 刷新当前视图
+            addToast('success', '校准完成', `成功修复 ${fixedCount} 条记录的资产归属。`);
+        } catch (e: any) {
+            addToast('error', '校准失败', e.message);
+        } finally {
+            setIsRepairing(false);
+            setRepairProgress('');
+        }
+    };
 
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-10 min-h-screen bg-[#F8FAFC]">
             <ProgressModal isOpen={!!deleteProgress} current={deleteProgress?.current || 0} total={deleteProgress?.total || 0} mode={deleteProgress?.mode} />
+            <RepairProgressModal isOpen={isRepairing} message={repairProgress} />
             
             <ConfirmModal isOpen={isClearModalOpen} title="全量物理空间清空" onConfirm={() => { onClearTable(tableTypeSearch); setIsClearModalOpen(false); setSelectedRowIds(new Set()); setTableData([]); addToast('success', '清空完成', '目标表数据已全部格式化。'); }} onCancel={() => setIsClearModalOpen(false)} confirmText="执行擦除" confirmButtonClass="bg-rose-500 hover:bg-rose-600 shadow-rose-500/20">
                 <p>正在执行物理层移除指令：<strong className="font-black text-slate-900">[{getTableName(tableTypeSearch)}]</strong></p>
@@ -457,16 +493,19 @@ export const DataExperienceView = ({ schemas, shops, onUpdateSchema, onClearTabl
                                     {selectedRowIds.size > 0 && <div className="px-5 py-3.5 bg-rose-50 rounded-2xl border border-rose-100 flex items-center gap-3"><Trash2 size={14} className="text-rose-500"/><span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">已锁定物理行: {selectedRowIds.size.toLocaleString()}</span></div>}
                                 </div>
                                 <div className="flex gap-3">
-                                    <button onClick={() => setIsClearModalOpen(true)} className="px-8 py-4 rounded-[22px] bg-rose-50 border border-rose-100 text-rose-500 font-black text-xs hover:bg-rose-100 transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
-                                        <Eraser size={14} /> 格式化全表
+                                    <button onClick={handleRepairOwnership} className="px-8 py-4 rounded-[22px] bg-indigo-50 border border-indigo-100 text-indigo-500 font-black text-xs hover:bg-indigo-100 transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                        <ShieldCheck size={14} /> 资产归属校准
                                     </button>
-                                    <button onClick={() => setIsDedupeModalOpen(true)} className="px-8 py-4 rounded-[22px] bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 hover:text-brand hover:border-brand transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
-                                        <CopyMinus size={14} /> 执行去重
+                                    <button onClick={() => setIsClearModalOpen(true)} className="px-6 py-4 rounded-[22px] bg-rose-50 border border-rose-100 text-rose-500 font-black text-xs hover:bg-rose-100 transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                        <Eraser size={14} /> 格式化
                                     </button>
-                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-8 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置筛选</button>
-                                    <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-12 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
+                                    <button onClick={() => setIsDedupeModalOpen(true)} className="px-6 py-4 rounded-[22px] bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 hover:text-brand hover:border-brand transition-all flex items-center gap-2 uppercase tracking-widest shadow-sm">
+                                        <CopyMinus size={14} /> 去重
+                                    </button>
+                                    <button onClick={() => { setSkuSearch(''); setShopSearch(''); setStartDate(''); setEndDate(''); setTableTypeSearch('shangzhi'); setQualityFilter('all'); handleExecuteSearch(); }} className="px-6 py-4 rounded-[22px] bg-slate-100 text-slate-500 font-black text-xs hover:bg-slate-200 transition-all uppercase tracking-widest">重置</button>
+                                    <button onClick={handleExecuteSearch} disabled={isLoadingData} className="px-10 py-4 rounded-[22px] bg-navy text-white font-black text-xs hover:bg-slate-800 shadow-xl shadow-navy/20 transition-all flex items-center gap-3 uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50">
                                         {isLoadingData ? <LoaderCircle size={16} className="animate-spin" /> : <Filter size={16}/>}
-                                        {isLoadingData ? '穿透中...' : '执行云端探测'}
+                                        {isLoadingData ? '穿透中...' : '探测'}
                                     </button>
                                 </div>
                             </div>

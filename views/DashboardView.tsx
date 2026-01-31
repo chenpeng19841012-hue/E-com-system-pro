@@ -43,6 +43,7 @@ const DIAGNOSIS_ICONS: Record<string, { icon: React.ElementType, color: string, 
     stock_warning: { icon: ShieldAlert, color: 'text-orange-500', bg: 'bg-orange-50/50' },
     low_roi: { icon: TrendingDown, color: 'text-amber-500', bg: 'bg-amber-50/50' },
     stale_inventory: { icon: PackageSearch, color: 'text-blue-500', bg: 'bg-blue-50/50' },
+    data_integrity: { icon: Binary, color: 'text-indigo-500', bg: 'bg-indigo-50/50' },
     default: { icon: ShieldAlert, color: 'text-slate-500', bg: 'bg-slate-100/50' },
 };
 
@@ -955,6 +956,41 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                     });
                 }
             }
+            
+            // 新增：数据链路完整性诊断
+            const integrityIssues: string[] = [];
+            const checkedSkus = new Set<string>();
+
+            const checkIntegrity = (rows: any[]) => {
+                rows.forEach(r => {
+                    const skuCode = getSkuIdentifier(r);
+                    if (skuCode && enabledSkusMap.has(skuCode) && !checkedSkus.has(skuCode)) {
+                        if (!r.shop_name) {
+                            integrityIssues.push(skuCode);
+                            checkedSkus.add(skuCode);
+                        }
+                    }
+                });
+            };
+            checkIntegrity(allSz);
+            checkIntegrity(allJzt);
+
+            if (integrityIssues.length > 0) {
+                diag.push({
+                    id: `data_integrity_${integrityIssues[0]}`,
+                    type: 'data_integrity',
+                    title: '数据链路不完整',
+                    desc: '',
+                    details: {
+                        '预警类型': '数据链路不完整',
+                        '影响资产': `${integrityIssues.slice(0, 2).join(', ')}${integrityIssues.length > 2 ? ` 等 ${integrityIssues.length} 个 SKU` : ''}`,
+                        '预警原因': '部分物理事实行缺少店铺归属，可能导致聚合数据不准。',
+                        '解决建议': '请前往【底层治理】->【物理清洗】，执行“资产归属校准”修复。'
+                    },
+                    severity: 'warning'
+                });
+            }
+
             setDiagnoses(diag);
             setDiagOffset(0);
 

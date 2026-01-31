@@ -3,6 +3,8 @@
  * v5.7.0 Upgrade: Robust Network Handling & Retry Logic
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Shop, ProductSKU } from './types';
+import { getTableName } from './helpers';
 
 // 默认演示配置 (兜底策略)
 const DEFAULT_FALLBACK_URL = "https://stycaaqvjbjnactxcvyh.supabase.co";
@@ -476,5 +478,70 @@ export const DB = {
     if (!supabase) return;
     const { error } = await supabase.from(tableName).delete().gt('id', 0);
     if (error) throw error;
+  },
+  
+  async repairAssetOwnership(shops: Shop[], skus: ProductSKU[], onProgress: (message: string) => void): Promise<number> {
+    const supabase = getClient();
+    if (!supabase) throw new Error("云端物理链路未建立。");
+
+    onProgress("正在加载资产与店铺映射...");
+    const shopMap = new Map(shops.map(s => [s.id, s.name]));
+    const skuShopMap = new Map(skus.map(s => [s.code, s.shopId]));
+
+    let totalFixed = 0;
+    const CHUNK_SIZE = 500;
+
+    const fixTable = async (tableName: string, skuColumns: string[]) => {
+        let hasMore = true;
+        let page = 0;
+        while(hasMore) {
+            onProgress(`正在扫描 ${getTableName(tableName as any)} 表 (第 ${page+1} 批)...`);
+            const { data: toFix, error } = await supabase
+                .from(tableName)
+                .select(`id, ${skuColumns.join(', ')}`)
+                .is('shop_name', null)
+                .range(page * CHUNK_SIZE, (page + 1) * CHUNK_SIZE - 1);
+
+            if (error) throw new Error(`扫描${tableName}失败: ${error.message}`);
+            if (!toFix || toFix.length === 0) {
+                hasMore = false;
+                continue;
+            }
+
+            const updates = toFix.map(row => {
+                let foundShopId: string | undefined = undefined;
+                for (const col of skuColumns) {
+                    const skuCode = row[col];
+                    if (skuCode && skuShopMap.has(skuCode)) {
+                        foundShopId = skuShopMap.get(skuCode);
+                        break;
+                    }
+                }
+
+                const shopName = foundShopId ? shopMap.get(foundShopId) : null;
+                if (shopName) {
+                    return { id: row.id, shop_name: shopName };
+                }
+                return null;
+            }).filter((u): u is {id: any, shop_name: string} => u !== null);
+
+            if (updates.length > 0) {
+                onProgress(`发现 ${updates.length} 条记录需要校准，正在写入...`);
+                const { error: updateError } = await supabase.from(tableName).upsert(updates);
+                if (updateError) throw new Error(`${tableName} 更新失败: ${updateError.message}`);
+                totalFixed += updates.length;
+            }
+            
+            if (toFix.length < CHUNK_SIZE) hasMore = false;
+            page++;
+            await sleep(50); // Prevent UI freeze
+        }
+    }
+
+    await fixTable('fact_shangzhi', ['sku_code', 'product_id']);
+    await fixTable('fact_jingzhuntong', ['tracked_sku_id']);
+
+    onProgress("校准完成。");
+    return totalFixed;
   }
 };
