@@ -194,7 +194,7 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
     const [shopSearch, setShopSearch] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [qualityFilter, setQualityFilter] = useState<'all' | 'date_is_null' | 'duplicates'>('all');
+    const [qualityFilter, setQualityFilter] = useState<'all' | 'date_issue' | 'duplicates'>('all');
     
     // Data Management
     const [tableData, setTableData] = useState<any[]>([]);
@@ -231,25 +231,26 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
         try {
             let data = [];
             if (qualityFilter === 'duplicates') {
-                // 执行特定的重复检查逻辑 (预览最近 2000 条)
                 data = await DB.getDuplicatePreview(`fact_${tableTypeSearch}`);
-                if (data.length === 0) {
-                    addToast('info', '质量检查通过', '最近 2000 条记录中未发现完全重复数据。');
-                } else {
-                    addToast('warning', '发现冗余', `检测到 ${data.length} 条重复数据 (预览模式)。请使用“执行去重”功能清洗。`);
-                }
+            } else if (qualityFilter === 'date_issue') {
+                addToast('info', '正在深度扫描...', '正在扫描最近 5000 条记录以查找日期问题...');
+                data = await DB.findDateIssues(`fact_${tableTypeSearch}`);
             } else {
-                // 标准查询
                 data = await DB.queryData(`fact_${tableTypeSearch}`, {
                     startDate: startDate || undefined,
                     endDate: endDate || undefined,
                     sku: skuSearch || undefined,
                     shopName: shopSearch || undefined,
-                    qualityFilter: qualityFilter
+                    qualityFilter: qualityFilter === 'date_issue' ? 'date_is_null' : qualityFilter
                 }, 10);
-                if (data.length === 0) {
-                    addToast('info', '检索完成', '未找到匹配的物理记录。');
-                }
+            }
+
+            if (data.length === 0) {
+                addToast('info', '检索完成', '未找到匹配的物理记录。');
+            } else if (qualityFilter === 'duplicates') {
+                addToast('warning', '发现冗余', `检测到 ${data.length} 条重复数据 (预览模式)。请使用“执行去重”功能清洗。`);
+            } else if (qualityFilter === 'date_issue') {
+                addToast('warning', '发现异常', `检测到 ${data.length} 条日期为空或格式异常的数据。`);
             }
             setTableData(data);
         } catch (e: any) {
@@ -475,7 +476,7 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
                                     <div className="relative">
                                         <select value={qualityFilter} onChange={e => setQualityFilter(e.target.value as any)} className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-3.5 text-xs font-black text-slate-700 outline-none focus:border-brand appearance-none shadow-sm">
                                             <option value="all">全量数据 (All Records)</option>
-                                            <option value="date_is_null">❌ 日期为空 (Date is NULL)</option>
+                                            <option value="date_issue">❌ 日期为空或异常 (扫描最近)</option>
                                             <option value="duplicates">⚠️ 完全重复数据 (Duplicate Rows)</option>
                                         </select>
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

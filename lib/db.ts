@@ -111,7 +111,7 @@ export const DB = {
       endDate?: string, 
       sku?: string, 
       shopName?: string,
-      qualityFilter?: 'date_is_null' | 'duplicates' | 'all'
+      qualityFilter?: 'date_is_null' | 'duplicates' | 'all' | 'date_issue'
   }, limit = 100): Promise<any[]> {
       const supabase = getClient();
       if (!supabase) return [];
@@ -119,7 +119,7 @@ export const DB = {
       let query = supabase.from(tableName).select('*');
 
       // 质量筛选
-      if (filters.qualityFilter === 'date_is_null') {
+      if (filters.qualityFilter === 'date_is_null' || filters.qualityFilter === 'date_issue') {
           query = query.is('date', null);
       } 
       // 质量筛选：重复数据 (此处不处理，由 getDuplicatePreview 处理)
@@ -147,6 +147,34 @@ export const DB = {
           return [];
       }
       return data || [];
+  },
+
+  async findDateIssues(tableName: string): Promise<any[]> {
+      const supabase = getClient();
+      if (!supabase) return [];
+      
+      const { data: recentRows, error: fetchError } = await supabase
+          .from(tableName)
+          .select('id, date')
+          .order('id', { ascending: false })
+          .limit(5000);
+
+      if (fetchError || !recentRows) return [];
+      
+      const invalidIds = recentRows
+          .filter(row => !row.date || String(row.date).trim() === '')
+          .map(row => row.id);
+
+      if (invalidIds.length === 0) return [];
+      
+      const { data: fullInvalidRows, error: detailError } = await supabase
+          .from(tableName)
+          .select('*')
+          .in('id', invalidIds);
+      
+      if (detailError) return [];
+      
+      return fullInvalidRows || [];
   },
 
   // 获取重复数据预览 (最近 2000 条内检测)
@@ -491,19 +519,19 @@ export const DB = {
         .from('fact_shangzhi')
         .select('id, product_id')
         .is('sku_code', null)
-        .not('product_id', 'is', null)
-        .gte('date', '1970-01-01'); // More robustly select rows with valid dates, skipping null/empty ones.
+        .not('product_id', 'is', null);
 
     if (skuError) throw new Error(`扫描 SKU 编码失败: ${skuError.message}`);
 
     if (skuToFix && skuToFix.length > 0) {
         onProgress(`发现 ${skuToFix.length} 条记录需要补充 SKU 编码，正在写入...`);
-        const skuUpdates = skuToFix.map(row => ({
-            id: row.id,
-            sku_code: row.product_id
-        }));
-        const { error: skuUpdateError } = await supabase.from('fact_shangzhi').upsert(skuUpdates);
-        if (skuUpdateError) throw new Error(`更新 SKU 编码失败: ${skuUpdateError.message}`);
+        for (const row of skuToFix) {
+            const { error: updateError } = await supabase
+                .from('fact_shangzhi')
+                .update({ sku_code: row.product_id })
+                .eq('id', row.id);
+            if (updateError) throw new Error(`更新 SKU 编码失败 (ID: ${row.id}): ${updateError.message}`);
+        }
         totalFixedSkuCodes = skuToFix.length;
     }
 
@@ -523,7 +551,6 @@ export const DB = {
                 .from(tableName)
                 .select(`id, ${skuColumns.join(', ')}`)
                 .is('shop_name', null)
-                .gte('date', '1970-01-01') // More robustly select rows with valid dates
                 .range(page * CHUNK_SIZE, (page + 1) * CHUNK_SIZE - 1);
 
             if (error) throw new Error(`扫描${tableName}失败: ${error.message}`);
@@ -531,9 +558,9 @@ export const DB = {
                 hasMore = false;
                 continue;
             }
-
-            const updates = toFix.map(row => {
-                let foundShopId: string | undefined = undefined;
+            
+            for (const row of toFix) {
+                 let foundShopId: string | undefined = undefined;
                 for (const col of skuColumns) {
                     const skuCode = row[col];
                     if (skuCode && skuShopMap.has(skuCode)) {
@@ -542,19 +569,19 @@ export const DB = {
                     }
                 }
                 const shopName = (foundShopId ? shopMap.get(foundShopId) : null) || "未知店铺";
-                return { id: row.id, shop_name: shopName };
-            });
-
-            if (updates.length > 0) {
-                onProgress(`发现 ${updates.length} 条记录需要校准店铺归属，正在写入...`);
-                const { error: updateError } = await supabase.from(tableName).upsert(updates);
-                if (updateError) throw new Error(`${tableName} 更新失败: ${updateError.message}`);
-                totalFixedOwnership += updates.length;
+                
+                const { error: updateError } = await supabase
+                    .from(tableName)
+                    .update({ shop_name: shopName })
+                    .eq('id', row.id);
+                
+                if (updateError) console.warn(`更新失败 (ID: ${row.id}): ${updateError.message}`);
+                else totalFixedOwnership++;
             }
             
             if (toFix.length < CHUNK_SIZE) hasMore = false;
             page++;
-            await sleep(50); // Prevent UI freeze
+            await sleep(50);
         }
     }
 
