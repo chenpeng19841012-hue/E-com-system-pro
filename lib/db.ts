@@ -1,4 +1,3 @@
-
 /**
  * Cloud-Native Database Adapter
  * v5.7.0 Upgrade: Robust Network Handling & Retry Logic
@@ -441,9 +440,10 @@ export const DB = {
             .range(page * pageSize, (page + 1) * pageSize - 1);
 
         if (skuCodes && skuCodes.length > 0) {
-            const skuList = `(${skuCodes.join(',')})`;
             if (tableName === 'fact_shangzhi') {
-                query = query.or(`sku_code.in.${skuList},product_id.in.${skuList}`);
+                const quotedSkuCodes = skuCodes.map(c => `"${c}"`).join(',');
+                const orFilter = `sku_code.in.(${quotedSkuCodes}),product_id.in.(${quotedSkuCodes})`;
+                query = query.or(orFilter);
             } else if (tableName === 'fact_jingzhuntong') {
                 query = query.in('tracked_sku_id', skuCodes);
             }

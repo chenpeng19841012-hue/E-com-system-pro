@@ -7,7 +7,7 @@ import {
     AlertTriangle, TrendingDown, Layers, Ban, Zap, UploadCloud,
     History, Store, Truck, Wifi, Clock, CalendarDays, Stethoscope, Binary,
     ListFilter, Calculator, Microscope, LayoutGrid, Search, FileText,
-    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync, CheckSquare, ShieldCheck
+    DollarSign, PackagePlus, Binoculars, ImageIcon, MessageSquare, Package, Database, CloudSync, CheckSquare, ShieldCheck, CheckCircle2
 } from 'lucide-react';
 import { DB } from '../lib/db';
 import { ProductSKU, Shop, View } from '../lib/types';
@@ -23,7 +23,7 @@ interface DailyRecord { date: string; self: number; pop: number; total: number; 
 
 interface Diagnosis {
     id: string;
-    type: 'asset' | 'stock_severe' | 'explosive' | 'data_gap' | 'high_potential' | 'low_roi' | 'new_sku' | 'data_integrity' | 'stale_inventory';
+    type: 'asset' | 'stock_severe' | 'stock_warning' | 'explosive' | 'data_gap' | 'high_potential' | 'low_roi' | 'new_sku' | 'data_integrity' | 'stale_inventory';
     title: string;
     desc: string;
     details: Record<string, string | number>;
@@ -36,6 +36,14 @@ const getDateKey = (d: string | Date) => {
     if (!d) return 'N/A';
     if (d instanceof Date) return d.toISOString().substring(0, 10);
     return String(d).replace(/\//g, '-').substring(0, 10);
+};
+
+const DIAGNOSIS_ICONS: Record<string, { icon: React.ElementType, color: string, bg: string }> = {
+    stock_severe: { icon: Flame, color: 'text-rose-500', bg: 'bg-rose-50/50' },
+    stock_warning: { icon: ShieldAlert, color: 'text-orange-500', bg: 'bg-orange-50/50' },
+    low_roi: { icon: TrendingDown, color: 'text-amber-500', bg: 'bg-amber-50/50' },
+    stale_inventory: { icon: PackageSearch, color: 'text-blue-500', bg: 'bg-blue-50/50' },
+    default: { icon: ShieldAlert, color: 'text-slate-500', bg: 'bg-slate-100/50' },
 };
 
 const DataInspectorModal = ({ 
@@ -61,26 +69,44 @@ const DataInspectorModal = ({
 
     const sourceData = useMemo(() => {
         const dataMap = new Map<string, { date: string, sku: string, gmv: number, ca: number, spend: number, source: string[] }>();
-        const getKey = (date: string, sku: string) => `${date}-${sku}`;
+        const getKey = (date: string, sku: string, type: 'shangzhi' | 'jingzhuntong') => `${date}-${sku}-${type}`;
 
         const processRows = (rows: any[], type: 'shangzhi' | 'jingzhuntong') => {
              rows.forEach(r => {
                 const date = getDateKey(r.date);
                 if (date < dateRange.start || date > dateRange.end) return;
                 
-                const sku = getSkuIdentifier(r);
-                if (!sku || !enabledSkusMap.has(sku)) return;
+                let sku: string | null = null;
 
-                const key = getKey(date, sku);
+                // Robust SKU identification logic
+                if (type === 'shangzhi') {
+                    const skuCode = r.sku_code ? String(r.sku_code).trim() : null;
+                    const productId = r.product_id ? String(r.product_id).trim() : null;
+
+                    if (skuCode && enabledSkusMap.has(skuCode)) {
+                        sku = skuCode;
+                    } else if (productId && enabledSkusMap.has(productId)) {
+                        sku = productId;
+                    }
+                } else { // jingzhuntong
+                    const identifier = getSkuIdentifier(r);
+                    if (identifier && enabledSkusMap.has(identifier)) {
+                        sku = identifier;
+                    }
+                }
+
+                if (!sku) return; // If no enabled SKU identifier is found, skip the row.
+
+                const key = getKey(date, sku, type);
                 const entry = dataMap.get(key) || { date, sku, gmv: 0, ca: 0, spend: 0, source: [] };
                 
                 if (type === 'shangzhi') {
                     entry.gmv += Number(r.paid_amount) || 0;
                     entry.ca += Number(r.paid_items) || 0;
-                    if (!entry.source.includes('商智')) entry.source.push('商智');
+                    if (entry.source.length === 0) entry.source.push('商智');
                 } else { // jingzhuntong
                     entry.spend += Number(r.cost) || 0;
-                    if (!entry.source.includes('广告')) entry.source.push('广告');
+                    if (entry.source.length === 0) entry.source.push('广告');
                 }
                 
                 dataMap.set(key, entry);
@@ -92,7 +118,7 @@ const DataInspectorModal = ({
 
         return Array.from(dataMap.values())
             .filter(d => d.gmv > 0 || d.ca > 0 || d.spend > 0)
-            .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku));
+            .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku) || a.source[0].localeCompare(b.source[0]));
     }, [rawData, dateRange, enabledSkusMap]);
 
     const formulas = [
@@ -233,32 +259,135 @@ const DataInspectorModal = ({
     );
 };
 
-// ... (DiagnosisCard, SubValueTrend, KPICard, MainTrendVisual components remain unchanged) ...
-const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClickMore?: () => void }> = ({ d, mode = 'carousel', onClickMore }) => {
+const DiagnosisCard: React.FC<{ d: Diagnosis, mode?: 'carousel' | 'list', onClick?: () => void }> = ({ d, mode = 'carousel', onClick }) => {
     const detailEntries = Object.entries(d.details);
-    const limit = mode === 'carousel' ? 2 : 100;
-    const visibleDetails = detailEntries.slice(0, limit);
-    const hiddenCount = detailEntries.length - limit;
+    const { icon: Icon, color, bg } = DIAGNOSIS_ICONS[d.type] || DIAGNOSIS_ICONS.default;
+    const severityColor = d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? (d.type === 'stock_warning' ? 'text-orange-600' : 'text-amber-600') : 'text-slate-800';
 
     return (
-        <div className={`transition-all duration-700 w-full flex flex-col border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-xl ${mode === 'carousel' ? 'h-[160px] p-4 rounded-[20px] mb-3' : 'p-6 rounded-[24px]'}`}>
-            <div className="flex items-center gap-3 mb-1.5 shrink-0">
-                <div className={`p-1.5 rounded-lg ${d.severity === 'critical' ? 'bg-rose-100 text-rose-600' : d.severity === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-brand/10 text-brand'}`}>
-                    <Flame size={14}/>
+        <div 
+            onClick={onClick}
+            className={`transition-all duration-500 w-full flex border hover:shadow-xl hover:-translate-y-1 ${
+                mode === 'carousel' 
+                ? `h-[160px] p-6 rounded-[24px] mb-3 flex-col ${bg} border-slate-100` 
+                : `p-4 rounded-2xl items-center gap-4 bg-white border-slate-100`
+            } ${onClick ? 'cursor-pointer' : ''}`}
+        >
+             <div className={`flex items-start gap-4 ${mode === 'list' ? 'w-full' : ''}`}>
+                <div className="space-y-2.5 overflow-hidden flex-1">
+                    {detailEntries.slice(0, mode === 'list' ? 2 : 5).map(([key, value]) => (
+                        <div key={key} className="flex items-start text-xs leading-snug">
+                            <span className="w-20 shrink-0 text-slate-400 font-bold truncate">{key}：</span>
+                            <span className={`font-bold break-words truncate flex items-center ${key === '预警类型' ? severityColor + ' font-black' : 'text-slate-700'}`}>
+                                {String(value)}
+                                {mode === 'carousel' && key === '预警类型' && <Icon size={14} className={`ml-2 ${color}`} />}
+                            </span>
+                        </div>
+                    ))}
                 </div>
-                <h4 className={`text-xs font-black uppercase tracking-tight truncate ${d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? 'text-amber-600' : 'text-slate-800'}`}>{d.title}</h4>
-            </div>
-            <p className="text-[9px] font-bold text-slate-400 leading-relaxed mb-2 line-clamp-1 shrink-0">{d.desc}</p>
-            <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 space-y-1.5 overflow-hidden flex-1 relative">
-                {visibleDetails.map(([k,v]) => (
-                    <div key={k} className="flex flex-col gap-0.5 text-[8px] font-bold border-b border-slate-100 last:border-0 pb-1 last:pb-0">
-                        <span className="text-slate-700 leading-relaxed break-all font-mono whitespace-pre-wrap">{v}</span>
+                {mode === 'list' && <ChevronRight size={20} className="text-slate-300"/>}
+             </div>
+        </div>
+    );
+};
+
+const DiagnosisDetailModal = ({ diagnosis, onClose, onMarkAsHandled }: { diagnosis: Diagnosis | null, onClose: () => void, onMarkAsHandled: () => void }) => {
+    if (!diagnosis) return null;
+
+    const { icon: Icon, color, bg } = DIAGNOSIS_ICONS[diagnosis.type] || DIAGNOSIS_ICONS.default;
+    const detailEntries = Object.entries(diagnosis.details);
+    const severityColor = diagnosis.severity === 'critical' ? 'text-rose-600' : diagnosis.severity === 'warning' ? (diagnosis.type === 'stock_warning' ? 'text-orange-600' : 'text-amber-600') : 'text-slate-800';
+
+    return (
+        <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
+            <div 
+                className="bg-white rounded-[40px] shadow-2xl w-full max-w-2xl p-10 m-4 max-h-[90vh] flex flex-col border border-slate-200" 
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-100">
+                    <div className="flex items-center gap-5">
+                        <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shrink-0 ${bg} ${color}`}>
+                            <Icon size={32} />
+                        </div>
+                        <div>
+                            <h3 className={`text-2xl font-black tracking-tight ${severityColor}`}>{diagnosis.details['预警类型']}</h3>
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">AI 审计预警详情</p>
+                        </div>
                     </div>
-                ))}
+                    <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all shadow-sm"><X size={24} /></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto no-scrollbar pr-2 -mr-4 space-y-4">
+                    {detailEntries.map(([key, value]) => (
+                        <div key={key} className="flex items-start text-sm leading-relaxed">
+                            <dt className="w-24 shrink-0 text-slate-400 font-bold">{key}：</dt>
+                            <dd className={`flex-1 font-bold break-words flex items-center ${key === '预警类型' ? severityColor : 'text-slate-700'}`}>
+                                <span>{String(value)}</span>
+                                {key === '预警类型' && <Icon size={16} className={`ml-2 inline-block ${color}`} />}
+                            </dd>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-10 pt-8 border-t border-slate-100 flex justify-end">
+                    <button 
+                        onClick={onMarkAsHandled}
+                        className="flex items-center gap-3 px-8 py-3 rounded-2xl bg-brand text-white font-black text-xs hover:bg-[#5da035] shadow-xl shadow-brand/20 transition-all active:scale-95 uppercase tracking-widest"
+                    >
+                        <CheckCircle2 size={16} /> 标记为已处理
+                    </button>
+                </div>
             </div>
         </div>
     );
 };
+
+const AllDiagnosesModal = ({ isOpen, onClose, diagnoses, onSelect }: { isOpen: boolean, onClose: () => void, diagnoses: Diagnosis[], onSelect: (d: Diagnosis) => void }) => {
+    if (!isOpen) return null;
+
+    return (
+         <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fadeIn" onClick={onClose}>
+            <div 
+                className="bg-white rounded-[40px] shadow-2xl w-full max-w-3xl p-10 m-4 max-h-[90vh] flex flex-col border border-slate-200" 
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex justify-between items-center mb-8 shrink-0 pb-6 border-b border-slate-100">
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                            <Layers size={24} className="text-brand"/> 全量审计矩阵 ({diagnoses.length})
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Full Audit & Risk Matrix</p>
+                    </div>
+                    <button onClick={onClose} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all shadow-sm"><X size={24} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto no-scrollbar pr-2 -mr-4 space-y-3">
+                    {diagnoses.map(d => {
+                         const { icon: Icon, color, bg } = DIAGNOSIS_ICONS[d.type] || DIAGNOSIS_ICONS.default;
+                         const severityColor = d.severity === 'critical' ? 'text-rose-600' : d.severity === 'warning' ? (d.type === 'stock_warning' ? 'text-orange-600' : 'text-amber-600') : 'text-slate-800';
+                         return (
+                            <div key={d.id} onClick={() => onSelect(d)} className={`w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-100 cursor-pointer hover:shadow-lg hover:border-slate-200 transition-all ${bg}`}>
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-white shadow-sm ${color}`}>
+                                    <Icon size={24} />
+                                </div>
+                                <div className="space-y-1.5 overflow-hidden flex-1">
+                                     {Object.entries(d.details).slice(0, 2).map(([key, value]) => (
+                                        <div key={key} className="flex items-start text-xs leading-snug">
+                                            <span className="w-20 shrink-0 text-slate-400 font-bold truncate">{key}：</span>
+                                            <span className={`font-bold break-words truncate ${key === '预警类型' ? severityColor + ' font-black' : 'text-slate-700'}`}>{String(value)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <ChevronRight size={20} className="text-slate-300"/>
+                            </div>
+                         )
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 
 const SubValueTrend = ({ current, previous, isHigherBetter = true }: { current: number, previous: number, isHigherBetter?: boolean }) => {
     if (previous === 0 && current === 0) return null;
@@ -320,7 +449,7 @@ const KPICard = ({ title, value, prefix = "", isFloat = false, icon, isHigherBet
     );
 };
 
-const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: MetricKey }) => {
+const MainTrendVisual = ({ data, metricKey, errorMessage }: { data: DailyRecord[], metricKey: MetricKey, errorMessage?: string }) => {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const svgRef = useRef<SVGSVGElement>(null);
     const width = 1000; const height = 240; const padding = { top: 20, right: 30, bottom: 30, left: 50 };
@@ -342,6 +471,15 @@ const MainTrendVisual = ({ data, metricKey }: { data: DailyRecord[], metricKey: 
         const index = Math.round(((mouseX - padding.left) / (width - padding.left - padding.right)) * (data.length - 1));
         if (index >= 0 && index < data.length) setHoverIndex(index);
     };
+
+    if (errorMessage) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 opacity-50">
+                <CalendarX size={48} className="mb-4" strokeWidth={1}/>
+                <p className="text-xs font-black uppercase tracking-widest">{errorMessage}</p>
+            </div>
+        );
+    }
 
     if (data.length === 0) return (
         <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 opacity-50">
@@ -448,11 +586,21 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
     });
 
     const [trends, setTrends] = useState<DailyRecord[]>([]);
+    const [trendErrorMessage, setTrendErrorMessage] = useState('');
     const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
-    const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
     const [diagOffset, setDiagOffset] = useState(0);
 
+    // New states for modals
+    const [selectedDiagnosis, setSelectedDiagnosis] = useState<Diagnosis | null>(null);
+    const [isAllDiagnosesModalOpen, setIsAllDiagnosesModalOpen] = useState(false);
+
     const systemVersion = 'v6.0.18887';
+
+    const handleMarkAsHandled = (id: string) => {
+        setDiagnoses(prev => prev.filter(d => d.id !== id));
+        setSelectedDiagnosis(null);
+        addToast('success', '状态更新', '该预警已处理，将不再提示。');
+    };
 
     useEffect(() => {
         if (factStats?.shangzhi?.latestDate && factStats.shangzhi.latestDate !== 'N/A') {
@@ -487,16 +635,28 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     const fetchData = async () => {
         setIsLoading(true);
+        setTrendErrorMessage('');
 
         const anchorStr = dataAnchorDate;
         const windowDays = 60;
         const windowRange = generateDateRange(anchorStr, windowDays);
         const windowStart = windowRange.length > 0 ? windowRange[0] : anchorStr;
 
+        // FIX: Explicitly type enabledSkuCodes as string[] to resolve type inference issue.
+        const enabledSkuCodes = Array.from(enabledSkusMap.keys());
+        if (enabledSkuCodes.length === 0) {
+            addToast('warning', '无统计资产', '请在 SKU 资产中心勾选需要统计的 SKU。');
+            setData({ gmv: { total: {current: 0, previous: 0}, self: {current: 0, previous: 0}, pop: {current: 0, previous: 0} }, ca: { total: {current: 0, previous: 0}, self: {current: 0, previous: 0}, pop: {current: 0, previous: 0} }, spend: { total: {current: 0, previous: 0}, self: {current: 0, previous: 0}, pop: {current: 0, previous: 0} }, roi: { total: {current: 0, previous: 0}, self: {current: 0, previous: 0}, pop: {current: 0, previous: 0} }});
+            setTrends([]);
+            setDiagnoses([]);
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const [allSz, allJzt] = await Promise.all([
-                DB.getRange('fact_shangzhi', windowStart, anchorStr),
-                DB.getRange('fact_jingzhuntong', windowStart, anchorStr),
+                DB.getRange('fact_shangzhi', windowStart, anchorStr, enabledSkuCodes as string[]),
+                DB.getRange('fact_jingzhuntong', windowStart, anchorStr, enabledSkuCodes as string[]),
             ]);
             
             setDebugRawData({ shangzhi: allSz, jingzhuntong: allJzt });
@@ -524,11 +684,15 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                  const prevEnd = generateDateRange(customRange.start, 2)[0];
                  previousPeriodKeys = generateDateRange(prevEnd, daysInPeriod);
             } else {
-                const daysMap: Record<string, number> = { '7d': 7, '30d': 30 }; 
+                const daysMap: Record<string, number> = { '7d': 7, '30d': 30 };
                 daysInPeriod = daysMap[rangeType] || 7;
+                // 修正：直接使用数据锚点日期作为当前周期的结束日期
                 currentPeriodKeys = generateDateRange(anchorStr, daysInPeriod);
-                const prevEnd = generateDateRange(currentPeriodKeys[0], 2)[0];
-                previousPeriodKeys = generateDateRange(prevEnd, daysInPeriod);
+                
+                // 确保环比周期正确对齐
+                const currentPeriodStartDate = currentPeriodKeys[0];
+                const prevPeriodEndDate = generateDateRange(currentPeriodStartDate, 2)[0];
+                previousPeriodKeys = generateDateRange(prevPeriodEndDate, daysInPeriod);
             }
             
             setViewRange({ start: currentPeriodKeys[0], end: currentPeriodKeys[currentPeriodKeys.length - 1] });
@@ -541,10 +705,29 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 const prev = { gmv: { total: 0, self: 0, pop: 0 }, ca: { total: 0, self: 0, pop: 0 }, spend: { total: 0, self: 0, pop: 0 } };
 
                 const processRow = (row: any, targetPeriod: 'curr' | 'prev', type: 'sz' | 'jzt') => {
-                    const code = getSkuIdentifier(row)?.trim();
-                    if (!code || !enabledSkusMap.has(code)) return;
+                    let code: string | null = null;
+                    let skuConfig: ProductSKU | undefined = undefined;
+
+                    // Robust SKU identification logic
+                    if (type === 'sz') {
+                        const skuCode = row.sku_code ? String(row.sku_code).trim() : null;
+                        const productId = row.product_id ? String(row.product_id).trim() : null;
+                        
+                        if (skuCode && enabledSkusMap.has(skuCode)) {
+                            code = skuCode;
+                        } else if (productId && enabledSkusMap.has(productId)) {
+                            code = productId;
+                        }
+                    } else { // 'jzt'
+                        const identifier = getSkuIdentifier(row);
+                        if (identifier && enabledSkusMap.has(identifier)) {
+                            code = identifier;
+                        }
+                    }
+
+                    if (!code) return; // If no enabled SKU is found, exit.
+                    skuConfig = enabledSkusMap.get(code)!;
                     
-                    const skuConfig = enabledSkusMap.get(code)!;
                     const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
                     const stats = targetPeriod === 'curr' ? curr : prev;
 
@@ -610,8 +793,15 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             currentSz.forEach(r => {
                 const dateKey = getDateKey(r.date);
                 if (!dailyAgg[dateKey]) return; 
-                const code = getSkuIdentifier(r)?.trim();
-                if (!code || !enabledSkusMap.has(code)) return;
+                let code: string | null = null;
+                const skuCode = r.sku_code ? String(r.sku_code).trim() : null;
+                if (skuCode && enabledSkusMap.has(skuCode)) {
+                    code = skuCode;
+                } else {
+                    const productId = r.product_id ? String(r.product_id).trim() : null;
+                    if (productId && enabledSkusMap.has(productId)) code = productId;
+                }
+                if (!code) return;
                 const skuConfig = enabledSkusMap.get(code)!;
                 const shopMode = shopIdToMode.get(skuConfig.shopId) || 'POP';
                 const gmv = Number(r.paid_amount) || 0;
@@ -644,24 +834,43 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                 }
                 return { date: d.date, self: selfVal, pop: popVal, total: selfVal + popVal };
             });
+            
+            if ((rangeType === 'yesterday' || rangeType === 'realtime') && currentSz.length === 0 && currentJzt.length === 0) {
+                 const dateStr = currentPeriodKeys[0];
+                 setTrendErrorMessage(`未上传 ${dateStr} 数据`);
+            }
+
             setTrends(trendRecords.sort((a, b) => a.date.localeCompare(b.date)));
 
             // AI Diagnosis (using current period data)
             const diag: Diagnosis[] = [];
             const last7DaysStart = generateDateRange(anchorStr, 7)[0];
-            const skuAnalysisMap = new Map<string, { sku: ProductSKU; sales: number; revenue: number; cost: number; }>();
+            const last15DaysStart = generateDateRange(anchorStr, 15)[0];
+
+            const skuAnalysisMap = new Map<string, { sku: ProductSKU; sales7d: number; sales15d: number; revenue: number; cost: number; }>();
             
-            currentSz.forEach((r: any) => {
-                const code = getSkuIdentifier(r);
-                const skuConfig = code ? enabledSkusMap.get(code) : undefined;
+            allSz.forEach((r: any) => {
+                let code: string | null = null;
+                const skuCode = r.sku_code ? String(r.sku_code).trim() : null;
+                if (skuCode && enabledSkusMap.has(skuCode)) {
+                    code = skuCode;
+                } else {
+                    const productId = r.product_id ? String(r.product_id).trim() : null;
+                    if (productId && enabledSkusMap.has(productId)) code = productId;
+                }
+                if (!code) return;
+                
+                const skuConfig = enabledSkusMap.get(code);
                 if (skuConfig) {
-                    let entry = skuAnalysisMap.get(skuConfig.code) || { sku: skuConfig, sales: 0, revenue: 0, cost: 0 };
-                    if (r.date >= last7DaysStart) entry.sales += Number(r.paid_items) || 0;
+                    let entry = skuAnalysisMap.get(skuConfig.code) || { sku: skuConfig, sales7d: 0, sales15d: 0, revenue: 0, cost: 0 };
+                    const sales = Number(r.paid_items) || 0;
+                    if (r.date >= last7DaysStart) entry.sales7d += sales;
+                    if (r.date >= last15DaysStart) entry.sales15d += sales;
                     entry.revenue += Number(r.paid_amount) || 0;
                     skuAnalysisMap.set(skuConfig.code, entry);
                 }
             });
-            currentJzt.forEach((r: any) => {
+            allJzt.forEach((r: any) => {
                 const code = getSkuIdentifier(r);
                 const skuConfig = code ? enabledSkusMap.get(code) : undefined;
                 if (skuConfig && skuAnalysisMap.has(skuConfig.code)) {
@@ -671,12 +880,75 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
             });
 
             for (const [code, skuData] of skuAnalysisMap.entries()) {
-                const { sku, sales, revenue, cost } = skuData;
+                const { sku, sales7d, sales15d, revenue, cost } = skuData;
                 const totalStock = (sku.warehouseStock || 0) + (sku.factoryStock || 0);
+                const skuIdentifier = `${sku.code} | ${sku.model || sku.name}`;
+                const shopName = shopMap.get(sku.shopId)?.name || 'N/A';
+                
+                if (sales7d > 10 && totalStock < sales7d) {
+                    diag.push({ 
+                        id: `stock_severe_${code}`, 
+                        type: 'stock_severe', 
+                        title: '断货高危预警', 
+                        desc: ``,
+                        details: { 
+                            '预警类型': '断货高危预警',
+                            '店铺': shopName,
+                            'SKU|型号': skuIdentifier,
+                            '预警原因': `根据近7日CA销售(${sales7d}件)，当前总库存(${totalStock}件)已不足。`,
+                            '解决建议': '建议立即启动补货流程，联系供应商或调拨库存。'
+                        }, 
+                        severity: 'critical' 
+                    });
+                } else if (sales15d > 20 && totalStock < sales15d) {
+                    diag.push({ 
+                        id: `stock_warning_${code}`, 
+                        type: 'stock_warning', 
+                        title: '普通断货预警', 
+                        desc: ``,
+                        details: { 
+                            '预警类型': '普通断货预警',
+                            '店铺': shopName,
+                            'SKU|型号': skuIdentifier,
+                            '预警原因': `根据近15日CA销售(${sales15d}件)，当前总库存(${totalStock}件)已不满足安全库存。`,
+                            '解决建议': '建议关注并准备补货计划。'
+                        }, 
+                        severity: 'warning' 
+                    });
+                }
 
-                if (sales > 10 && totalStock < sales) diag.push({ id: `stock_${code}`, type: 'stock_severe', title: '断货高危预警', desc: `资产 [${sku.name}] 近7日销量已超过当前总库存。`, details: { 'SKU': sku.code, '店铺': shopMap.get(sku.shopId)?.name || 'N/A', '周销/库存': `${sales} / ${totalStock}` }, severity: 'critical' });
-                if (cost > 300 && (revenue / cost) < 1.2 && revenue > 0) diag.push({ id: `roi_${code}`, type: 'low_roi', title: '广告投放亏损', desc: `资产 [${sku.name}] 广告投产比过低。`, details: { 'SKU': sku.code, '花费/产出': `¥${Math.round(cost)} / ¥${Math.round(revenue)}`, 'ROI': (revenue / cost).toFixed(2) }, severity: 'warning' });
-                if (totalStock > 100 && sales < 5 && totalStock > sales * 10) diag.push({ id: `stale_${code}`, type: 'stale_inventory', title: '呆滞库存风险', desc: `资产 [${sku.name}] 库存高但销量低。`, details: { 'SKU': sku.code, '库存/周销': `${totalStock} / ${sales}` }, severity: 'info' });
+                if (cost > 300 && (revenue / cost) < 1.2 && revenue > 0) {
+                    diag.push({ 
+                        id: `roi_${code}`, 
+                        type: 'low_roi', 
+                        title: '广告投放亏损', 
+                        desc: ``,
+                        details: {
+                            '预警类型': '广告投放亏损',
+                            '店铺': shopName,
+                            'SKU|型号': skuIdentifier,
+                            '预警原因': `周期内广告花费 ¥${Math.round(cost)}，产出 ¥${Math.round(revenue)}，ROI(${(revenue / cost).toFixed(2)})过低。`,
+                            '解决建议': '检查广告关键词和落地页，考虑降低出价或暂停低效计划。'
+                        }, 
+                        severity: 'warning' 
+                    });
+                }
+                if (totalStock > 100 && sales7d < 5 && totalStock > sales7d * 10) {
+                     diag.push({ 
+                        id: `stale_${code}`, 
+                        type: 'stale_inventory', 
+                        title: '呆滞库存风险', 
+                        desc: ``,
+                        details: {
+                            '预警类型': '呆滞库存风险',
+                            '店铺': shopName,
+                            'SKU|型号': skuIdentifier,
+                            '预警原因': `库存量高(${totalStock}) 但近7日销量低(${sales7d})，库存周转率过低。`,
+                            '解决建议': '考虑促销清仓或捆绑销售，优化库存结构。'
+                        }, 
+                        severity: 'info' 
+                    });
+                }
             }
             setDiagnoses(diag);
             setDiagOffset(0);
@@ -693,7 +965,21 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
     return (
         <div className="p-8 md:p-12 w-full animate-fadeIn space-y-8 min-h-screen bg-[#F8FAFC]">
             
-            {/* ... (UI components remain same) ... */}
+            <DiagnosisDetailModal 
+                diagnosis={selectedDiagnosis} 
+                onClose={() => setSelectedDiagnosis(null)} 
+                onMarkAsHandled={() => selectedDiagnosis && handleMarkAsHandled(selectedDiagnosis.id)}
+            />
+            <AllDiagnosesModal 
+                isOpen={isAllDiagnosesModalOpen}
+                onClose={() => setIsAllDiagnosesModalOpen(false)}
+                diagnoses={diagnoses}
+                onSelect={(d) => {
+                    setIsAllDiagnosesModalOpen(false);
+                    setSelectedDiagnosis(d);
+                }}
+            />
+
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-200 pb-4">
                 <div className="space-y-1">
                     <div className="flex items-center gap-4 mb-2">
@@ -769,7 +1055,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                         </div>
                     </div>
                     <div className="flex-1 w-full">
-                         <MainTrendVisual data={trends} metricKey={activeMetric} />
+                         <MainTrendVisual data={trends} metricKey={activeMetric} errorMessage={trendErrorMessage} />
                     </div>
                 </div>
 
@@ -793,7 +1079,7 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
                                 <div className="flex flex-col">
                                     {diagnoses.map((d, i) => (
                                         <div key={d.id} className="h-[160px] mb-3 shrink-0">
-                                            <DiagnosisCard d={d} mode="carousel" onClickMore={() => setIsAllDiagnosesModalOpen(true)} />
+                                            <DiagnosisCard d={d} mode="carousel" onClick={() => setSelectedDiagnosis(d)} />
                                         </div>
                                     ))}
                                 </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Zap, ChevronDown, BarChart3, X, Download, TrendingUp, ArrowUp, ArrowDown, Activity, Filter, Database, Search, Sparkles, RefreshCcw, CheckSquare, Square, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
 import { Shop, ProductSKU, FieldDefinition } from '../lib/types';
@@ -516,26 +515,24 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                             return (
                                 <div key={key} 
                                     onClick={() => setChartMetrics(p => { const n = new Set(p); if (n.has(key)) n.delete(key); else n.add(key); return n; })} 
-                                    className={`p-3 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-28 flex flex-col justify-between ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
+                                    className={`p-3 rounded-3xl transition-all cursor-pointer border-2 relative group/kpi h-28 flex flex-col ${isSelected ? 'bg-slate-50 ring-4 ring-slate-100 shadow-xl' : 'bg-white border-slate-100 hover:bg-slate-50 shadow-sm'}`} 
                                     style={{ borderColor: isSelected ? color : 'transparent' }}>
                                     
-                                    <div className="space-y-0.5">
+                                    <div className="flex justify-between items-start">
                                         <div className="flex items-center gap-1.5">
                                             {isSelected ? <CheckSquare size={12} style={{ color }} /> : <Square size={12} className="text-slate-300" />}
                                             <span className={`text-[8px] font-black uppercase truncate ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span>
                                         </div>
-                                        <p className="text-lg font-black text-slate-900 tabular-nums tracking-tighter">{formatMetricValue(main, key).replace('¥', '')}</p>
-                                    </div>
-
-                                    <div className="my-1">
-                                        <MiniSparkline data={sparkData} color={color} />
-                                    </div>
-
-                                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
                                         <span className={`${txtC} text-[9px] font-black flex items-center gap-0.5`}>
                                             {isG ? <ArrowUp size={8} strokeWidth={4} /> : <ArrowDown size={8} strokeWidth={4} />}
                                             {Math.abs(chg).toFixed(0)}%
                                         </span>
+                                    </div>
+                                    
+                                    <p className="text-lg font-black text-slate-900 tabular-nums tracking-tighter mt-1">{formatMetricValue(main, key).replace('¥', '')}</p>
+
+                                    <div className="mt-auto -mb-1">
+                                        <MiniSparkline data={sparkData} color={color} />
                                     </div>
                                 </div>
                             );
@@ -570,7 +567,18 @@ export const MultiQueryView = ({ skus, shops, schemas, addToast }: MultiQueryVie
                                             <tr key={row.aggDate || idx} className={`transition-colors group ${row.aggDate === 'summary-row' ? 'bg-brand/5 font-black' : 'hover:bg-slate-50/80'}`}>
                                                 {resultHeaders.map(key => (
                                                     <td key={key} className={`py-4 px-4 text-[11px] truncate font-mono text-center ${row.aggDate === 'summary-row' ? 'text-slate-900' : `text-slate-600 ${idx > 0 ? 'border-b border-slate-50' : ''}`}`}>
-                                                        {key === 'sku_shop' ? (<div className="truncate text-left pl-2"><div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div><div className={`text-[9px] font-bold mt-0.5 truncate uppercase tracking-tighter ${row.aggDate === 'summary-row' ? 'text-brand' : 'text-slate-400 opacity-70'}`}>{row.sku_shop.shopName}</div></div>) : key === 'date' ? (<span className={`font-black whitespace-nowrap px-2 py-1 rounded-md ${row.aggDate === 'summary-row' ? 'bg-brand/10 text-brand' : 'text-slate-500 bg-slate-100/50'}`}>{row.date}</span>) : (row[key] == null) ? (<span className="opacity-20">-</span>) : typeof row[key] === 'number' ? (<span className={`font-black ${['paid_amount','cost','roi'].includes(key) ? (row.aggDate === 'summary-row' ? 'text-brand' : 'text-slate-900') : (row.aggDate === 'summary-row' ? 'text-slate-800' : 'text-slate-600')}`}>{formatMetricValue(row[key], key)}</span>) : row[key]}
+                                                        {key === 'sku_shop' ? (
+                                                            row.aggDate === 'summary-row' ? (
+                                                                <div className="flex justify-center items-center h-full">
+                                                                    <Database size={20} className="text-brand" />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="truncate text-left pl-2">
+                                                                    <div className="font-black text-slate-800 truncate" title={row.sku_shop.code}>{row.sku_shop.code}</div>
+                                                                    <div className="text-[9px] font-bold mt-0.5 truncate uppercase tracking-tighter text-slate-400 opacity-70">{row.sku_shop.shopName}</div>
+                                                                </div>
+                                                            )
+                                                        ) : key === 'date' ? (<span className={`font-black whitespace-nowrap px-2 py-1 rounded-md ${row.aggDate === 'summary-row' ? 'bg-brand/10 text-brand' : 'text-slate-500 bg-slate-100/50'}`}>{row.date}</span>) : (row[key] == null) ? (<span className="opacity-20">-</span>) : typeof row[key] === 'number' ? (<span className={`font-black ${['paid_amount','cost','roi'].includes(key) ? (row.aggDate === 'summary-row' ? 'text-brand' : 'text-slate-900') : (row.aggDate === 'summary-row' ? 'text-slate-800' : 'text-slate-600')}`}>{formatMetricValue(row[key], key)}</span>) : row[key]}
                                                     </td>
                                                 ))}
                                             </tr>
