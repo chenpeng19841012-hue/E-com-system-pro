@@ -610,9 +610,8 @@ export const DashboardView = ({ setCurrentView, skus, shops, factStats, addToast
 
     useEffect(() => {
         setHeaderControls(
-            <button onClick={() => setIsDebugOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
-                <SearchCode size={14} />
-                <span className="text-xs font-black uppercase tracking-widest">链路探测器</span>
+            <button onClick={() => setIsDebugOpen(true)} title="链路探测器" className="flex items-center justify-center w-10 h-10 bg-white rounded-full border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
+                <SearchCode size={18} />
             </button>
         );
         return () => setHeaderControls(null); // Cleanup on unmount

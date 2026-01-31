@@ -680,11 +680,10 @@ export const App = () => {
                         <div className="w-3 h-3 rounded-full bg-green-400 border border-green-500/50"></div>
                     </div>
                     <IntelligenceHub setCurrentView={wrappedSetCurrentView} />
-                    <div className="ml-auto flex items-center gap-4">
+                    <div className="ml-auto flex items-center gap-2">
                         {headerControls}
-                        <button onClick={() => setIsHotCacheInspectorOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-white rounded-[22px] border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
-                            <Zap size={14} />
-                            <span className="text-xs font-black uppercase tracking-widest">内存加速缓存</span>
+                        <button onClick={() => setIsHotCacheInspectorOpen(true)} title="内存加速缓存" className="flex items-center justify-center w-10 h-10 bg-white rounded-full border-2 border-slate-200 text-slate-500 hover:text-brand hover:border-brand/50 transition-all shadow-sm">
+                            <Zap size={18} />
                         </button>
                     </div>
                 </header>
