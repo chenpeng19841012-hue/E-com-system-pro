@@ -7,7 +7,8 @@ export type FieldDataType = 'STRING' | 'INTEGER' | 'REAL' | 'TIMESTAMP';
 
 export interface ToastProps {
   id: number;
-  type: 'success' | 'error';
+  // FIX: Add 'info' to the list of allowed toast types.
+  type: 'success' | 'error' | 'info';
   title: string;
   message: string;
 }

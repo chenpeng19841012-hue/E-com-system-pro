@@ -107,7 +107,7 @@ export const App = () => {
     
     // 热数据缓存 (智能动态窗口)
     const [factTables, setFactTables] = useState<any>({ shangzhi: [], jingzhuntong: [], customer_service: [] });
-    // 新增：内存聚合缓存 (Session-level)
+    // 新增：内存聚合缓存 (Session-level) -> 现在是物理快照
     const [hotCacheData, setHotCacheData] = useState<any[]>([]);
     const [isHotCacheInspectorOpen, setIsHotCacheInspectorOpen] = useState(false);
 
@@ -116,40 +116,24 @@ export const App = () => {
     const [compShops, setCompShops] = useState<MonitoredCompetitorShop[]>([]);
     const [compGroups, setCompGroups] = useState<CompetitorGroup[]>([]);
 
-    const addToast = (type: 'success' | 'error', title: string, message: string) => {
+    const addToast = useCallback((type: 'success' | 'error' | 'info', title: string, message: string) => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, type, title, message }]);
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
-    };
+    }, []);
 
     const loadMetadata = useCallback(async () => {
         try {
             setLoadingMessage('正在探测数据边界...');
             
-            const [statSz, statJzt, statCs] = await Promise.all([
+            // 1. Load metadata first (always from DB, it's small)
+            const [
+                statSz, statJzt, statCs,
+                s_shops, s_skus_from_db, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups
+            ] = await Promise.all([
                 DB.getTableSummary('fact_shangzhi'),
                 DB.getTableSummary('fact_jingzhuntong'),
-                DB.getTableSummary('fact_customer_service')
-            ]);
-
-            let anchorDate = new Date();
-            if (statSz.latestDate && statSz.latestDate !== 'N/A') {
-                const szDate = new Date(statSz.latestDate);
-                if (!isNaN(szDate.getTime())) {
-                    anchorDate = szDate;
-                }
-            }
-            
-            const endDateStr = anchorDate.toISOString().split('T')[0];
-            const startDate = new Date(anchorDate.getTime() - 59 * 24 * 60 * 60 * 1000);
-            const startDateStr = startDate.toISOString().split('T')[0];
-
-            setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
-
-            const [
-                s_shops, s_skus, s_agents, s_skuLists, history, settings, q_data, s_sz, s_jzt, s_cs_schema, s_compShops, s_compGroups,
-                recentSz, recentJzt, recentCs
-            ] = await Promise.all([
+                DB.getTableSummary('fact_customer_service'),
                 DB.loadConfig('dim_shops', []),
                 DB.loadConfig('dim_skus', []),
                 DB.loadConfig('dim_agents', []),
@@ -161,87 +145,77 @@ export const App = () => {
                 DB.loadConfig('schema_jingzhuntong', INITIAL_JINGZHUNTONG_SCHEMA),
                 DB.loadConfig('schema_customer_service', INITIAL_CUSTOMER_SERVICE_SCHEMA),
                 DB.loadConfig('comp_shops', []),
-                DB.loadConfig('comp_groups', []),
-                DB.getRange('fact_shangzhi', startDateStr, endDateStr),
-                DB.getRange('fact_jingzhuntong', startDateStr, endDateStr),
-                DB.getRange('fact_customer_service', startDateStr, endDateStr)
+                DB.loadConfig('comp_groups', [])
             ]);
             
+            // FIX: Sanitize SKU data loaded from DB to remove any null/undefined entries or entries without a 'code' property, preventing render errors.
+            const s_skus = (s_skus_from_db || []).filter(s => s && s.code);
+    
             setShops(s_shops); setSkus(s_skus); setAgents(s_agents); setSkuLists(s_skuLists);
             setUploadHistory(history); setSnapshotSettings(settings); setQuotingData(q_data);
             setSchemas({ shangzhi: s_sz, jingzhuntong: s_jzt, customer_service: s_cs_schema });
             setCompShops(s_compShops); setCompGroups(s_compGroups);
-            
             setFactStats({ shangzhi: statSz, jingzhuntong: statJzt, customer_service: statCs });
+    
+            // 2. Handle fact tables with session caching
+            const FACT_TABLE_CACHE_KEY = 'yunzhou_fact_table_cache_v1';
+            const cachedFactTables = sessionStorage.getItem(FACT_TABLE_CACHE_KEY);
+            let recentSz, recentJzt, recentCs;
+    
+            let anchorDate = new Date();
+            if (statSz.latestDate && statSz.latestDate !== 'N/A') {
+                const szDate = new Date(statSz.latestDate);
+                if (!isNaN(szDate.getTime())) anchorDate = szDate;
+            }
+            
+            const endDateStr = anchorDate.toISOString().split('T')[0];
+            const startDate = new Date(anchorDate.getTime() - 59 * 24 * 60 * 60 * 1000);
+            const startDateStr = startDate.toISOString().split('T')[0];
+            
+            const skusToFetch = s_skus.filter((s: ProductSKU) => s.isStatisticsEnabled).map((s: ProductSKU) => s.code);
+    
+            if (cachedFactTables) {
+                const parsed = JSON.parse(cachedFactTables);
+                recentSz = parsed.shangzhi;
+                recentJzt = parsed.jingzhuntong;
+                recentCs = parsed.customer_service;
+                addToast('info', '缓存命中', '已从当前浏览器会话缓存中加载数据。');
+            } else {
+                setLoadingMessage(`同步热数据 (${startDateStr} ~ ${endDateStr})...`);
+                [recentSz, recentJzt, recentCs] = await Promise.all([
+                    DB.getRange('fact_shangzhi', startDateStr, endDateStr, skusToFetch),
+                    DB.getRange('fact_jingzhuntong', startDateStr, endDateStr, skusToFetch),
+                    DB.getRange('fact_customer_service', startDateStr, endDateStr)
+                ]);
+                try {
+                    sessionStorage.setItem(FACT_TABLE_CACHE_KEY, JSON.stringify({ shangzhi: recentSz, jingzhuntong: recentJzt, customer_service: recentCs }));
+                } catch (e) {
+                    console.error("Failed to write to sessionStorage:", e);
+                    addToast('error', '缓存写入失败', '浏览器存储空间可能已满。');
+                }
+            }
+            
             setFactTables({ shangzhi: recentSz, jingzhuntong: recentJzt, customer_service: recentCs });
             
-            // **内存加速引擎：1:1 复刻战略沙盘聚合算法**
-            const skusToTrack = s_skus.filter((s: ProductSKU) => s.isStatisticsEnabled);
-            const skusToTrackMap = new Map(skusToTrack.map((s: ProductSKU) => [s.code, s]));
-            const shopMap = new Map(s_shops.map((s: Shop) => [s.id, s.name]));
-            const hotCacheAggMap = new Map<string, any>();
-
-            // 1. Process Shangzhi Data
-            recentSz.forEach((row: any) => {
-                const skuIdentifier = getSkuIdentifier(row);
-                if (!skuIdentifier || !skusToTrackMap.has(skuIdentifier)) return;
-
-                const skuInfo = skusToTrackMap.get(skuIdentifier)!;
-                const dateKey = String(row.date).substring(0, 10);
-                const key = `${dateKey}-${skuIdentifier}`;
-
-                const entry = hotCacheAggMap.get(key) || {
-                    date: dateKey,
-                    sku_shop: { code: skuIdentifier, shopName: shopMap.get(skuInfo.shopId) || '未知' },
-                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
-                    cost: 0, clicks: 0,
-                };
-                
-                entry.pv += Number(row.pv) || 0;
-                entry.uv += Number(row.uv) || 0;
-                entry.paid_items += Number(row.paid_items) || 0;
-                entry.paid_amount += Number(row.paid_amount) || 0;
-                entry.paid_users += (Number(row.paid_users) || Number(row.paid_customers) || 0);
-                
-                hotCacheAggMap.set(key, entry);
+            // **内存加速缓存 -> 物理快照 (RAW DATA)**
+            const shangzhiRaw = recentSz.map((r: any) => ({ ...r, source: '商智' }));
+            const jingzhuntongRaw = recentJzt.map((r: any) => ({ ...r, source: '广告' }));
+    
+            const newHotCacheData = [...shangzhiRaw, ...jingzhuntongRaw].sort((a, b) => {
+                const dateComp = (b.date || '').localeCompare(a.date || '');
+                if (dateComp !== 0) return dateComp;
+                const skuA = getSkuIdentifier(a) || '';
+                const skuB = getSkuIdentifier(b) || '';
+                return skuA.localeCompare(skuB);
             });
-
-            // 2. Process Jingzhuntong Data
-            recentJzt.forEach((row: any) => {
-                const skuIdentifier = getSkuIdentifier(row);
-                if (!skuIdentifier || !skusToTrackMap.has(skuIdentifier)) return;
-
-                const skuInfo = skusToTrackMap.get(skuIdentifier)!;
-                const dateKey = String(row.date).substring(0, 10);
-                const key = `${dateKey}-${skuIdentifier}`;
-
-                const entry = hotCacheAggMap.get(key) || {
-                    date: dateKey,
-                    sku_shop: { code: skuIdentifier, shopName: shopMap.get(skuInfo.shopId) || '未知' },
-                    pv: 0, uv: 0, paid_items: 0, paid_amount: 0, paid_users: 0,
-                    cost: 0, clicks: 0,
-                };
-
-                entry.cost += Number(row.cost) || 0;
-                entry.clicks += Number(row.clicks) || 0;
-                
-                hotCacheAggMap.set(key, entry);
-            });
-            
-            // 3. Calculate derived metrics
-            hotCacheAggMap.forEach((entry: any) => {
-                entry.paid_conversion_rate = entry.uv > 0 ? entry.paid_users / entry.uv : 0;
-                entry.cpc = entry.clicks > 0 ? entry.cost / entry.clicks : 0;
-                entry.roi = entry.cost > 0 ? entry.paid_amount / entry.cost : 0;
-            });
-            
-            setHotCacheData(Array.from(hotCacheAggMap.values()).sort((a,b) => b.date.localeCompare(a.date) || a.sku_shop.code.localeCompare(b.sku_shop.code)));
+    
+            setHotCacheData(newHotCacheData);
 
         } catch (e) {
             console.error("Initialization failed:", e);
             addToast('error', '初始化受阻', '无法连接数据层，请检查网络。');
         }
-    }, []);
+    }, [addToast]);
 
     useEffect(() => { 
         const init = async () => {
@@ -255,6 +229,7 @@ export const App = () => {
     const onDeleteRows = async (tableType: TableType, ids: any[]) => {
         try {
             await DB.deleteRows(`fact_${tableType}`, ids);
+            sessionStorage.removeItem('yunzhou_fact_table_cache_v1'); // Invalidate cache
             await loadMetadata(); // 刷新统计
         } catch (e) {
             addToast('error', '物理删除失败', '操作数据库时发生错误。');
@@ -504,6 +479,8 @@ export const App = () => {
         // 写入数据库 (Supabase Upsert 会自动处理 duplicate key update)
         const tableName = `fact_${type}`;
         await DB.bulkAdd(tableName, enrichedData, onProgress);
+        
+        sessionStorage.removeItem('yunzhou_fact_table_cache_v1'); // Invalidate cache
 
         // 记录历史
         const newHistoryItem: UploadHistory = {

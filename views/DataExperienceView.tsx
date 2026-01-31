@@ -241,7 +241,8 @@ export const DataExperienceView = ({ schemas, shops, skus, onUpdateSchema, onCle
                     endDate: endDate || undefined,
                     sku: skuSearch || undefined,
                     shopName: shopSearch || undefined,
-                    qualityFilter: qualityFilter === 'date_issue' ? 'date_is_null' : qualityFilter
+                    // FIX: This comparison was redundant and caused a type error. In this code branch, `qualityFilter` is always 'all'.
+                    qualityFilter
                 }, 10);
             }
 
