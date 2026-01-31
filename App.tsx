@@ -197,18 +197,28 @@ export const App = () => {
             const aggMap = new Map<string, any>();
             
             const processRow = (row: any, type: 'sz' | 'jzt') => {
-                 let skuCode: string | null = null;
-                 if (type === 'sz') {
-                     // For Shangzhi, trust sku_code or product_id
-                     skuCode = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
-                 } else { // jzt
-                     // For Jingzhuntong, ONLY trust tracked_sku_id to avoid mismatches
-                     skuCode = getSkuIdentifier({ tracked_sku_id: row.tracked_sku_id });
-                     // Fallback if tracked_sku_id is missing but other IDs are present
-                     if (!skuCode) {
-                         skuCode = getSkuIdentifier({ sku_code: row.sku_code, product_id: row.product_id });
-                     }
-                 }
+                 const normalize = (val: any): string | null => {
+                    if (val === undefined || val === null) return null;
+                    if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
+                    const strVal = String(val).trim();
+                    if (strVal === '') return null;
+                    if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+                        const num = Number(strVal);
+                        if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
+                    }
+                    return strVal;
+                };
+
+                let rawIdentifier: any = null;
+                if (type === 'sz') {
+                    rawIdentifier = row.sku_code || row.product_id;
+                } else { // jzt
+                    rawIdentifier = row.tracked_sku_id;
+                    if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
+                        rawIdentifier = row.sku_code || row.product_id;
+                    }
+                }
+                const skuCode = normalize(rawIdentifier);
 
                  if (!skuCode || !enabledSkusMap.has(skuCode)) return;
 

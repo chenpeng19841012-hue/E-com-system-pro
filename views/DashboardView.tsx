@@ -78,22 +78,31 @@ const DataInspectorModal = ({
                 
                 let sku: string | null = null;
                 
+                const normalize = (val: any): string | null => {
+                    if (val === undefined || val === null) return null;
+                    if (typeof val === 'number') return val.toLocaleString('fullwide', { useGrouping: false });
+                    const strVal = String(val).trim();
+                    if (strVal === '') return null;
+                    if (/^[0-9.]+[eE][+-]?\d+$/.test(strVal)) {
+                        const num = Number(strVal);
+                        if (!isNaN(num)) return num.toLocaleString('fullwide', { useGrouping: false });
+                    }
+                    return strVal;
+                };
+
+                let rawIdentifier: any = null;
                 if (type === 'shangzhi') {
-                    // For Shangzhi, trust sku_code or product_id
-                    const identifiedSku = getSkuIdentifier({ sku_code: r.sku_code, product_id: r.product_id });
-                    if (identifiedSku && enabledSkusMap.has(identifiedSku)) {
-                        sku = identifiedSku;
-                    }
+                    rawIdentifier = r.sku_code || r.product_id;
                 } else { // jingzhuntong
-                    // For Jingzhuntong, ONLY trust tracked_sku_id to avoid mismatches
-                    let identifiedSku = getSkuIdentifier({ tracked_sku_id: r.tracked_sku_id });
-                    // Fallback if tracked_sku_id is missing but other IDs are present
-                    if (!identifiedSku) {
-                        identifiedSku = getSkuIdentifier({ sku_code: r.sku_code, product_id: r.product_id });
+                    rawIdentifier = r.tracked_sku_id;
+                    if (rawIdentifier === null || rawIdentifier === undefined || String(rawIdentifier).trim() === '') {
+                        rawIdentifier = r.sku_code || r.product_id;
                     }
-                    if (identifiedSku && enabledSkusMap.has(identifiedSku)) {
-                        sku = identifiedSku;
-                    }
+                }
+                const identifiedSku = normalize(rawIdentifier);
+
+                if (identifiedSku && enabledSkusMap.has(identifiedSku)) {
+                    sku = identifiedSku;
                 }
 
                 if (!sku) return; // If no enabled SKU identifier is found, skip the row.
