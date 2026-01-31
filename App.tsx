@@ -202,18 +202,71 @@ export const App = () => {
 
                  const key = `${row.date}-${skuCode}`;
                  const entry = aggMap.get(key) || { 
-                     date: row.date, 
-                     sku: skuCode,
-                     skuName: enabledSkusMap.get(skuCode)?.name || '', 
-                     gmv: 0, ca: 0, uv: 0, spend: 0, roi: 0,
+                    // Key fields
+                    date: row.date, 
+                    sku: skuCode,
+                    skuName: enabledSkusMap.get(skuCode)?.name || '', 
+                    shop_name: '',
+                    category_l3: '',
+                    account_nickname: '',
+
+                    // Shangzhi Metrics
+                    gmv: 0,
+                    ca: 0,
+                    uv: 0,
+                    pv: 0,
+                    paid_orders: 0,
+                    paid_users: 0,
+                    add_to_cart_users: 0,
+                    add_to_cart_items: 0,
+
+                    // Jingzhuntong Metrics
+                    spend: 0,
+                    impressions: 0,
+                    clicks: 0,
+                    direct_orders: 0,
+                    direct_order_amount: 0,
+                    indirect_orders: 0,
+                    indirect_order_amount: 0,
+                    total_orders: 0,
+                    total_order_amount: 0,
+                    direct_add_to_cart: 0,
+                    indirect_add_to_cart: 0,
+                    total_add_to_cart: 0,
+
+                    // Calculated Metrics
+                    roi: 0,
+                    cpc: 0,
+                    cvr: 0,
                  };
 
                  if (type === 'sz') {
-                     entry.gmv += Number(row.paid_amount) || 0;
-                     entry.ca += Number(row.paid_items) || 0;
-                     entry.uv += Number(row.uv) || 0;
+                    if (!entry.shop_name) entry.shop_name = row.shop_name || '';
+                    if (!entry.category_l3) entry.category_l3 = row.category_l3 || '';
+                     
+                    entry.gmv += Number(row.paid_amount) || 0;
+                    entry.ca += Number(row.paid_items) || 0;
+                    entry.uv += Number(row.uv) || 0;
+                    entry.pv += Number(row.pv) || 0;
+                    entry.paid_orders += Number(row.paid_orders) || 0;
+                    entry.paid_users += Number(row.paid_users) || 0;
+                    entry.add_to_cart_users += Number(row.add_to_cart_users) || 0;
+                    entry.add_to_cart_items += Number(row.add_to_cart_items) || 0;
                  } else { // jzt
-                     entry.spend += Number(row.cost) || 0;
+                    if (!entry.account_nickname) entry.account_nickname = row.account_nickname || '';
+
+                    entry.spend += Number(row.cost) || 0;
+                    entry.impressions += Number(row.impressions) || 0;
+                    entry.clicks += Number(row.clicks) || 0;
+                    entry.direct_orders += Number(row.direct_orders) || 0;
+                    entry.direct_order_amount += Number(row.direct_order_amount) || 0;
+                    entry.indirect_orders += Number(row.indirect_orders) || 0;
+                    entry.indirect_order_amount += Number(row.indirect_order_amount) || 0;
+                    entry.total_orders += Number(row.total_orders) || 0;
+                    entry.total_order_amount += Number(row.total_order_amount) || 0;
+                    entry.direct_add_to_cart += Number(row.direct_add_to_cart) || 0;
+                    entry.indirect_add_to_cart += Number(row.indirect_add_to_cart) || 0;
+                    entry.total_add_to_cart += Number(row.total_add_to_cart) || 0;
                  }
                  aggMap.set(key, entry);
             };
@@ -223,6 +276,8 @@ export const App = () => {
             
             aggMap.forEach(entry => {
                 entry.roi = entry.spend > 0 ? entry.gmv / entry.spend : 0;
+                entry.cpc = entry.clicks > 0 ? entry.spend / entry.clicks : 0;
+                entry.cvr = entry.uv > 0 ? entry.paid_users / entry.uv : 0;
             });
             
             setHotCacheData(Array.from(aggMap.values()).sort((a,b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku)));
